@@ -1,0 +1,21 @@
+psplash_fb_text_size: a text has one line more than it has newlines
+
+The height was the number of newlines times the font height (one line when
+there are none), so a message of n lines was placed as if it had n - 1:
+psplash_draw_msg puts the text's bottom at the split line, and the last line
+went below it, into the rows of the progress bar, which then painted over it.
+The clear rectangle missed that line as well. openccu-lite's end-of-boot
+message has four lines, and its web address was half covered by the bar.
+
+--- psplash.orig/psplash-fb.c	2025-05-13 13:08:00.000000000 +0200
++++ psplash/psplash-fb.c	2026-09-13 09:40:36.757113803 +0200
+@@ -568,7 +568,8 @@
+     }
+
+   *width  = (w > mw) ? w : mw;
+-  *height = (h == 0) ? font->height : h;
++  /* every text has one line more than it has newlines */
++  *height = h + font->height;
+ }
+
+ void

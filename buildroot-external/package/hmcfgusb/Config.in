@@ -1,0 +1,11 @@
+config BR2_PACKAGE_HMCFGUSB
+	bool "hmcfgusb (flash-hmcfgusb)"
+	depends on BR2_TOOLCHAIN_HAS_THREADS # libusb
+	select BR2_PACKAGE_LIBUSB
+	help
+	  flash-hmcfgusb from Michael Gernoth's hmcfgusb: updates the
+	  firmware of an eQ-3 HM-CFG-USB-2 BidCos-RF adapter (neither
+	  rfd nor eq3configcmd can). openccu-lite's Interfaces page
+	  runs it with a firmware file the user uploads.
+
+	  https://git.zerfleddert.de/cgi-bin/gitweb.cgi/hmcfgusb

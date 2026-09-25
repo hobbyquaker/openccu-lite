@@ -1,0 +1,3 @@
+# Locally computed: buildroot's tarball of the git checkout; bump together with HMCFGUSB_VERSION.
+sha256  303acd41413f882711156f6b339a4a08386dbdb371bf5e1e0fac9a6d4a3ced08  hmcfgusb-715728607ae77bebf3ac50fdbdb46639551995e4-git4.tar.gz
+sha256  aa1844e79d5222589128003dd763f4a462be780bd0449bae11ad27bbd1f73e6d  LICENSE

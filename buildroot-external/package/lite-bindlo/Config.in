@@ -1,0 +1,8 @@
+config BR2_PACKAGE_LITE_BINDLO
+	bool "lite-bindlo"
+	depends on BR2_TOOLCHAIN_HAS_THREADS # dlsym
+	help
+	  openccu-lite: an LD_PRELOAD shim that binds a listed port's
+	  wildcard bind() to the loopback. hmipserver's unit uses it for
+	  its HTTP port 39292, for which hmipserver has no bind-address
+	  setting.

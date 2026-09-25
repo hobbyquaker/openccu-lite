@@ -1,0 +1,25 @@
+config BR2_PACKAGE_OCCULITED
+	bool "occulited - the openccu-lite system service"
+	depends on BR2_PACKAGE_HOST_GO_TARGET_ARCH_SUPPORTS
+	depends on BR2_PACKAGE_OPENCCU_BASE
+	select BR2_PACKAGE_LIGHTTPD
+	select BR2_PACKAGE_LIGHTTPD_LUA
+	select BR2_PACKAGE_TCL
+	help
+	  The system service of openccu-lite: the metadata store
+	  (device names, rooms, functions) with its API and change
+	  stream, the system administration API and web UI, users
+	  and sessions. It replaces the CCU WebUI and ReGaHss above
+	  the XML-RPC line; the interface processes are untouched.
+
+	  Installs the service, its lighttpd wiring (the /api and
+	  shell proxy, the mod_magnet session gate for /addons/),
+	  the busybox init script and the tclrega.so shim that
+	  answers the session check of addon settings pages. Built
+	  from a source archive of the occulited repository at a
+	  pinned commit; the web UI is part of that archive, and so
+	  is the addon catalogue the system carries (catalog/ of
+	  that repository: the catalogue file and the adapter
+	  manifests, installed under /etc/occulite).
+
+	  https://git.lan.raff.rocks/hobbyquaker/occulited
