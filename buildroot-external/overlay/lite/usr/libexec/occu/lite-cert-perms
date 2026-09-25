@@ -1,0 +1,18 @@
+#!/bin/sh
+# openccu-lite: the box's TLS certificate and key, /etc/config/server.pem, is written by
+# S50lighttpd's check_certificate as root 0600. The certs group (gid 8101, package/occulited's
+# users table) reads it: every confined addon is in that group (occulited's policy drop-in), so a
+# broker or a web server behind its own user offers TLS with the same certificate lighttpd does.
+# Run from lighttpd.service after the start and after every reload - the two moments the file
+# can be new. Never fails the unit.
+f=/etc/config/server.pem
+[ -f "$f" ] || exit 0
+# busybox has no getent: read /etc/group (occu-etc-writable may have moved it to the userfs;
+# the symlink resolves either way)
+if ! grep -q '^certs:' /etc/group 2>/dev/null; then
+	echo "lite-cert-perms: no certs group on this box, $f stays root-only" >&2
+	exit 0
+fi
+chgrp certs "$f" 2>/dev/null
+chmod 0640 "$f" 2>/dev/null
+exit 0

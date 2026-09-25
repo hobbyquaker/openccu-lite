@@ -1,0 +1,148 @@
+# openccu-lite: replaces /etc/init.d/S50lighttpd and overrides
+# buildroot's lighttpd.service.
+#
+# Restart tracking: the unit tracks the daemon. lighttpd-angel supervises lighttpd and runs in the foreground
+# with -D, so it is systemd's main process (Type=exec) instead of something start-stop-daemon
+# backgrounded behind a Type=forking/RemainAfterExit unit that never noticed its death.
+# The script's preparation is its own "reload" action - the SSL certificate check and the three
+# /var/etc/lighttpd_*.conf includes, exactly what start() does before the daemon; the USR1 it
+# ends with is a no-op while no angel is running. That keeps the preparation upstream's. It runs
+# in lighttpd-prepare.service, pulled in before every start; ExecReload starts that unit again
+# and then signals the angel, which the script did through the pidfile start-stop-daemon wrote
+# and systemd does not - but only when the configuration changed (lite-lighttpd-reload): the
+# signal is a graceful restart that cuts every long-lived connection, and S99SetupLEDs' reload at
+# the end of every boot, which upstream needs to open the RemoteAPI ports, changes nothing here
+# (lite-classic-rpc-conf decides "not ready yet" per request).
+# Not started in LAN-gateway mode (/usr/local/HMLGW), which is the script's HM_MODE check.
+#
+# lighttpd runs as www-data, not root - it parses the addons' drop-ins and serves what an addon
+# puts in its www, and a confined addon controls both. The ports 80 and 443 come from
+# CAP_NET_BIND_SERVICE (ambient, so the angel's re-exec of lighttpd keeps it); the certificate
+# through the certs group (root:certs 0640); the classic RPC pair is root:www-data 0640
+# (lite-classic-rpc-conf); the pid file lives in its own runtime directory. The drop-ins
+# themselves are what occulited wrote as validated copies (occulited -lighttpd-dropins), never a
+# link into an addon's directory; the addons' static files and CGIs come from occulited too
+# (conf.d/occulited.conf) - lighttpd itself loads no mod_cgi.
+#
+# The sandbox below: the whole file system read-only except the pid directory and the upload
+# overflow directory; the userfs a read-only view of what the web server reads (the drop-ins and
+# the certificate in /etc/config, the addon trees for their error pages) and nothing else - not
+# occulited's state, not the backups, not the daemons' and the addons' own configuration
+# directories; a private /tmp and /dev; nothing executable but the system's binaries and
+# libraries; the loopback and the LAN over IPv4/IPv6 and unix sockets (the syslog error log, an
+# addon's socket); the system-service system calls on the native ABI, no new privileges, no
+# namespaces, no realtime, no writable-and-executable memory; kernel tunables, modules, logs,
+# cgroups and the clock protected. The one child lighttpd starts is the access log's pipe to
+# systemd-cat when the Log page switches it on, which lives inside the same sandbox.
+#
+# Root's preparation is not in this unit (lighttpd-prepare.service): a "+" line runs as root but
+# inside this mount namespace, where /etc/config and /var/etc are read-only for it too. The
+# "+" lines left - the boot screen's message, the reload's start of the preparation and the
+# shutdown wait - write nothing to the file system.
+[Unit]
+Description=Web server (lighttpd)
+# Right after the network, beside occulited instead of behind it: while occulited does not answer,
+# the proxy's 503 is turned into the waiting page (conf.d/occulited.conf), so a browser never meets
+# a refused connection. The preparation reads HM_MODE from /var/hm_mode, which occu-init-host
+# writes long before the network is up.
+After=network.target occu-init-system.service lighttpd-prepare.service
+# the preparation before every start: pulled in, not required - the web server starts either way
+Wants=lighttpd-prepare.service
+# At shutdown the web server goes last among the radio units: a page that tells the user to unplug
+# the box once the web server stops answering must not see that while hmipserver is still writing or
+# the radio module is handed to its bootloader. That is not an ordering (a Before= would make the
+# radio detection wait for the web server at boot too): the stop waits until hmipserver, rfd,
+# multimacd and the radio detection are down, while the system shuts down (lite-radio-stop-wait).
+ConditionPathExists=!/usr/local/HMLGW
+# never give up on the web server; RestartSec/RestartSteps below are the brake instead
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+ExecStartPre=+-/usr/libexec/occu/lite-psplash boot S50lighttpd
+ExecStart=/usr/sbin/lighttpd-angel -f /etc/lighttpd/lighttpd.conf -D
+# what the configuration was at the start, for ExecReload's comparison (as www-data, in the sandbox)
+ExecStartPost=-/usr/libexec/occu/lite-lighttpd-reload record
+ExecStartPost=+-/usr/libexec/occu/lite-psplash done S50lighttpd
+# at shutdown: serve until the radio stack is down (at most 120 s, hmipserver's own stop timeout);
+# a plain stop or restart of the web server does not wait
+ExecStop=+-/usr/libexec/occu/lite-radio-stop-wait 120
+# the preparation again (a changed marker, certificate or drop-in), then the angel's reload
+ExecReload=+-/usr/bin/systemctl start lighttpd-prepare.service
+ExecReload=/usr/libexec/occu/lite-lighttpd-reload reload $MAINPID
+KillMode=control-group
+TimeoutStartSec=120
+TimeoutStopSec=180
+Restart=always
+RestartSec=2
+RestartSteps=8
+RestartMaxDelaySec=300
+StandardOutput=journal+console
+StandardError=journal+console
+OOMScoreAdjust=-900
+
+User=www-data
+Group=www-data
+# the certificate (root:certs 0640)
+SupplementaryGroups=certs
+# /run/lighttpd, www-data's: the pid file (server.pid-file, which the lite post-build points there)
+RuntimeDirectory=lighttpd
+# ports 80 and 443 without root; the angel re-executes lighttpd on a reload and keeps them
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+# what lighttpd creates - the pid file, upload spill files - is its own
+UMask=0077
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# the userfs as the web server sees it: an empty read-only file system with the system's
+# configuration directory (the drop-ins in lighttpd/, the certificate, the classic RPC pair - the
+# directory as a whole, because occulited and the certificate check replace those files by
+# writing a new one and renaming it, and a bind of a single file would keep showing the old one),
+# the addon trees (their drop-ins name error pages there), and the upload overflow directory
+# (lighttpd.conf's server.upload-dirs, after /dev/shm), writable. Optional ("-"): a path a
+# restored backup or a factory reset does not have must not fail the namespace setup.
+TemporaryFileSystem=/usr/local:ro
+BindReadOnlyPaths=-/usr/local/etc/config -/usr/local/addons
+BindPaths=-/usr/local/tmp
+ReadWritePaths=-/usr/local/tmp
+# inside that directory, the other daemons' and the addons' own configuration directories are
+# nothing the web server reads. Directories only: a file that is written anew and renamed into
+# place (the security key, hmipserver's settings) would slip out from under a per-file mount, and
+# those files are closed to www-data by their modes anyway.
+InaccessiblePaths=-/usr/local/etc/config/addons -/usr/local/etc/config/crRFD -/usr/local/etc/config/eshlight
+InaccessiblePaths=-/usr/local/etc/config/hs485d -/usr/local/etc/config/hs485types -/usr/local/etc/config/rfd
+# nothing under the file system is executable but the system's binaries, libraries and helpers:
+# not the userfs (the addon trees, the uploads), not /tmp, not /dev/shm, not /var. The access log's
+# pipe runs /bin/sh and /usr/bin/systemd-cat, both under /usr/bin.
+NoExecPaths=/
+ExecPaths=/usr/bin /usr/sbin /usr/lib /usr/libexec
+# /dev/shm stays (server.upload-dirs); /dev/log is the journal's socket
+PrivateDevices=yes
+DevicePolicy=closed
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+# the loopback and the LAN (IPv4 and IPv6), and unix sockets: the error log to syslog, an addon
+# drop-in's proxy to a socket in its own tree, the access log's pipe to systemd-cat
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# lighttpd's Lua is the interpreter and PCRE2 is built without its JIT: no W+X memory
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+# @system-service and nothing narrower: it carries @setuid, which the setuid busybox calls at
+# every applet's start even as www-data (the access log's /bin/sh, /bin/kill in ExecReload)
+SystemCallFilter=@system-service
+RemoveIPC=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,25 @@
+#!/bin/sh
+# openccu-lite: the page lighttpd shows while occulited does not answer, with this box's details.
+#
+# lighttpd starts right after the network, beside occulited. Until occulited answers - at boot,
+# during its restart, after a crash - the proxy's 503 is replaced by /etc/lighttpd/occulite-starting.lua
+# with this page for browsers (and a JSON 503 with Retry-After for everything else). The page comes
+# from occulited's package with placeholders; this fills in the host name, the firmware version, the
+# product and the address, so it can say "<host> · <version>" and point to the recovery system by
+# address. Run before lighttpd starts and at every reload (a new host name or address).
+# Every value is reduced to the characters it can legitimately contain, so nothing from the system
+# can become markup or break the substitution.
+set -u
+SRC=${STARTING_PAGE_SRC:-/etc/lighttpd/occulite-starting.html}
+DST=${STARTING_PAGE_DST:-/var/etc/occulite-starting.html}
+VERSION_FILE=${STARTING_PAGE_VERSION:-/VERSION}
+
+[ -r "$SRC" ] || exit 0
+host=$(hostname 2>/dev/null | tr -cd 'A-Za-z0-9.-')
+version=$(sed -n 's/^LITE=//p' "$VERSION_FILE" 2>/dev/null | head -n 1 | tr -cd 'A-Za-z0-9.+-')
+platform=$(sed -n 's/^PLATFORM=//p' "$VERSION_FILE" 2>/dev/null | head -n 1 | tr -cd 'A-Za-z0-9_-')
+ip=$(ip -4 route get 1 2>/dev/null | sed -n 's/.* src \([0-9.]*\).*/\1/p' | head -n 1 | tr -cd '0-9.')
+
+mkdir -p "$(dirname "$DST")"
+sed -e "s|@HOSTNAME@|${host}|g" -e "s|@VERSION@|${version}|g" -e "s|@PLATFORM@|${platform}|g" -e "s|@IP@|${ip}|g" \
+  "$SRC" > "$DST.tmp" && mv -f "$DST.tmp" "$DST"

@@ -1,0 +1,65 @@
+#!/bin/sh
+# openccu-lite: lighttpd's reload, only when its configuration changed.
+#
+# A reload is a graceful restart (SIGUSR1): the old worker stops accepting, and whatever long-lived
+# connection it still holds - an addon's event stream, a WebSocket - is cut when it ends. Callers
+# reload by habit: upstream's end-of-boot script reloads to open the RemoteAPI ports, addons and
+# people call "/etc/init.d/S50lighttpd reload". A reload whose configuration is the one lighttpd
+# already runs changes nothing but the cut, so it is skipped.
+#
+# The configuration is what "lighttpd -p" prints - every include resolved, the addons' drop-ins and
+# the generated /var/etc fragments with them - without its two per-run lines (var.PID, var.CWD),
+# plus the content of every file it names (the certificate, the Lua scripts, the htpasswd files):
+# a renewed certificate under the same path is a change. The fingerprint of what runs is kept in
+# lighttpd's runtime directory, written when lighttpd starts and after every reload that signals.
+#
+# Usage: lite-lighttpd-reload record          (ExecStartPost: remember what lighttpd started with)
+#        lite-lighttpd-reload reload <pid>    (ExecReload: USR1 to <pid> when it changed)
+# LITE_LIGHTTPD, LITE_LIGHTTPD_CONF and LITE_LIGHTTPD_STATE replace the binary, the configuration
+# and the fingerprint file (the test case runs it on a fake tree).
+set -u
+LIGHTTPD=${LITE_LIGHTTPD:-/usr/sbin/lighttpd}
+CONF=${LITE_LIGHTTPD_CONF:-/etc/lighttpd/lighttpd.conf}
+STATE=${LITE_LIGHTTPD_STATE:-/run/lighttpd/config.sum}
+
+# the fingerprint on stdout; nothing and exit 1 when lighttpd cannot print the configuration
+fingerprint() {
+  conf=$("$LIGHTTPD" -p -f "$CONF" 2>/dev/null) || return 1
+  [ -n "$conf" ] || return 1
+  conf=$(printf '%s\n' "$conf" | grep -v -E '^[[:space:]]*var\.(PID|CWD)[[:space:]]*=')
+  {
+    printf '%s\n' "$conf"
+    printf '%s\n' "$conf" | grep -o '"/[^"]*"' | tr -d '"' | sort -u | while IFS= read -r f; do
+      case "$f" in *.pid|/run/*|/var/run/*) continue ;; esac
+      [ -f "$f" ] && [ -r "$f" ] && printf '%s %s\n' "$f" "$(md5sum <"$f" | cut -d' ' -f1)"
+    done
+  } | md5sum | cut -d' ' -f1
+}
+
+case "${1-}" in
+  record)
+    sum=$(fingerprint) || { rm -f "$STATE"; exit 0; }
+    printf '%s\n' "$sum" >"$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
+    ;;
+  reload)
+    pid=${2-}
+    case "$pid" in ''|*[!0-9]*) echo "lite-lighttpd-reload: no main pid to reload" >&2; exit 1 ;; esac
+    sum=$(fingerprint) || sum=""
+    old=$(cat "$STATE" 2>/dev/null || :)
+    if [ -n "$sum" ] && [ "$sum" = "$old" ]; then
+      echo "lighttpd: configuration unchanged, no graceful restart"
+      exit 0
+    fi
+    kill -s USR1 "$pid" || exit 1
+    if [ -n "$sum" ]; then
+      printf '%s\n' "$sum" >"$STATE.tmp" && mv -f "$STATE.tmp" "$STATE"
+    else
+      rm -f "$STATE"
+    fi
+    echo "lighttpd: configuration changed, graceful restart"
+    ;;
+  *)
+    echo "usage: lite-lighttpd-reload record | reload <pid>" >&2
+    exit 2
+    ;;
+esac

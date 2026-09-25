@@ -1,0 +1,58 @@
+# openccu-lite: what root does for the web server before it starts and at every reload -
+# lighttpd.service's former ExecStartPre lines, in a unit of their own.
+#
+# lighttpd runs as www-data in a mount sandbox (lighttpd.service): the userfs is a read-only view
+# of the few paths it needs, /var and /run are read-only, /tmp is private. The preparation writes,
+# as root, exactly where that view is closed: S50lighttpd's reload action checks or generates the
+# certificate in /etc/config and renders the /var/etc/lighttpd_*.conf includes (the HTTPS
+# redirect, HSTS, the host-name redirect, the classic RPC sockets); the waiting page lands in
+# /var/etc; the certificate's group is set for the certs group; the addons' drop-ins are written
+# as validated root-owned copies into /etc/config/lighttpd. A "+" prefix in lighttpd.service gives
+# a line root, but not a way out of the mount namespace - the sandbox's file system view applies
+# to it all the same - so these lines run here, outside it.
+#
+# Pulled in by lighttpd.service (Wants=, After=) at every start, and started by its ExecReload
+# before the reload signal, so a changed marker, certificate or drop-in is rendered as before.
+# Each step is best effort, as its "-" prefix made it in lighttpd.service: the web server starts
+# either way. Not in LAN-gateway mode (/usr/local/HMLGW), like the web server itself.
+[Unit]
+Description=Web server preparation (certificate, configuration includes, addon drop-ins)
+After=network.target occu-init-system.service
+ConditionPathExists=!/usr/local/HMLGW
+
+[Service]
+Type=oneshot
+# the SSL certificate check and the /var/etc/lighttpd_*.conf includes - exactly what the script's
+# start() does before the daemon; the USR1 it ends with is a no-op while no angel is running
+ExecStart=-/etc/init.d/S50lighttpd.script reload
+# the waiting page shown while occulited does not answer, with this system's name, version and address
+ExecStart=-/usr/libexec/occu/lite-starting-page
+# the certificate S50's check_certificate may just have written is root 0600: the certs group reads it
+ExecStart=-/usr/libexec/occu/lite-cert-perms
+# the addons' lighttpd drop-ins as validated root-owned copies, before the daemon reads them
+ExecStart=-/usr/bin/occulited -lighttpd-dropins
+# a oneshot has no start timeout of its own; the web server's is 120 s
+TimeoutStartSec=120
+StandardOutput=journal+console
+StandardError=journal+console
+
+# Root, with root's file system view - that is what this unit is for - but nothing beyond what
+# its four steps do: files under /etc/config and /var/etc, openssl, a route lookup over netlink
+# for the system's address, systemctl. No new capabilities, no namespaces, no realtime, no
+# writable-and-executable memory; kernel tunables, modules, logs, cgroups and the clock untouched.
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+# AF_NETLINK: lite-starting-page's and check_certificate's "ip route get" for the system's address
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallFilter=@system-service
