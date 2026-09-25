@@ -1,0 +1,18 @@
+# openccu-lite: a USB stick's filesystem is mounted in the host's namespace. Upstream's
+# usbmount.rules ran /usr/share/usbmount/usbmount from udev, but systemd-udevd runs with
+# PrivateMounts=yes, so the mount happened in udevd's own namespace and nothing else saw it
+# (/media stayed an empty tmpfs). Here udev only asks systemd for occu-usb-mount@<kernel name>,
+# which runs the same usbmount - /media/usb1…8, the mount.d hooks, the /media/usb0 link - from a
+# unit; the unit is bound to the device and unmounts when the stick is pulled. The lite images
+# ship without usbmount.rules (board/lite/post-build-systemd.sh).
+#
+# The system's own partitions are left alone, as in usbmount.rules: the image's partition table
+# (deedbeef) and the labels bootfs, rootfs and userfs.
+ACTION=="remove", GOTO="lite_usb_storage_end"
+SUBSYSTEM!="block", GOTO="lite_usb_storage_end"
+KERNEL!="sd*|ub*|mmcblk*", GOTO="lite_usb_storage_end"
+ENV{ID_PART_TABLE_UUID}=="deedbeef", GOTO="lite_usb_storage_end"
+ENV{ID_FS_LABEL}=="bootfs|rootfs|userfs", GOTO="lite_usb_storage_end"
+ENV{ID_FS_USAGE}!="filesystem", GOTO="lite_usb_storage_end"
+TAG+="systemd", ENV{SYSTEMD_WANTS}+="occu-usb-mount@%k.service"
+LABEL="lite_usb_storage_end"

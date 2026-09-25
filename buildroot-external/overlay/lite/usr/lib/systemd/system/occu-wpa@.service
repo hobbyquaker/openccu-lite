@@ -1,0 +1,29 @@
+# openccu-lite: wpa_supplicant for one Wi-Fi interface, started and stopped by occu-wifi.service.
+# The networks are occulited's /etc/config/wpa_supplicant.conf (0600); its control socket in
+# /run/wpa_supplicant belongs to the group occulite, so the web UI scans and connects through it.
+[Unit]
+Description=Wi-Fi supplicant for %i
+BindsTo=sys-subsystem-net-devices-%i.device
+After=sys-subsystem-net-devices-%i.device
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/wpa_supplicant -i %i -c /etc/config/wpa_supplicant.conf -s
+Restart=on-failure
+RestartSec=3
+# CAP_CHOWN: the control directory goes to the group occulite. CAP_DAC_OVERRIDE: a reply goes to
+# the client's own socket, occulited's in /run/occulite/wpa (occulite, 0755), which root without it
+# may not write to - wpa_supplicant assumes a root with every capability, as wpa_cli's do.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_CHOWN CAP_DAC_OVERRIDE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+# no ProtectKernelTunables: the supplicant sets the interface's own sysctls (/proc/sys/net/ipv4/conf/<if>/)
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_PACKET AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native

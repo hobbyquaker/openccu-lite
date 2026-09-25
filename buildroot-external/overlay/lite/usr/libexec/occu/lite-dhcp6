@@ -1,0 +1,42 @@
+#!/bin/sh
+# openccu-lite: udhcpc6's script for an interface occulited runs DHCPv6 on (its IPv6 settings,
+# mode DHCPv6). Unlike busybox's default script it touches IPv6 only - the default one flushes the
+# interface's IPv4 address on deconfig. It sets the address the server leases (a /128: DHCPv6 hands
+# out single addresses; the prefix and the default route come from the router's announcements),
+# notes it in /run/occulite/dhcp6-<interface> so occulited can remove it when the mode changes, and
+# hands the nameservers to resolvconf as the record <interface>.dhcp6.
+IP=${IP:-/sbin/ip}
+RESOLVCONF=${RESOLVCONF:-/sbin/resolvconf}
+STATE_DIR=${STATE_DIR:-/run/occulite}
+state="${STATE_DIR}/dhcp6-${interface}"
+
+drop_address() {
+  if [ -r "${state}" ]; then
+    "${IP}" -6 addr del "$(cat "${state}")" dev "${interface}" 2>/dev/null
+    rm -f "${state}"
+  fi
+}
+
+case "$1" in
+  deconfig|leasefail|nak)
+    drop_address
+    "${RESOLVCONF}" -d "${interface}.dhcp6" 2>/dev/null
+    ;;
+  bound|renew)
+    if [ -n "${ipv6}" ]; then
+      if [ -r "${state}" ] && [ "$(cat "${state}")" != "${ipv6}/128" ]; then
+        drop_address
+      fi
+      "${IP}" -6 addr replace "${ipv6}/128" dev "${interface}"
+      mkdir -p "${STATE_DIR}"
+      echo "${ipv6}/128" > "${state}"
+    fi
+    if [ -n "${dns}" ]; then
+      {
+        [ -n "${search}" ] && echo "search ${search}"
+        for d in ${dns}; do echo "nameserver ${d}"; done
+      } | "${RESOLVCONF}" -a "${interface}.dhcp6"
+    fi
+    ;;
+esac
+exit 0

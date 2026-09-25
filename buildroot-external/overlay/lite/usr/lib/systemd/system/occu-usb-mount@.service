@@ -1,0 +1,32 @@
+# openccu-lite: one USB stick's filesystem, mounted for the whole system. Started by
+# 63-openccu-lite-usb-storage.rules for the partition's kernel name (sda1, sdb, mmcblk1p1);
+# /usr/libexec/occu/lite-usb-mount runs upstream's usbmount with udev's facts about the partition,
+# here in the host's mount namespace: /media/usb1…8, the first stick linked as /media/usb0 (the
+# backup's default directory), nosuid, nodev, noexec, noatime; FAT, exFAT and NTFS owned by root
+# and readable by the occulite group (overlay/lite/etc/usbmount/usbmount.conf).
+#
+# BindsTo= the device: pulling the stick stops the unit, and the stop unmounts (lazily - the
+# device is gone) and runs usbmount's umount.d hooks. A shutdown stops it the same way.
+#
+# The journal's copies may go to a stick (TARGET=usb:<label>/<dir> in /etc/config/journal, ram-sync
+# only): after the mount lite-journal-sync switches them to the stick when its label is the
+# journal's and copies at once; before the unmount it makes a last copy while the stick can still
+# be written, and the journal carries on in RAM until the stick is back. At shutdown that step
+# waits for occu-journal-sync's own last copy, so the stick is still there for it. Both steps are
+# "-": the journal never keeps a stick from being mounted or unmounted.
+[Unit]
+Description=USB storage /dev/%I
+BindsTo=dev-%i.device
+After=dev-%i.device local-fs.target
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-usb-mount add %I
+ExecStartPost=-/usr/libexec/occu/lite-journal-sync attach %I
+ExecStop=-/usr/libexec/occu/lite-journal-sync detach %I
+ExecStop=/usr/libexec/occu/lite-usb-mount remove %I
+TimeoutSec=90
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,14 @@
+# openccu-lite: DHCP for one Wi-Fi interface, started and stopped by occu-wifi.service. Its script
+# sets the address, the default route with the metric of the preferred interface and the
+# nameservers (resolvconf); Ethernet's netconfig is not touched.
+[Unit]
+Description=Wi-Fi DHCP for %i
+BindsTo=sys-subsystem-net-devices-%i.device
+After=sys-subsystem-net-devices-%i.device occu-wpa@%i.service
+
+[Service]
+Type=simple
+ExecStart=/bin/sh -c 'exec /sbin/udhcpc -f -S -i %i -x hostname:"$(hostname)" -s /usr/libexec/occu/lite-wifi-dhcp'
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes

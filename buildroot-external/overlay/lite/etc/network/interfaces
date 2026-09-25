@@ -1,0 +1,8 @@
+# openccu-lite: upstream's interfaces without wlan0. Wi-Fi is occulited's (occu-wifi.service):
+# upstream's hook runs one interface only and, with no wpa_supplicant.conf, unloads the Wi-Fi
+# driver, while here Ethernet and Wi-Fi are up side by side, each with its own addressing.
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet manual

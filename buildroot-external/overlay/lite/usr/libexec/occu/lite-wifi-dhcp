@@ -1,0 +1,32 @@
+#!/bin/sh
+# openccu-lite: udhcpc's script for the Wi-Fi interface (occu-wifi-dhcp@.service). Unlike
+# upstream's dhcp.script it leaves Ethernet's netconfig and routes alone: the address, the default
+# route with the metric of the preference in /etc/config/wifi (5 when Wi-Fi is preferred, below
+# DHCP Ethernet's 10; 600 when not), the nameservers through resolvconf.
+[ -r /etc/config/wifi ] && . /etc/config/wifi
+metric=600
+[ "${PREFERRED:-eth}" = "wlan" ] && metric=5
+
+case "$1" in
+  deconfig)
+    /sbin/ip -4 addr flush dev "${interface}"
+    /sbin/ip link set dev "${interface}" up
+    /sbin/resolvconf -d "${interface}" 2>/dev/null
+    ;;
+  bound|renew)
+    [ "$1" = "bound" ] && /sbin/ip -4 addr flush dev "${interface}"
+    /sbin/ip -4 addr replace "${ip}/${mask:-24}" dev "${interface}" ${broadcast:+broadcast "${broadcast}"}
+    while /sbin/ip -4 route del default dev "${interface}" 2>/dev/null; do :; done
+    m=${metric}
+    for r in ${router}; do
+      /sbin/ip -4 route add default via "${r}" dev "${interface}" metric "${m}"
+      m=$((m + 1))
+    done
+    {
+      [ -n "${domain}" ] && echo "domain ${domain}"
+      for d in ${dns}; do echo "nameserver ${d}"; done
+    } | /sbin/resolvconf -a "${interface}"
+    mkdir -p /var/status && touch /var/status/hasIP
+    ;;
+esac
+exit 0

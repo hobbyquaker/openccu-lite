@@ -1,0 +1,24 @@
+# openccu-lite: Wi-Fi, beside the network start. `occulited wifi up` takes a setup file from the
+# boot partition, then - with Wi-Fi switched on in /etc/config/wifi - loads the onboard driver,
+# unblocks the radio, starts the interface's supplicant (occu-wpa@) and its addressing (DHCP by
+# occu-wifi-dhcp@, or static), the default route's metric by the preferred interface. Switched off
+# it blocks the radio and unloads the onboard driver. occulited reloads it for new addressing or a
+# new preference and restarts it for the switch.
+[Unit]
+Description=Wi-Fi
+After=occu-network.service occulited-helper.service
+Before=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/occulited wifi up
+ExecReload=/usr/bin/occulited wifi reload
+ExecStop=/usr/bin/occulited wifi down
+TimeoutStartSec=120
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=occu-wifi
+
+[Install]
+WantedBy=multi-user.target

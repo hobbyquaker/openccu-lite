@@ -1,0 +1,49 @@
+#!/bin/sh
+# openccu-lite (task 161): occu-usb-mount@.service - upstream's usbmount for one partition, run from
+# a unit in the host's mount namespace instead of from udev (whose PrivateMounts=yes hid the mount).
+#
+# usbmount reads the partition's facts from udev's environment; a unit has none, so they are taken
+# from udev's database for the device. Only the keys usbmount uses are passed, and never through
+# eval: a stick's label is whatever its owner wrote into it.
+#
+# Usage: lite-usb-mount add|remove <kernel name>   (sda1, sdb, mmcblk1p1)
+set -u
+action=${1:-}
+name=${2:-}
+USBMOUNT=${LITE_USBMOUNT:-/usr/share/usbmount/usbmount}
+UDEVADM=${LITE_UDEVADM:-udevadm}
+
+case "${action}" in
+  add|remove) ;;
+  *) echo "Usage: $0 add|remove <kernel name>" >&2; exit 2 ;;
+esac
+case "${name}" in
+  ''|*[!A-Za-z0-9]*) echo "not a block device name: '${name}'" >&2; exit 2 ;;
+esac
+
+DEVNAME=/dev/${name}
+export DEVNAME
+
+if [ "${action}" = add ]; then
+  props=$("${UDEVADM}" info --query=property --name="${DEVNAME}" 2>/dev/null) || {
+    echo "udev knows nothing about ${DEVNAME}" >&2
+    exit 1
+  }
+  while IFS='=' read -r key value; do
+    case "${key}" in
+      ID_FS_USAGE|ID_FS_TYPE|ID_FS_UUID|ID_FS_LABEL|DEVPATH) export "${key}=${value}" ;;
+    esac
+  done <<EOT
+${props}
+EOT
+fi
+
+"${USBMOUNT}" "${action}"
+rc=$?
+if [ "${action}" = add ] && [ ${rc} -eq 0 ]; then
+  where=$(awk -v d="${DEVNAME}" '$1 == d { print $2; exit }' /proc/mounts 2>/dev/null)
+  echo "${DEVNAME} (${ID_FS_TYPE:-?}) mounted at ${where:-nowhere}"
+elif [ "${action}" = remove ]; then
+  echo "${DEVNAME} unmounted"
+fi
+exit ${rc}
