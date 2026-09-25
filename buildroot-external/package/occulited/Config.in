@@ -22,4 +22,4 @@ config BR2_PACKAGE_OCCULITED
 	  that repository: the catalogue file and the adapter
 	  manifests, installed under /etc/occulite).
 
-	  https://git.lan.raff.rocks/hobbyquaker/occulited
+	  https://github.com/hobbyquaker/occulited

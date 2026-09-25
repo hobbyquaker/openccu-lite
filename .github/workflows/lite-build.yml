@@ -106,9 +106,10 @@ jobs:
         # fragment's proxy port and the gate's session shapes, so the test only breaks when they do)
         run: |
           rev=$(sed -n 's/^OCCULITED_VERSION *= *//p' buildroot-external/package/occulited/occulited.mk)
-          site=$(sed -n 's/^OCCULITED_SITE *= *//p' buildroot-external/package/occulited/occulited.mk)
-          rm -rf /tmp/occulited-pin && mkdir -p /tmp/occulited-pin
-          curl -sSfL "$site/$rev.tar.gz" | tar -xz -C /tmp/occulited-pin
+          repo=$(sed -n 's/^OCCULITED_SITE *= *$(call github,\([^,]*\),\([^,]*\),.*/\1\/\2/p' buildroot-external/package/occulited/occulited.mk)
+          test -n "$rev" && test -n "$repo"
+          rm -rf /tmp/occulited-pin && mkdir -p /tmp/occulited-pin/occulited
+          curl -sSfL "https://github.com/$repo/archive/$rev.tar.gz" | tar -xz --strip-components=1 -C /tmp/occulited-pin/occulited
           bash scripts/lite-lighttpd-redirect-test.sh /tmp/occulited-pin/occulited
       - name: A POST without a body reaches the API and the addons
         # every lite product takes board/lite/patches, and lighttpd of the pinned version, built in an
