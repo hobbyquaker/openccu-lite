@@ -1,5 +1,9 @@
 # Security: what openccu-lite does today, and what it still owes
 
+**The audit's records** (task 120): [threat-model.md](threat-model.md) — assets, actors, boundaries and the residual
+risks; [security-asvs.md](security-asvs.md) — the code against OWASP ASVS 5.0 Level 2, row by row;
+[security-en303645.md](security-en303645.md) — the product against ETSI EN 303 645.
+
 The honest baseline: separate users now, AppArmor later.
 Written 2026-09-06 for the busybox-init step; the move to systemd changed the last section.
 

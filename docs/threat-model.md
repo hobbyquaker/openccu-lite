@@ -546,12 +546,35 @@ Known, accepted for now, and written down so that nobody has to rediscover them.
 | R8 | **Classic RPC has no real authentication** | It is the CCU's protocol, and compatibility is the point of it | Nothing, within compatibility: it stays a switch that is off by default, with the warnings on its page |
 | R9 | **`?sid=` puts a session id in a URL** | The CCU addon convention needs it | The narrow legacy alias, on by default only for undeclared addons |
 
+## Audit log
+
+The "to check" rows that were checked, and what became of them. One entry per slice of the audit.
+
+**2026-09-26 — B1 and B2, the authentication, session and access-control slice** (occulited `00fda6e`, image
+`1.0.0-dev.25`; the checklist is [security-asvs.md](security-asvs.md), the product baseline
+[security-en303645.md](security-en303645.md)):
+
+| row | outcome |
+| --- | --- |
+| B1 *Spoofing* — the lockout, the cookie's flags | the flags hold (V7.5); the lockout by address is dodged with a client-sent `X-Forwarded-For` → **B-230** (confirmed on a lab system) |
+| B1 *Tampering* — `SameSite=Lax` alone | not alone any more: the `Origin`/`Sec-Fetch-Site` check of task 213 covers every state-changing call on the cookie; the header credential and the CSP of D-78 remain → **task 259** |
+| B1 *Repudiation* — which changes are logged with who and from where | password logins, refusals and lockouts are at debug → **B-231**; the older system routes log the action without the caller (stays open in B-231's wake) |
+| B1 *Information disclosure* — the list of open routes | `open()` in `internal/httpapi/auth.go` is the one list: health, version, the auth flow, the ACME challenge, the pairing request, `addonctl` (own token), `homematic.cgi` (loopback only — but the loopback is decided on the forged address, **B-230**), the SBOM. Each answers nothing a session would guard, except that one |
+| B1 *Denial of service* — unauthenticated work | the login's argon2 runs one at a time; eight authenticated JSON routes read bodies without a cap, no idle timeout → **B-232** |
+| B1 *Elevation* — every route's scope, mechanically | `TestRouteTable` walks the mux; the default is deny; pass |
+| B2 *Spoofing* — a faked `X-Forwarded-For` | lighttpd appends the real address to a client-sent header and occulited takes the first element → **B-230** |
+| B2 *Repudiation* — the log's address | the forwarded one, and therefore the client's choice → **B-230** |
+| — (V6.3) | the login skips argon2 for an unknown account: a timing oracle for names → **B-233** |
+
 ## How this document is kept
 
 - **Reviewed at every minor release** (the standing process), and whenever a boundary changes: a new helper
   operation, a new open route, a new outside source, a change to the confinement.
 - **An agent's prompt for boundary work names this document** — the boundary it touches, and the "to check" rows
   of that boundary.
+- **The audit's records** are [security-asvs.md](security-asvs.md) (the code against OWASP ASVS 5.0 L2) and
+  [security-en303645.md](security-en303645.md) (the product against ETSI EN 303 645); the [audit log](#audit-log)
+  above says which rows were checked when.
 - **The "to check" column is the audit's backlog.** Each row becomes a finding (a bug or a task) with a CVSS 3.1
   rating, or is struck out with the reason it is not a finding.
 - **The bugs are kept in the boundary sections** so the pattern stays visible: nearly every security bug in this
