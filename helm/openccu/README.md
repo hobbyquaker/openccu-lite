@@ -69,7 +69,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | service.ports.TCP.xmlrpc | int | `1999` | ReGaHss XmlRpc |
 | service.ports.TCP.xmlrpc-proxy | int | `31999` | ReGaHss XmlRpc proxy |
 | service.ports.TCP.xmlrpc-tls | int | `41999` | ReGaHss XmlRpc TLS |
-| service.ports.UDP.eq3configd | int | `43439` | eq3configd |
+| service.ports.UDP.discovery | int | `43439` | eQ-3 device discovery (occulited on openccu-lite, eq3configd on the classic products) |
 | service.ports.UDP.snmp | int | `161` |  |
 | service.ports.UDP.upnp | int | `1900` | uPnP/ssdp |
 | service.type | string | `"ClusterIP"` |  |

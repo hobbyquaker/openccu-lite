@@ -71,6 +71,10 @@ case "$1" in
   restart|reload)
     restart
   ;;
+  init)
+    # prepare only (the crontab merge), for a service manager that starts crond itself
+    init
+  ;;
   *)
     echo "Usage: $0 {start|stop|restart}"
     exit 1

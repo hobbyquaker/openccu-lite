@@ -1,0 +1,204 @@
+#!/bin/sh
+# shellcheck shell=dash disable=SC2169,SC3001,SC3010 source=/dev/null
+#
+# Starts lighttpd.
+#
+
+[[ -r /var/hm_mode ]] && . /var/hm_mode
+
+PIDFILE=/var/run/lighttpd.pid
+PIDFILE_ANGEL=/var/run/lighttpd-angel.pid
+
+# skip this startup if not in normal mode
+[[ "${HM_MODE}" != "NORMAL" ]] && exit 0
+
+check_certificate() {
+  # openccu-lite (task 35, D-48): an ACME-managed certificate - occulited wrote the marker beside
+  # it - is occulited's to renew and is never regenerated here; a LAN CA's 24-hour certificate
+  # would otherwise fail the one-day check on the very reload that installs it.
+  [[ -f /etc/config/server.pem.managed || -f /etc/config/server.pem.acme ]] && return 0
+  # check if a valid/non-expired SSL cert exists and if
+  # not we regenerate it.
+  if ! /usr/bin/openssl x509 -checkend 86400 -noout -in /etc/config/server.pem 2>/dev/null >/dev/null; then
+    [[ -f /etc/config/server.pem ]] && mv -f /etc/config/server.pem "/etc/config/server.pem_$(date +%Y%m%d)"
+    echo -n "creating new SSL cert... "
+    IP=$(ip -4 route get 1 | head -1 | cut -d' ' -f8 | tr -d '\n')
+    /usr/bin/openssl req -new -x509 -nodes -newkey ec:<(openssl ecparam -name secp384r1) \
+                                           -keyout /etc/config/server.pem \
+                                           -out /etc/config/server.pem \
+                                           -days 3650 \
+                                           -addext "subjectAltName = DNS:$(hostname),IP:${IP}" \
+                                           -addext "keyUsage = keyCertSign,digitalSignature,keyEncipherment" \
+                                           -addext "extendedKeyUsage = serverAuth" \
+                                           -addext "nsCertType = server,sslCA" \
+                                           -subj "/C=DE/O=HomeMatic/OU=$(cat /var/board_serial)/CN=$(hostname)" 2>/dev/null >/dev/null
+  fi
+}
+
+fqdn_redirect() {
+  # openccu-lite: redirect the bare host name to <host>.<domain>. The userfs marker
+  # /etc/config/fqdnRedirect holds that name; the fragment is the lite overlay's, so a product
+  # without it is unchanged. Only a name the live certificate covers is used, so the redirect
+  # never leads into a certificate warning: after a rename it waits for a certificate for the
+  # new name, whose install reloads lighttpd and brings it back. On port 80 it rides on the
+  # HTTPS redirect, after it, so http://<host>/ takes one hop - call this after that block.
+  echo "" >/var/etc/lighttpd_fqdnredirect.conf
+  [[ -f /etc/config/fqdnRedirect ]] && [[ -f /etc/lighttpd/conf.d/fqdnredirect.conf ]] || return 0
+  FQDN=$(head -n 1 /etc/config/fqdnRedirect | tr 'A-Z' 'a-z' | tr -d ' \t\r')
+  # a DNS name of two labels or more and nothing else, so the marker cannot become configuration
+  [[ ${#FQDN} -le 253 ]] || return 0
+  echo "${FQDN}" | grep -Eq '^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$' || return 0
+  /usr/bin/openssl x509 -noout -checkhost "${FQDN}" -in /etc/config/server.pem 2>/dev/null | grep -q ' does match ' || return 0
+  echo "var.fqdn_redirect_host = \"${FQDN%%.*}\"" >/var/etc/lighttpd_fqdnredirect.conf
+  echo "var.fqdn_redirect_target = \"${FQDN}\"" >>/var/etc/lighttpd_fqdnredirect.conf
+  echo "include \"/etc/lighttpd/conf.d/fqdnredirect.conf\"" >>/var/etc/lighttpd_fqdnredirect.conf
+  if [[ -f /etc/config/httpsRedirectEnabled ]]; then
+    echo "include \"/var/etc/lighttpd_fqdnredirect.conf\"" >>/var/etc/lighttpd_httpsredirect.conf
+  fi
+  return 0
+}
+
+remoteapi_conf() {
+  # openccu-lite (task 143): the classic RPC sockets the Remote access page switched on, without
+  # upstream's ReGa sockets; upstream's include everywhere else
+  if [[ -x /usr/libexec/occu/lite-classic-rpc-conf ]]; then
+    /usr/libexec/occu/lite-classic-rpc-conf /var/etc/lighttpd_webui_remoteapi.conf
+  elif [[ -f /var/status/startupFinished ]]; then
+    echo "include \"/etc/lighttpd/conf.d/webui_remoteapi.conf\"" >/var/etc/lighttpd_webui_remoteapi.conf
+  else
+    echo "include \"/etc/lighttpd/conf.d/webui_remoteapi_notready.conf\"" >/var/etc/lighttpd_webui_remoteapi.conf
+  fi
+}
+
+hsts_conf() {
+  # openccu-lite: HTTP Strict Transport Security (task 36). The userfs marker
+  # /etc/config/hstsEnabled holds the max-age in seconds; the fragment is the lite overlay's, so a
+  # product without it is unchanged. Digits only, so a hand-edited marker cannot become
+  # configuration; a marker without digits is the default of a week (task 96).
+  # Task 96: a marker of 0 is HSTS switched off but clearing - max-age=0, so a browser that visits
+  # forgets its entry - until the Unix time in /etc/config/hstsClearUntil, and no header once that
+  # has passed (without the file: until the marker goes). A clock that is behind only sends
+  # max-age=0 longer, which costs nothing.
+  echo "" >/var/etc/lighttpd_hsts.conf
+  [[ -f /etc/config/hstsEnabled ]] && [[ -f /etc/lighttpd/conf.d/hsts.conf ]] || return 0
+  HSTS_MAX_AGE=$(tr -dc '0-9' </etc/config/hstsEnabled | head -c 10)
+  case "${HSTS_MAX_AGE}" in
+    "" | *[!0]*) ;;
+    *)
+      HSTS_UNTIL=""
+      [[ -f /etc/config/hstsClearUntil ]] && HSTS_UNTIL=$(tr -dc '0-9' </etc/config/hstsClearUntil | head -c 12)
+      if [[ -n "${HSTS_UNTIL}" ]] && [[ "$(date +%s)" -ge "${HSTS_UNTIL}" ]]; then
+        return 0
+      fi
+      HSTS_MAX_AGE=0
+    ;;
+  esac
+  echo "var.hsts_max_age = \"${HSTS_MAX_AGE:-604800}\"" >/var/etc/lighttpd_hsts.conf
+  echo "include \"/etc/lighttpd/conf.d/hsts.conf\"" >>/var/etc/lighttpd_hsts.conf
+  return 0
+}
+
+start() {
+  echo -n "Starting lighttpd: "
+
+  # check if a valid/non-expired SSL cert exists and if
+  # not we regenerate it.
+  check_certificate
+
+  # activate/deactivate service interface authentication
+  if [[ -f /etc/config/authEnabled ]] && [[ -f /etc/lighttpd/conf.d/auth.conf ]]; then
+    echo "include \"/etc/lighttpd/conf.d/auth.conf\"" >/var/etc/lighttpd_auth.conf
+  else
+    echo "" >/var/etc/lighttpd_auth.conf
+  fi
+
+  # activate/deactivate automatic https redirect
+  if [[ -f /etc/config/httpsRedirectEnabled ]]; then
+    echo "include \"/etc/lighttpd/conf.d/httpsredirect.conf\"" >/var/etc/lighttpd_httpsredirect.conf
+  else
+    echo "" >/var/etc/lighttpd_httpsredirect.conf
+  fi
+
+  # activate/deactivate HTTP Strict Transport Security (openccu-lite, task 36 and 96)
+  hsts_conf
+
+  # activate/deactivate the redirect from the bare host name to <host>.<domain>
+  fqdn_redirect
+
+  # activate/deactivate RemoteAPI ports
+  remoteapi_conf
+
+  # adjust the oom score (which is inherited by start-stop-daemon)
+  # to ensure that others are killed first in case of low memory situations
+  echo -900 >/proc/$$/oom_score_adj 2>/dev/null
+
+  if start-stop-daemon -d / -S -q -b -m -p ${PIDFILE_ANGEL} --exec /usr/sbin/lighttpd-angel -- -f /etc/lighttpd/lighttpd.conf -D; then
+    echo "OK"
+  else
+    echo "ERROR"
+  fi
+}
+stop() {
+  echo -n "Stopping lighttpd: "
+  start-stop-daemon -K -q -p ${PIDFILE_ANGEL}
+  rm -f ${PIDFILE_ANGEL}
+  [[ ! -f ${PIDFILE} ]] && echo "OK" || echo "ERROR"
+}
+restart() {
+  stop
+  start
+}
+reload() {
+  echo -n "Reloading lighttpd: "
+
+  # check if a valid/non-expired SSL cert exists and if
+  # not we regenerate it.
+  check_certificate
+
+  # activate/deactivate service interface authentication
+  if [[ -f /etc/config/authEnabled ]] && [[ -f /etc/lighttpd/conf.d/auth.conf ]]; then
+    echo "include \"/etc/lighttpd/conf.d/auth.conf\"" >/var/etc/lighttpd_auth.conf
+  else
+    echo "" >/var/etc/lighttpd_auth.conf
+  fi
+
+  # activate/deactivate automatic https redirect
+  if [[ -f /etc/config/httpsRedirectEnabled ]]; then
+    echo "include \"/etc/lighttpd/conf.d/httpsredirect.conf\"" >/var/etc/lighttpd_httpsredirect.conf
+  else
+    echo "" >/var/etc/lighttpd_httpsredirect.conf
+  fi
+
+  # activate/deactivate HTTP Strict Transport Security (openccu-lite, task 36 and 96)
+  hsts_conf
+
+  # activate/deactivate the redirect from the bare host name to <host>.<domain>
+  fqdn_redirect
+
+  # activate/deactivate RemoteAPI ports
+  remoteapi_conf
+
+  start-stop-daemon -K -s USR1 -q -p ${PIDFILE_ANGEL}
+  # openccu-lite: no angel running (systemd's unit prepares with reload before lighttpd starts) is nothing to reload, not an error
+  [[ -f ${PIDFILE} || ! -f ${PIDFILE_ANGEL} ]] && echo "OK" || echo "ERROR"
+}
+
+case "$1" in
+  start)
+    start
+  ;;
+  stop)
+    stop
+  ;;
+  restart)
+    restart
+  ;;
+  reload)
+    reload
+  ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|reload}"
+    exit 1
+esac
+
+exit 0

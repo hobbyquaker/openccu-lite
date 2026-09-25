@@ -3,6 +3,20 @@
 #
 # startup script that updates HomeMatic-RF devices, if necessary.
 #
+# COPRO_UPDATE_AT_BOOT=no (set by the caller, e.g. a service manager unit) keeps the
+# version check but never flashes: a system that offers the coprocessor update in its
+# user interface reports a newer firmware here and flashes it on the user's request.
+#
+
+# copro_flash_deferred <old version> <new version>: true (and says so) when the
+# flash is left to the user interface
+copro_flash_deferred() {
+  [ "${COPRO_UPDATE_AT_BOOT:-yes}" = "no" ] || return 1
+  echo -n "${1:-unknown}, ${2} available (not flashed at boot)"
+  # nothing was flashed, so there is nothing to re-initialise
+  REINIT=
+  return 0
+}
 
 update_rf_hardware() {
 
@@ -46,7 +60,10 @@ update_rf_hardware() {
 
       # if NEW_VERSION is not empty we go ahead and perform the
       # update operation
-      if [[ -n "${NEW_VERSION}" ]] && [[ "${NEW_VERSION}" != "${OLD_VERSION}" ]]; then
+      if [[ -n "${NEW_VERSION}" ]] && [[ "${NEW_VERSION}" != "${OLD_VERSION}" ]] &&
+         copro_flash_deferred "${OLD_VERSION}" "${NEW_VERSION}"; then
+        :
+      elif [[ -n "${NEW_VERSION}" ]] && [[ "${NEW_VERSION}" != "${OLD_VERSION}" ]]; then
         # we always perform the firmware update in /tmp
         # so lets copy the whole firmware directory to tmp
         TMPDIR_FW=$(mktemp -d)
@@ -129,7 +146,10 @@ update_rf_hardware() {
 
       # if NEW_VERSION is not empty we go ahead and perform the
       # update operation
-      if [[ "${NEW_VERSION}" != "${OLD_VERSION}" ]]; then
+      if [[ "${NEW_VERSION}" != "${OLD_VERSION}" ]] &&
+         copro_flash_deferred "${OLD_VERSION}" "${NEW_VERSION}"; then
+        :
+      elif [[ "${NEW_VERSION}" != "${OLD_VERSION}" ]]; then
         echo -n "${OLD_VERSION}=>${NEW_VERSION}"
         if [[ -n "${FORCED_VERSION}" ]]; then
           echo -n " (forced), "
@@ -223,7 +243,10 @@ update_rf_hardware() {
 
       # if NEW_VERSION is not empty we go ahead and perform the
       # update operation
-      if [[ "${NEW_VERSION}" != "${OLD_VERSION}" ]]; then
+      if [[ "${NEW_VERSION}" != "${OLD_VERSION}" ]] &&
+         copro_flash_deferred "${OLD_VERSION}" "${NEW_VERSION}"; then
+        :
+      elif [[ "${NEW_VERSION}" != "${OLD_VERSION}" ]]; then
         echo -n "${OLD_VERSION}=>${NEW_VERSION}"
         if [[ -n "${FORCED_VERSION}" ]]; then
           echo -n " (forced), "
@@ -281,8 +304,9 @@ start() {
   # check+update rf module firmwares
   update_rf_hardware
 
-  # save all HM_ env variables
-  set | grep '^HM_' >/var/hm_mode
+  # save all HM_ env variables; replaced in one step, so a unit reading the file meanwhile never
+  # sees it half written (the web server and eq3configd start beside these under systemd)
+  set | grep '^HM_' >/var/hm_mode.tmp && mv -f /var/hm_mode.tmp /var/hm_mode
 
   # check if we should re-init afterwards
   if [[ -n "${REINIT}" ]]; then

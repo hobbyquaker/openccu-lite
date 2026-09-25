@@ -101,8 +101,10 @@ handle_renew() {
     touch /var/status/hasLink
   fi
 
-  # check internet connection
-  /bin/checkInternet
+  # check internet connection (not on images without the internet check)
+  if [[ -x /bin/checkInternet ]]; then
+    /bin/checkInternet
+  fi
 }
 
 handle_bound() {

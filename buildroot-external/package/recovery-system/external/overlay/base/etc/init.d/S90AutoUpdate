@@ -5,6 +5,19 @@
 # waiting which we can perform during bootup automatically.
 #
 
+# keep the install log for the system that boots next: a copy of /tmp/fwinstall.log
+# on the userfs (mounted read-write by the caller), named after the UTC time. The
+# system reads it at its next boot (openccu-lite carries it into its journal) and
+# removes it. Best effort: nothing here may fail the update or the reboot.
+save_install_log() {
+  if [[ -f /tmp/fwinstall.log ]] && mkdir -p /usr/local/var/recovery 2>/dev/null; then
+    chmod 0755 /usr/local/var/recovery 2>/dev/null
+    cp /tmp/fwinstall.log "/usr/local/var/recovery/$(date -u +%Y-%m-%dT%H-%M-%SZ).log" 2>/dev/null &&
+      chmod 0644 /usr/local/var/recovery/*.log 2>/dev/null
+  fi
+  return 0
+}
+
 start() {
   echo -n "Checking for Auto-Update Jobs: "
 
@@ -41,6 +54,7 @@ start() {
         # firmware update done, lets reboot!
         mount -o rw,remount /userfs
         rm -f /usr/local/.firmwareUpdate
+        save_install_log
         mount -o ro,remount /userfs
 
         # reboot and exit
@@ -109,6 +123,7 @@ start() {
     # firmware update done, lets reboot!
     mount -o rw,remount /userfs
     rm -f /usr/local/.firmwareUpdate
+    save_install_log
     mount -o ro,remount /userfs
 
     # reboot and exit

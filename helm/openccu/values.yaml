@@ -156,8 +156,8 @@ service:
         enabled: true
         port: 1900
         protocol: UDP
-      # -- eq3configd
-      eq3configd:
+      # -- eQ-3 device discovery (occulited on openccu-lite, eq3configd on the classic products)
+      discovery:
         enabled: true
         port: 43439
         protocol: UDP

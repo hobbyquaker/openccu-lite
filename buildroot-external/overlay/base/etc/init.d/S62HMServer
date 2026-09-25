@@ -19,6 +19,28 @@ HM_SERVER_DEVNODE=/dev/mmd_hmip
 LOGLEVEL_HMIP=error
 PIDFILE=/var/run/HMIPServer.pid
 
+# create the log4j2 configuration from its template and modify it according
+# to the syslog settings: setupLog4j2 <template> <output> <syslog settings>
+setupLog4j2() {
+  cp -a "$1" "$2"
+
+  # get the current syslog settings
+  [[ -r "$3" ]] && . "$3"
+
+  # check if we have an external loghost and if so, modify
+  # the SYSLOG appender in log4j2.xml accordingly. Not when the server
+  # logs to stdout (HMIP_LOG_STDOUT=1): whatever collects that output
+  # forwards it, and the loghost would get every message twice.
+  if [[ -n "${LOGHOST}" ]] && [[ "${HMIP_LOG_STDOUT}" != "1" ]]; then
+    sed -i "s|host=\"127\.0\.0\.1\"|host=\"${LOGHOST}\"|" "$2"
+    sed -i "/AppenderRef ref=\"File\"/a\\    <AppenderRef ref=\"SYSLOG\"\\/>" "$2"
+  fi
+
+  # modify "priority value" values in log4j2.xml to set the
+  # global loglevel
+  sed -i "s/level=\".*\"/level=\"$(echo ${LOGLEVEL_HMIP} | tr '[:upper:]' '[:lower:]')\"/g" "$2"
+}
+
 init() {
   export JAVA_HOME=/opt/java/
   export PATH=${PATH}:${JAVA_HOME}/bin
@@ -29,23 +51,18 @@ init() {
     fi
   fi
 
+  # optional overrides: /etc/hmipserver.default (the image) and /etc/config/hmipserver.default
+  # (the user) may set HMIP_BIND_ADDRESS to keep the XML-RPC port (Legacy.Port) off the LAN,
+  # e.g. 127.0.0.1 when every client runs on the CCU, and HMIP_LOG_STDOUT=1 to start the
+  # server as a plain background child that keeps this script's stdout (for a service
+  # manager that collects it, together with a log4j2 template that logs to the console)
+  for f in /etc/hmipserver.default /etc/config/hmipserver.default; do
+    [[ -r "${f}" ]] && . "${f}"
+  done
+
   # create a log4j2.xml config file in /var/etc and modify it
   # according to the syslog settings in /etc/config/syslog
-  cp -a ${CFG_TEMPLATE_DIR}/log4j2.xml /var/etc/
-
-  # get the current syslog settings
-  [[ -r /etc/config/syslog ]] && . /etc/config/syslog
-
-  # check if we have an external loghost and if so, modify
-  # the SYSLOG appender in log4j2.xml accordingly.
-  if [[ -n "${LOGHOST}" ]]; then
-    sed -i "s|host=\"127\.0\.0\.1\"|host=\"${LOGHOST}\"|" /var/etc/log4j2.xml
-    sed -i "/AppenderRef ref=\"File\"/a\\    <AppenderRef ref=\"SYSLOG\"\\/>" /var/etc/log4j2.xml
-  fi
-
-  # modify "priority value" values in log4j2.xml to set the
-  # global loglevel
-  sed -i "s/level=\".*\"/level=\"$(echo ${LOGLEVEL_HMIP} | tr '[:upper:]' '[:lower:]')\"/g" /var/etc/log4j2.xml
+  setupLog4j2 ${CFG_TEMPLATE_DIR}/log4j2.xml /var/etc/log4j2.xml /etc/config/syslog
 
   # if the userfs is located on a non-mmc device (not on a SD card)
   # we can safely use the old /usr/local/sdcard directory path as
@@ -133,6 +150,12 @@ init() {
     # in crRFD.
     sed -i "s|^Lan\.Routing\.Enabled=.*$|Lan.Routing.Enabled=${ADVANCED_HMIP}|" /var/etc/crRFD.conf
 
+    # HMIP_BIND_ADDRESS comes from the hmipserver.default files sourced at the top of init()
+    if [[ -n "${HMIP_BIND_ADDRESS}" ]]; then
+      sed -i "/^Legacy\.BindAddress=/d" /var/etc/crRFD.conf
+      echo "Legacy.BindAddress=${HMIP_BIND_ADDRESS}" >>/var/etc/crRFD.conf
+    fi
+
   else
     HM_SERVER=/opt/HMServer/HMServer.jar:/opt/HMServer/coupling/ESHBridge.jar
     HM_SERVER_CLASS="de.eq3.ccu.server.HMServer"
@@ -204,8 +227,17 @@ start() {
   # to ensure that others are killed first in case of low memory situations
   echo -900 >/proc/$$/oom_score_adj 2>/dev/null
 
-  # shellcheck disable=SC2086
-  start-stop-daemon -d / -b -S -q -m -p "${PIDFILE}" --exec java -- -Dos.arch=${ARCH} ${JAVAOPT} -Dlog4j.configurationFile=file:///var/etc/log4j2.xml -Dfile.encoding=ISO-8859-1 -cp "${HM_SERVER}" ${HM_SERVER_CLASS} ${HM_SERVER_ARGS}
+  if [[ "${HMIP_LOG_STDOUT}" == "1" ]]; then
+    # a plain background child keeps this script's stdout and stderr, which
+    # start-stop-daemon -b would detach it from; the pid file comes from $!
+    # shellcheck disable=SC2086
+    # the working directory is / as start-stop-daemon -d / gives the other path
+    (cd / && exec java -Dos.arch=${ARCH} ${JAVAOPT} -Dlog4j.configurationFile=file:///var/etc/log4j2.xml -Dfile.encoding=ISO-8859-1 -cp "${HM_SERVER}" ${HM_SERVER_CLASS} ${HM_SERVER_ARGS}) &
+    echo $! >"${PIDFILE}"
+  else
+    # shellcheck disable=SC2086
+    start-stop-daemon -d / -b -S -q -m -p "${PIDFILE}" --exec java -- -Dos.arch=${ARCH} ${JAVAOPT} -Dlog4j.configurationFile=file:///var/etc/log4j2.xml -Dfile.encoding=ISO-8859-1 -cp "${HM_SERVER}" ${HM_SERVER_CLASS} ${HM_SERVER_ARGS}
+  fi
   echo -n "."
   waitStartupComplete
 }

@@ -13,7 +13,12 @@ JAVA_AZUL_SOURCE = zulu$(JAVA_AZUL_VERSION)-linux_x64.tar.gz
 endif
 JAVA_AZUL_LICENSE = GPL
 JAVA_AZUL_LICENSE_FILES = DISCLAIMER legal/java.base/LICENSE legal/java.base/ADDITIONAL_LICENSE_INFO legal/java.base/ASSEMBLY_EXCEPTION
-JAVA_AZUL_DEPENDENCIES = fontconfig dejavu liberation
+# The JVM's font stack (AWT only): required when the configuration selects it, so a
+# configuration without fontconfig/fonts (no AWT user on the box) can build.
+JAVA_AZUL_DEPENDENCIES = \
+	$(if $(BR2_PACKAGE_FONTCONFIG),fontconfig) \
+	$(if $(BR2_PACKAGE_DEJAVU),dejavu) \
+	$(if $(BR2_PACKAGE_LIBERATION),liberation)
 
 define JAVA_AZUL_INSTALL_TARGET_CMDS
 	$(INSTALL) -d -m 0755 $(TARGET_DIR)/opt/java-azul

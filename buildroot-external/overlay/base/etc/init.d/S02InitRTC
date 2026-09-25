@@ -50,7 +50,8 @@ init_rtc_device() {
 
     # in addition, we load the dummy_rx8130 kernel module so
     # that the hss_led process assumes a RPI-RF-MOD is present
-    if ! grep -Eq "_rx8130 " /proc/modules; then
+    # (openccu-lite: only where hss_led is, which the lite images no longer ship)
+    if [[ -x /bin/hss_led ]] && ! grep -Eq "_rx8130 " /proc/modules; then
       modprobe dummy_rx8130
     fi
 

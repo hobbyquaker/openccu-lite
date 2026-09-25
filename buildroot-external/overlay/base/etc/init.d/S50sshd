@@ -14,19 +14,21 @@ test -x $DAEMON || exit 0
 
 umask 077
 
-start() {
+# prepare sshd without starting it: the host keys, the ssh userdir and the
+# key permissions. Returns 1 when sshd must not run - ssh is not enabled, or
+# the compromised default data was just wiped - so a service manager that
+# starts the daemon itself can run this alone and skip the start.
+init() {
   # Only run this if ssh is explicitly enabled
-  [ -f /etc/config/sshEnabled ] || return
+  [ -f /etc/config/sshEnabled ] || return 1
 
   # check if we should wipe compromised default data
   if [[ "$(/usr/bin/sha256sum /usr/local/etc/config/shadow | cut -d' ' -f1)" == \
         "cec9319d99ca94364ee21405357784f85326792ba4db2fc8601e32dce1367bbf" ]]; then
     rm -f /usr/local/etc/config/sshEnabled /usr/local/etc/ssh_host_*
     sed -i "s/^\(root\):.*:\(.*:.*:.*:.*:::\)$/\1:*:\2/" /usr/local/etc/config/shadow
-    return
+    return 1
   fi
-
-  echo -n "Starting sshd: "
 
   # Create any missing keys
   if [[ ! -f /usr/local/etc/ssh_host_dsa_key ]] ||
@@ -52,6 +54,14 @@ start() {
     chmod 0600 /usr/local/etc/ssh/authorized_keys
     chown root:root /usr/local/etc/ssh/authorized_keys
   fi
+
+  return 0
+}
+
+start() {
+  init || return
+
+  echo -n "Starting sshd: "
 
   if start-stop-daemon -d / -S -q -p "${PIDFILE}" --exec "${DAEMON}"; then
     echo "OK"
@@ -96,6 +106,10 @@ case "$1" in
   ;;
   reload)
     reload
+  ;;
+  init)
+    # prepare only (keys, userdir, permissions); exit 1 when sshd must not start
+    init || exit 1
   ;;
   *)
   echo "Usage: $0 {start|stop|restart|reload}"

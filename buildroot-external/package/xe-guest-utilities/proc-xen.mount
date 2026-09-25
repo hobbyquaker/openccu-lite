@@ -1,0 +1,14 @@
+# xe-guest-utilities: xenfs for the XenServer guest agent. Referenced by the package's
+# INSTALL_INIT_SYSTEMD since upstream, written here when the systemd product first built.
+[Unit]
+Description=Xen filesystem (xenfs) on /proc/xen
+ConditionPathExists=/proc/xen
+ConditionPathExists=!/proc/xen/xenbus
+
+[Mount]
+What=none
+Where=/proc/xen
+Type=xenfs
+
+[Install]
+WantedBy=xe-daemon.service
