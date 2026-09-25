@@ -1,209 +1,405 @@
-<img height="60px" src="release/logo.png" align="left">
-<br/>
+# openccu-lite
 
-### Your flexible, cloud-free Homematic IP® CCU smart-home solution
+*Deutsch — die englische Fassung ist [README.en.md](README.en.md).*
 
-[![Current Release](https://img.shields.io/github/release/OpenCCU/OpenCCU.svg)](https://github.com/OpenCCU/OpenCCU/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/OpenCCU/OpenCCU/latest/total.svg)](https://github.com/OpenCCU/OpenCCU/releases/latest)
-[![DownloadsSnapshots](https://img.shields.io/github/downloads/OpenCCU/OpenCCU/snapshots/total.svg)](https://github.com/OpenCCU/OpenCCU/releases/snapshots)
-[![CI Build](https://github.com/OpenCCU/OpenCCU/workflows/CI%20Build/badge.svg)](https://github.com/OpenCCU/OpenCCU/actions)
-[![Snapshot Build](https://github.com/OpenCCU/OpenCCU/workflows/Snapshot%20Build/badge.svg)](https://github.com/OpenCCU/OpenCCU/releases/tag/snapshots)
-[![Contributors](https://img.shields.io/github/contributors/OpenCCU/OpenCCU.svg)](https://github.com/OpenCCU/OpenCCU/graphs/contributors)
-[![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/OpenCCU/OpenCCU.svg)](https://github.com/OpenCCU/OpenCCU/issues)
-[![Percentage of issues still open](http://isitmaintained.com/badge/open/OpenCCU/OpenCCU.svg)](https://github.com/OpenCCU/OpenCCU/issues)
-[![Commits since last release](https://img.shields.io/github/commits-since/OpenCCU/OpenCCU/latest.svg)](https://github.com/OpenCCU/OpenCCU/releases/latest)
-[![Artifact HUB](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/openccu)](https://artifacthub.io/packages/search?repo=openccu)
-[![License](https://img.shields.io/github/license/OpenCCU/OpenCCU.svg)](https://github.com/OpenCCU/OpenCCU/blob/master/LICENSE)
-[![Donate](https://img.shields.io/badge/donate-PayPal-green.svg)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=RAQSDY9YNZVCL)
-[![GitHub sponsors](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&link=https://github.com/sponsors/OpenCCU)](https://github.com/sponsors/OpenCCU)
-[![GitHub stars](https://img.shields.io/github/stars/OpenCCU/OpenCCU.svg?style=social&label=Star)](https://github.com/OpenCCU/OpenCCU/stargazers/)
+> **Alpha-Software — bitte zuerst lesen.**
+>
+> openccu-lite ist im **Alpha-Stadium**. Vieles ist ungetestet, manches genau auf einem System
+> getestet, und es gibt Fehler — die bekannten in [BUGS.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/BUGS.md), andere hat noch niemand
+> gesehen. **Bitte nur auf Testsystemen einsetzen.** Wer es trotzdem auf der CCU wagt, die das
+> eigene Haus steuert, sorgt vorher für einen schmerzfreien Weg zurück: eine **zweite SD-Karte**
+> mit der laufenden Firmware (Karte tauschen, fertig) oder auf x86 ein **Klon der VM**. Zurück zu
+> OpenCCU mit den eigenen Daten geht nur über ein Backup, das *vor* dem Wechsel gezogen wurde —
+> siehe [docs/switching.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/switching.md).
+>
+> **Es richtet sich an erfahrene Anwender**, die wissen, was sie tun: Leute, denen Homematic-
+> Paramsets vertraut sind und die eine CCU von innen kennen (`rfd`, `hs485d`, der
+> HmIP-Server, die Addon-Mechanik, lighttpd, das Userfs) und sich in einer Shell zurechtfinden.
+> Es gibt keine ReGaHSS, keinen Programm-Editor und keine Handführung; was es gibt, ist ein
+> Funk-Gateway mit Namensspeicher und einer Verwaltungsoberfläche — jede Automatisierung lebt
+> woanders.
 
-<sub>[Deutschsprachiges 🇩🇪🇦🇹🇨🇭 ReadMe](README.de.md)</sub>
-___
+Eine Homematic-CCU-Firmware ohne ReGaHSS: die Funk-Schnittstellen (`rfd`, `hs485d`,
+`hmipserver`), die Addon-Mechanik und lighttpd genau so, wie OpenCCU sie baut — und an der
+Stelle von WebUI und ReGa-Logik ein kleiner Go-Dienst, **`occulited`**, der das System verwaltet und
+das eine behält, das jede Integration von einer CCU noch braucht: Gerätenamen und Räume.
 
-OpenCCU – formerly known as _RaspberryMatic_ – is a free, non-commercial, open-source operating system for running a **cloud-free smart-home hub** compatible with eQ-3’s [Homematic IP](https://www.homematic-ip.com/) and [HomeMatic](http://homematic.com/) devices. It targets **100% compatibility** with the vendor’s _CCU3_ and can be installed directly on [CCU3](https://homematic-ip.com/en/product/smart-home-ccu3-central-control-unit) and [ELV Charly](https://www.elv.de/elv-smart-home-zentrale-charly-starter-set-bausatz.html) hardware. It also runs on common 64-bit capable SBCs (e.g., [Raspberry Pi](https://www.raspberrypi.org/), [Hardkernel ODROID](https://www.hardkernel.com/product-category/odroid-board/), [ASUS Tinkerboard 2/2S](https://tinker-board.asus.com/series/tinker-board-2.html)) and generic x86_64 or aarch64 hardware. In addition, OpenCCU is available as a pure virtual appliance for popular hypervisors and container platforms (e.g., Proxmox VE, VirtualBox, Synology VMM, Docker/OCI, Kubernetes) and as a native [Home Assistant](https://www.home-assistant.io/) App. Beyond CCU3 parity, it provides **WebUI, OS-level, and connectivity enhancements** for a more advanced user experience.
+Das System ist ein Funk-Gateway mit Namensspeicher. Die Automatisierung läuft dort, wo Anwender sie
+ohnehin betreiben (Home Assistant, Smart Home Engine ("she"), Node-RED, ioBroker, ...); die
+Geräteverwaltung macht [homematic-manager](https://github.com/hobbyquaker/homematic-manager),
+als Addon mit einem Klick installiert.
 
-[more...](https://github.com/OpenCCU/OpenCCU/wiki/Einleitung)
+## Versionen und Images
 
-## :cookie: Features
+openccu-lite hat eine eigene semantische Version, beginnend mit **1.0.0-alpha.0**; die Kopfzeile
+der Oberfläche zeigt sie. Die Images tragen in `/VERSION` zusätzlich die OpenCCU-Basis, auf der
+sie gebaut sind — für das Recovery-System. Release-Artefakte heißen
+`openccu-lite-<Produkt>-<Version>.<Endung>`:
 
-- **Drop-in compatibility.** Works with the same Homematic / Homematic IP hardware, WebUI features, and add-on ecosystem as the vendor CCU firmware.
-- **Backup interchangeability.** Backups are cross-compatible, enabling straightforward migration between the vendor CCU firmware and OpenCCU.
-- **Enhancements beyond vendor firmware.** Includes WebUI improvements, Linux OS updates, stability and performance fixes, and new capabilities that do not yet exist upstream.
+| Produkt | Hardware | Artefakte |
+| --- | --- | --- |
+| `x86_64-ova` | eine VM (VMware, Proxmox, VirtualBox) | `….ova`, `….zip` (das Update-Paket), `….img` |
+| `aarch64-rpi3` | CCU3, Charly, Raspberry Pi 3, CM3 | `….zip`, `…-ccu3.tgz` (das Update von einer CCU3 aus) |
+| `aarch64-rpi4` | Raspberry Pi 4, CM4 | `….zip` |
+| `aarch64-rpi5` | Raspberry Pi 5, CM5 (noch nie gebootet, Aufgabe 32) | `….zip` |
+| `lxc-lite_amd64`, `lxc-lite_arm64` | ein unprivilegierter Proxmox-LXC-Container (Aufgabe 34; Funk nur über LAN-Gateways oder einen durchgereichten HmIP-RFUSB) | `openccu-lite-lxc-amd64-….tar.xz`, `openccu-lite-lxc-arm64-….tar.xz` (die CT-Vorlage) |
 
-[more...](https://github.com/OpenCCU/OpenCCU/wiki/Einleitung#features)
+Ein Docker-/OCI-Image gibt es nicht: der Container ist die LXC-Vorlage. Wer eine CCU in Docker
+betreiben will, nimmt das OCI-Image von OpenCCU.
 
-## :computer: Requirements
+openccu-lite läuft im Labor auf einer x86_64-VM, einem Raspberry Pi 4 mit HmIP-RFUSB und einer
+Charly (Raspberry Pi 3 B mit RPI-RF-MOD); vor einem Release steht
+[docs/hardware-checklist.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/hardware-checklist.md).
 
-OpenCCU can be installed on vendor CCU hardware, common 64-bit capable SBCs, and x86_64 / aarch64 systems—or deployed virtually:
+## Funktionen im Überblick
 
-**Hardware**
-- [CCU3](https://homematic-ip.com/en/product/smart-home-ccu3-central-control-unit), [ELV Charly](https://www.elv.de/elv-smart-home-zentrale-charly-starter-set-bausatz.html)
-- [Raspberry Pi](https://www.raspberrypi.org/)
-- [Hardkernel ODROID](https://www.hardkernel.com/product-category/odroid-board/)
-- [ASUS Tinkerboard 2/2S](https://tinker-board.asus.com/series/tinker-board-2.html)
-- Generic x86_64 / aarch64
-  
-**Virtualization & Containers**
-- [Proxmox VE](https://www.proxmox.com/en/proxmox-ve), [QEMU/KVM](https://www.qemu.org/), [XCP-ng/XenServer](https://xcp-ng.org/), [VMware ESXi](https://www.vmware.com/de/products/esxi-and-esx.html) / [Workstation Player](https://www.vmware.com/de/products/workstation-player/workstation-player-evaluation.html), [Hyper-V](https://learn.microsoft.com/de-de/virtualization/hyper-v-on-windows/), [VirtualBox](https://www.virtualbox.org/)
-- [Synology Virtual Machine Manager](https://www.synology.com/de-de/dsm/feature/virtual_machine_manager), [QNAP Virtualization Station](https://www.qnap.com/event/station/de-de/virtualization.php), [Unraid](https://unraid.net/)
-- [Docker/OCI](https://www.docker.com/), [LXC](https://linuxcontainers.org/), [Kubernetes (K8s)](https://kubernetes.io/)
-- [Home Assistant](https://home-assistant.io/) (add-on)
+Neben Namen, Räumen, Addons, Netzwerk und Geräte-Firmware (siehe *occulited in einem Absatz*):
 
-[more...](https://github.com/OpenCCU/OpenCCU/wiki/Einleitung#vorraussetzungen)
+- **Log-Seite:** das Journal mit Filtern nach Unit, Tag, Schweregrad und Text, live mitlaufend und
+  als Text oder JSON herunterladbar. Die Quelle *Alle / System / Kernel* zeigt das Kernel-Log mit
+  Zeitstempeln seit dem Boot wie `dmesg`; ein Boot-Menü springt in frühere Boots, soweit das Journal
+  sie hält.
+- **Boot-Zeitleiste** auf der Dienste-Seite: jede Unit des Boots als Balken, die kritische Kette,
+  der Vergleich mit dem vorigen Boot, Export als SVG und JSON. Die letzten zehn Boots bleiben auf
+  jedem System gespeichert.
+- **Wo das Journal liegt**, wählbar: nur im RAM (Standard auf den SD-Karten-Produkten); im RAM mit
+  Kopien auf das Userfs alle 6 Stunden und bei jedem Herunterfahren, sodass die Karte einen
+  Schreibvorgang pro Intervall sieht und ein Neustart nichts verliert; oder direkt auf das Userfs
+  (Standard auf VM und Container).
+- **Status-LED** (RPI-RF-MOD): occulited ist ihr einziger Schreiber, `hss_led` ist nicht mehr im
+  Image. Dauerhaft blau, wenn alles in Ordnung ist, wie auf der CCU3; gelb schnell ohne Netzwerk,
+  rot bei ausgefallenem Funk oder Dienst, cyan bei einem System-Update. Reihenfolge, Farben und
+  Muster sind einstellbar, dazu ein Nachtmodus und *Locate*; Home Assistant oder Node-RED setzen die
+  LED über die API mit einem Token, das nur das darf.
+- **Backups auf Netzwerkfreigaben:** Die nächtliche Sicherung wird einmal erstellt und auf jedes
+  aktivierte Ziel kopiert — ein USB-Verzeichnis, NFS, CIFS/SMB oder SSH (ein SFTP-Upload von
+  occulited, mit einem auf dem System erzeugten Schlüssel und festgehaltenem Host-Key). Jedes Ziel
+  zeigt seinen Zustand, hat einen Schreibtest und wird nach Fehlern neu eingehängt; alte Sicherungen
+  werden erst nach einer bestätigten Lieferung gelöscht.
+- **Warnungen der Statusseite** kommen aus occulited. Ein Administrator schaltet eine Warnung für 1,
+  7 oder 90 Tage stumm, und die Stummschaltung endet früher, sobald die Warnung verschwindet und
+  wiederkommt.
 
-## :cloud: Quick-Start
+## Sicherheit
 
-1) **Download**
-   - Get the image for your target under **[Releases](https://github.com/OpenCCU/OpenCCU/releases)**.
-   - Filename pattern: `OpenCCU-X.XX.XX.YYYYMMDD-<TARGET>.zip`.
+Eine CCU gibt die Gerätesteuerung über 2001, 2010 und 2000 ohne Anmeldung ins LAN, lässt Addons,
+ihre CGIs und die Funk-Daemons als root laufen und schützt eine Addon-Seite nur so gut, wie das
+Addon sich selbst prüft. openccu-lite dreht jede dieser Voreinstellungen um.
 
-2) **Install (choose one)**
-   - **Own hardware (e.g., Raspberry Pi):** unzip and flash the `*.img` to a microSD card (e.g., with [Etcher](https://etcher.io) or `dd`).
-   - **Migrate from CCU2/CCU3:** upload the OpenCCU package as a regular firmware update.
-   - **Virtualized environment:** follow the installation procedure for your hypervisor/container platform.
+### Was im Netz erreichbar ist
 
-3) **Boot**
-   - Start the device/VM. On first boot, OpenCCU detects available **Homematic / Homematic IP** RF modules (e.g., `RPI-RF-MOD`, `HmIP-RFUSB`) on GPIO or USB.
+Die Funk-Daemons und occulited lauschen nur auf dem Loopback; nach außen spricht lighttpd. Die
+Firewall ist eine Liste von INPUT-Regeln in der Reihenfolge, in der sie geprüft werden, mit der Policy
+`DROP` für IPv4 und IPv6: Eingehend wird verworfen, was keine Regel annimmt. Was eine eingeschaltete
+Funktion braucht, trägt das System selbst als Regel mit ihrem Besitzer ein — mit einem Kommentar,
+warum sie da ist — und nimmt sie beim Ausschalten wieder heraus; jede Regel lässt sich bearbeiten,
+verschieben oder löschen. Eine Änderung muss innerhalb von 60 Sekunden bestätigt werden, sonst stellt
+das System die vorigen Regeln selbst wieder her. Ein System, das von OpenCCU kommt, übernimmt dessen
+`firewall.conf` einmal in diese Liste, mit denselben Freigaben wie vorher.
 
-4) **Access the WebUI**
-   - Open `http://openccu/` in your browser (or use the device’s DHCP-assigned IP if name resolution is unavailable).
-   - You will land in the familiar CCU WebUI and can start configuring your Homematic / Homematic IP devices.
-   - *Optional:* restore an existing CCU backup to migrate your setup.
+| Dienst | Port | gebunden an | von außen |
+| --- | --- | --- | --- |
+| lighttpd | 80, 443 | LAN | Weboberfläche und API mit Anmeldung, Addon-Seiten hinter dem Login-Gate; Regel aus den local networks |
+| occulited | 8183 | `127.0.0.1`, erzwungen | nur über lighttpd |
+| rfd (BidCos-RF) | 32001 | `127.0.0.1` | nur über lighttpd mit klassischem RPC |
+| hmipserver (HmIP-RF) | 32010 | `127.0.0.1` | nur über lighttpd mit klassischem RPC |
+| hs485d (BidCos-Wired) | 32000 | `127.0.0.1` | nur über lighttpd mit klassischem RPC |
+| hmipserver (VirtualDevices) | 39292 | alle Adressen | von der Firewall geschlossen; über lighttpd mit klassischem RPC |
+| klassisches RPC über lighttpd | 2001, 2010, 9292, TLS 42001, 42010, 49292; 2000/42000 nur mit hs485d | LAN | standardmäßig aus; auf System → Fernzugriff, Klartext und TLS getrennt, mit oder ohne Benutzername und Passwort |
+| hmipserver (Update von HmIP-Access-Points) | 9293, 9294, UDP 43438 | alle Adressen | offen, solange HmIP-RF läuft |
+| Netzwerkerkennung | Multicast, SSDP 1900, eQ-3-Discovery | – | offen, als eigene Regeln bearbeitbar |
+| multimacd | – | kein Socket, kein Netzwerk | – |
+| sshd | 22 | LAN | nur mit eingeschaltetem SSH, nur aus lokalen Netzen |
+| ReGaHSS 1999, 8181 | – | – | gibt es nicht (8183 gehört seit Aufgabe 182 occulited) |
+| Addons | ihre Ports | wie das Addon bindet | jeder deklarierte Port ein eigener Schalter auf der Seite Zusatzsoftware, standardmäßig zu |
 
-[more...](https://github.com/OpenCCU/OpenCCU/wiki/Installation#schnellstart)
+Ein Schalter pro Port heißt: Der TLS-Listener eines MQTT-Brokers kann offen sein und sein
+Klartext-Port zu.
 
-## :memo: Documentation ([🇩🇪](https://github.com/OpenCCU/OpenCCU/wiki/Home)/[🇺🇸](https://github.com/OpenCCU/OpenCCU/wiki/en.Home))
+### Wer als wer läuft
 
-1. [Introduction](https://github.com/OpenCCU/OpenCCU/wiki/Einleitung)
-   * [Requirements](https://github.com/OpenCCU/OpenCCU/wiki/Einleitung#vorraussetzungen)
-   * [Features](https://github.com/OpenCCU/OpenCCU/wiki/Einleitung#features)
-   * [Limitations](https://github.com/OpenCCU/OpenCCU/wiki/Einleitung#limitationeneinschränkungen)
-   * [License and Warranty](https://github.com/OpenCCU/OpenCCU/wiki/Einleitung#lizenz--haftung)
-   * [Commercial Distribution](https://github.com/OpenCCU/OpenCCU/wiki/Einleitung#kommerzieller-vertrieb)
-2. [Installation](https://github.com/OpenCCU/OpenCCU/wiki/Installation)
-   * [Quick-Start](https://github.com/OpenCCU/OpenCCU/wiki/Installation#schnellstart)
-   * [Basic Installation (Hardware)](https://github.com/OpenCCU/OpenCCU/wiki/Installation#grundinstallation-hardware)
-     * [CCU3](https://github.com/OpenCCU/OpenCCU/wiki/Installation-CCU3)
-     * [ELV-Charly](https://github.com/OpenCCU/OpenCCU/wiki/Installation-ELV-Charly)
-     * [RaspberryPi](https://github.com/OpenCCU/OpenCCU/wiki/Installation-RaspberryPi)
-     * [Hardkernel ODROID](https://github.com/OpenCCU/OpenCCU/wiki/Installation-ODROID)
-     * [ASUS Tinkerboard 2/2S](https://github.com/OpenCCU/OpenCCU/wiki/Installation-Tinkerboard2)
-     * [Generic x86_64 / aarch64](https://github.com/OpenCCU/OpenCCU/wiki/Installation-Generic-x86_64)
-   * [Basic Installation (Virtual)](https://github.com/OpenCCU/OpenCCU/wiki/Installation#grundinstallation-virtuell)
-     * [Proxmox Virtual Environment](https://github.com/OpenCCU/OpenCCU/wiki/Installation-Proxmox-VE)
-     * [Home Assistant Add-on](https://github.com/OpenCCU/OpenCCU/wiki/Installation-HomeAssistant)
-     * [Docker Container (OCI)](https://github.com/OpenCCU/OpenCCU/wiki/Installation-Docker-OCI)
-     * [Linux Container (LXC)](https://github.com/OpenCCU/OpenCCU/wiki/Installation-LXC)
-     * [QEmu/KVM](https://github.com/OpenCCU/OpenCCU/wiki/Installation-QEmu)
-     * [Kubernetes/K8s](https://github.com/OpenCCU/OpenCCU/wiki/Installation-Kubernetes)
-     * [Synology Virtual Machine Manager](https://github.com/OpenCCU/OpenCCU/wiki/Installation-Synology-VMM)
-     * [QNAP VirtualizationStation](https://github.com/OpenCCU/OpenCCU/wiki/Installation-QNAP-VirtualizationStation)
-     * [UNRAID](https://github.com/OpenCCU/OpenCCU/wiki/Installation-UNRAID)
-     * [XCP-ng/XenServer](https://github.com/OpenCCU/OpenCCU/wiki/Installation-XCPng)
-     * [Oracle VirtualBox](https://github.com/OpenCCU/OpenCCU/wiki/Installation-VirtualBox)
-     * [vmWare Workstation Player](https://github.com/OpenCCU/OpenCCU/wiki/Installation-vmWare-Workstation-Player)
-     * [vmWare ESXi](https://github.com/OpenCCU/OpenCCU/wiki/Installation-vmWare-ESXi)
-     * [HyperV](https://github.com/OpenCCU/OpenCCU/wiki/Installation-HyperV)
-   * [Configuration Upgrade](https://github.com/OpenCCU/OpenCCU/wiki/Installation#konfigurationsübernahme)
-     * [Upgrade from CCU3](https://github.com/OpenCCU/OpenCCU/wiki/Installation#umstieg-von-ccu3)
-     * [Upgrade from CCU2](https://github.com/OpenCCU/OpenCCU/wiki/Installation#umstieg-von-ccu2)
-     * [Upgrade from CCU1](https://github.com/OpenCCU/OpenCCU/wiki/Installation#umstieg-von-ccu1)
-     * [Upgrade to virtual OpenCCU](https://github.com/OpenCCU/OpenCCU/wiki/Installation#umstieg-zu-virtuellem-raspberrymatic)
-   * [Deinstallation](https://github.com/OpenCCU/OpenCCU/wiki/Deinstallation)
-3. [Administration](https://github.com/OpenCCU/OpenCCU/wiki/Administration)
-   * [Firmware Update/Upgrade](https://github.com/OpenCCU/OpenCCU/wiki/Administration#firmware-updateupgrade)
-   * [Backup/Restore](https://github.com/OpenCCU/OpenCCU/wiki/Administration#backup--restore)
-   * [Security Advices](https://github.com/OpenCCU/OpenCCU/wiki/Administration#sicherheitshinweise)
-   * [CCU-Addon Software](https://github.com/OpenCCU/OpenCCU/wiki/Administration#ccu-addons--zusatzsoftware)
-4. Usage
-   * [WebUI Usage](https://github.com/OpenCCU/OpenCCU/wiki/WebUI-Benutzung)
-     * [Log-Level setup](https://github.com/OpenCCU/OpenCCU/wiki/WebUI-Benutzung#log-daten-und-log-level)
-   * [Tips & Tricks](https://github.com/OpenCCU/OpenCCU/wiki/Tipps)
-   * [Expert-Features](https://github.com/OpenCCU/OpenCCU/wiki/Experten-Features)
-     * [WLAN/WiFi Setup](https://github.com/OpenCCU/OpenCCU/wiki/Experten-Features#wlanwifi-nutzung)
-     * [Bluetooth Setup](https://github.com/OpenCCU/OpenCCU/wiki/Experten-Features#bluetooth-nutzung)
-     * [LAN-Gateway Mode](https://github.com/OpenCCU/OpenCCU/wiki/Experten-Features#lan-gateway-betrieb)
-     * [USV Client/Server Setup](https://github.com/OpenCCU/OpenCCU/wiki/Experten-Features#usv-clientserver-nut)
-     * [USB-Boot Setup](https://github.com/OpenCCU/OpenCCU/wiki/Experten-Features#usb-boot)
-     * [Monit-WatchDog WebUI](https://github.com/OpenCCU/OpenCCU/wiki/Experten-Features#monit-watchdog-weboberfl%C3%A4che)
-     * [HB-RF-ETH Setup](https://github.com/OpenCCU/OpenCCU/wiki/Experten-Features#hb-rf-eth-anbindung)
-     * [Individual Diagramm/Backup-Path](https://github.com/OpenCCU/OpenCCU/wiki/Experten-Features#individueller-diagrammbackup-speicherpfad)
-     * [Own commands during bootup](https://github.com/OpenCCU/OpenCCU/wiki/Experten-Features#eigene-aktionen-während-des-bootvorgangs)
-5. [Support, Contributions](https://github.com/OpenCCU/OpenCCU/wiki/Support)
-   * [Known Issues](https://github.com/OpenCCU/OpenCCU/wiki/Support#bekannte-probleme)
-   * [Request Help](https://github.com/OpenCCU/OpenCCU/wiki/Support#hilfe-suchen)
-   * [FAQ – Frequently Asked Questions](https://github.com/OpenCCU/OpenCCU/wiki/Support#faq)
-   * [Report Issues](https://github.com/OpenCCU/OpenCCU/wiki/Support#bugreports)
-   * [Request Features](https://github.com/OpenCCU/OpenCCU/wiki/Support#featurerequests)
-   * [Contributions / Development](https://github.com/OpenCCU/OpenCCU/wiki/Support#mitarbeit--weiterentwicklung)
+- **occulited** läuft als eigener Nutzer `occulite` ohne Rechte; die HTTP-Seite, also die
+  Angriffsfläche, kann nichts, was ein Nutzer ohne Rechte nicht kann. Was root braucht —
+  `/etc/config` schreiben, die Skripte der Firmware, `systemctl`, Addon-Konten — geht über einen
+  Unix-Socket (`root:occulite 0660`) an einen Helper mit einer geschlossenen Liste: Programme per
+  Name, Schreibpfade per Präfix und typisierte Einzeloperationen, die ihre Eingaben an der Grenze
+  prüfen (das Root-Passwort nur als fertiger Hash, das Zertifikat nur als Kette mit dem passenden
+  Schlüssel, eine Datei für `X-Sendfile` nur als übergebener Deskriptor). Befehle sind
+  Argumentlisten, nie Shell-Strings, und jede Ablehnung steht im Journal.
+- **Addons** laufen standardmäßig eingesperrt als eigener Nutzer `addon-<id>`: `ProtectSystem=strict`,
+  `NoNewPrivileges`, keine Capabilities, eigener Mount- und PID-Namespace mit privatem `/tmp` und
+  `/var/run`, schreibbar nur die eigenen Verzeichnisse. Was ein Addon darüber hinaus braucht —
+  Capabilities, Gruppen, Pfade, Datenverzeichnisse, Ports — deklariert sein Katalogeintrag, und die
+  Dienste-Seite zeigt es. Ein Addon ohne Deklaration läuft ebenso eingesperrt und ist als
+  *undeclared* markiert. Root ist ein bewusster, als unsicher beschrifteter Opt-out; Addons, die vor
+  dem Wechsel schon installiert waren, bleiben einmalig root, bis man sie einsperrt. Die CGIs eines
+  Addons laufen als dessen Nutzer, nicht als root unter lighttpd.
+- **Dateibesitz:** Nach jedem Update über die Oberfläche bekommt ein eingesperrtes Addon seine
+  Dateien zurück; was ein direktes `install_addon` als root hinterlässt, meldet die Statusseite mit
+  *Besitz reparieren*. Datenverzeichnisse außerhalb des Addon-Baums (`/usr/local/<id>` oder
+  deklarierte) übernimmt occulited mit Leitplanken: nie ein geteiltes Verzeichnis, nie das eines
+  anderen Addons, nie über einen Symlink.
+- **Root-Addons** verlieren `CAP_SYS_ADMIN`: `mount -o remount,rw /` schlägt fehl, die
+  Systempartition bleibt schreibgeschützt. Damit Addons wie jp-hb-devices trotzdem unverändert
+  laufen, ist `/firmware/rftypes` beim Boot beschreibbar (ein Overlay auf dem Userfs). Ein Addon, das
+  wirklich einhängen muss, deklariert `sys_admin`, und die Dienste-Seite sagt es.
+- **AppArmor:** Profile für occulited, seinen Helper, lighttpd und homematic-manager; ein Addon kann
+  ein eigenes Profil mitbringen. Für fremde Software werden keine Profile generiert — ein falsches
+  Profil ist schlimmer als keins.
+- **Das Zertifikat des Systems** (Kette und Schlüssel) ist `root:certs 0640`. Eingesperrte Addons sind
+  in der Gruppe `certs`, damit ein Broker oder Webserver TLS mit dem Zertifikat des Systems anbietet.
+- **Die Funk-Daemons** haben eigene Nutzer: `rfd`, `hmipserver`, `multimacd`, `hs485d`, dazu
+  `hmlangw`. udev gibt den Gerätedateien Ressourcengruppen
+  (`raw-uart`, `eq3loop`, `mmd-bidcos`, `mmd-hmip`), und jede Unit darf nur ihre eigenen öffnen
+  (`DevicePolicy=closed`). Keine Capabilities, `ProtectSystem=strict`; die Vorbereitung als root
+  läuft vor dem Start, samt einer Reparatur der Besitzrechte bei jedem Start, denn ein
+  `.sbk`-Restore ist immer root-eigen. multimacd bekommt seine Echtzeitpriorität über
+  `LimitRTPRIO=99` statt `CAP_SYS_NICE`. Ein Fehler in der JVM des hmipservers erreicht so weder den
+  BidCos-Schlüssel von rfd noch den UART von multimacd, und `rfd.conf` mit den
+  LAN-Gateway-Schlüsseln ist `root:rfd 0640`, für Addons unlesbar. Das gilt auch in den
+  LXC-Containern, und es gibt keinen Rückfall auf root. Die Firmware des Funkmoduls wird als
+  multimacd-Nutzer in einer transienten Unit geflasht, die nur das Gerät des Moduls öffnen darf. Im
+  Labor nicht getestet: HB-RF-USB/ETH, ein BidCos-LAN-Gateway, ein HM-CFG-USB-2, BidCos-Wired und
+  der LAN-Gateway-Modus.
 
-## :yum: Support & Contributions
+### Anmeldung, Sitzungen und Addon-Seiten
 
-**Where to discuss / ask**
-- Use **[GitHub Discussions](https://github.com/OpenCCU/OpenCCU/discussions)** for general questions and feedback.
-- German-speaking users: the OpenCCU area in the **[HomeMatic-Forum](https://homematic-forum.de/forum/viewforum.php?f=65)**.
+- **Lokale Konten** mit argon2id, Rollen `admin` und `user`, Sperre nach Fehlversuchen pro Name und
+  Adresse, ein erzwungenes Passwort beim ersten Start, eine Sitzungsliste mit *überall abmelden*.
+  Einen Passwort-Reset per Mail gibt es nicht; `occulited passwd <user>` auf der Konsole ist der Weg
+  zurück. Ganz ohne Anmeldung läuft das System nur in einem bewusst gewählten Modus für ein
+  vertrauenswürdiges Netz.
+- **Das Sitzungs-Cookie** heißt über HTTPS `__Secure-occulite_session` (`Secure`, `HttpOnly`,
+  `SameSite=Lax`) und über HTTP `occulite_session`, damit eine Anmeldung über das eine Schema das
+  andere nicht aussperrt.
+- **Das Login-Gate:** lighttpd prüft vor jeder Anfrage unter `/addons/` — statische Dateien, CGIs,
+  Backends hinter einem Proxy, WebSockets —, ob eine gültige Sitzung dahintersteht; ohne Sitzung
+  kommt die Anmeldung. Auf einer CCU ist ein CGI, dessen Autor die Sitzungsprüfung vergessen hat,
+  offen.
+- **`X-Occulite-Session`:** Das Gate reicht die geprüfte Sitzungs-ID in diesem Header an das Addon
+  weiter. Einen gleichnamigen Header vom Client entfernt lighttpd auf jeder Anfrage und jedem
+  Socket, in jeder Schreibweise (auch `X_Occulite_Session`); gelingt das nicht, antwortet das Gate
+  mit `500`. Der Header stammt also nie vom Client, und ein Addon muss kein Cookie parsen. Wer der
+  Nutzer ist und welche Rolle er hat, beantwortet `GET /api/auth/v1/state`.
+- **Addons übernehmen die Sitzung des Systems**, statt eine eigene Anmeldung zu verlangen: RedMatics
+  Node-RED-Editor und homematic-manager öffnen sich ohne zweiten Login.
+- **Keine Sitzungs-ID in URLs:** Eingebettete Addon-Ansichten und neue Tabs tragen kein `?sid=` mehr,
+  das sonst in Verlauf, Lesezeichen und `Referer` landet. Nur ein Addon, das es ausdrücklich
+  deklariert, bekommt es noch; die Sitzungsprüfung klassischer Einstellungsseiten beantwortet das
+  `tclrega.so`-Shim.
+- **OpenID Connect** (Authentik, Keycloak, Authelia, Zitadel, Pocket ID, …): Authorization Code mit
+  PKCE, eingerichtet über Discovery mit Issuer, Client-ID und Secret. Für jede Anmeldung über den
+  Provider muss ein Konto gleichen Namens auf dem System existieren; abgeglichen wird nur über den
+  Nutzernamen, die Rolle kommt vom Konto. Die Anmeldeseite zeigt unter dem Passwortformular
+  *Anmelden mit …*; der Passwort-Login daneben ist abschaltbar, und dann führt
+  `occulited auth password-login on` auf der Konsole zurück. Zwei-Faktor-Anmeldung ist Sache des
+  Providers.
 
-**When to open an issue**
-- After a discussion confirms a **clear feature request** or a **reproducible bug**, open an issue in **[Issues](https://github.com/OpenCCU/OpenCCU/issues)**.
-- Please search for existing issues first and include: OpenCCU version, target/hardware or hypervisor, steps to reproduce, expected vs. actual behavior, and relevant logs.
+### API-Tokens
 
-**Ways to contribute**
-- Test releases and help **reproduce/triage** [open issues](https://github.com/OpenCCU/OpenCCU/issues).
-- Improve the wiki-based **[documentation](https://github.com/OpenCCU/OpenCCU/wiki)**.
-- [Review pull requests](https://github.com/OpenCCU/OpenCCU/pulls) and provide feedback.
-- Submit **code contributions** (bug fixes, features) via pull requests.
+Programme melden sich mit `Authorization: Bearer olt_…` an. Ein Token hat 128 Bit Zufall, wird genau
+einmal angezeigt, nur als SHA-256 gespeichert und einzeln widerrufen; `occulited token` legt einen
+auf der Konsole an. Tokens tragen **Scopes** statt einer pauschalen Rolle: Jede Route nennt den
+Scope, den sie braucht, und ein Token darf nur, was ihm gegeben wurde. Der gemeinsame Token der
+Addons auf dem System liest nur. Zwei Scopes sind für eine Aufgabe gemacht:
 
-**Pull requests**
-- Keep PRs focused (one topic per PR), link the related issue/discussion, and follow our guidelines in **[CONTRIBUTING](CONTRIBUTING.md)**.
-- By contributing, you agree that your work is licensed under the project’s **Apache-2.0** license.
+| Scope | darf | für |
+| --- | --- | --- |
+| `led` | den Zustand der Status-LED lesen, eine eigene Überschreibung setzen, *Locate* — sonst nichts | Home Assistant, Node-RED |
+| `backup` | Sicherungen erstellen und herunterladen, synchron oder als asynchroner Job — sonst nichts | Backup-Integrationen, Skripte auf einem NAS |
 
-**Community standards**
-- Please read and follow our **[CODE OF CONDUCT](CODE_OF_CONDUCT.md)**.
+Für die Maintainer von Backup-Integrationen gibt es einen wiederverwendbaren Prompt,
+`docs/INTEGRATOR-PROMPT.md`.
 
-[more...](https://github.com/OpenCCU/OpenCCU/wiki/Support)
+### Klassisches RPC (System → Fernzugriff)
 
-## :scroll: Licenses
+Clients, die für eine CCU3 oder OpenCCU eingerichtet sind — Home Assistant, ioBroker, homematic-manager
+als Desktop-App, node-red-contrib-ccu auf einem anderen Rechner, FHEM, openHAB —, arbeiten unverändert
+gegen openccu-lite: auf denselben Ports, mit derselben Anmeldung und mit Rückrufen.
 
-- **Project & release images.** The OpenCCU project (this repository) and the downloadable images under **[Releases](https://github.com/OpenCCU/OpenCCU/releases)** are provided under the **[Apache License 2.0](https://opensource.org/licenses/Apache-2.0)**, unless stated otherwise. OpenCCU is distributed free of charge and without commercial intent.
+- **Zwei Schalter, standardmäßig aus:** Klartext (2001 BidCos-RF, 2010 HmIP-RF, 9292 VirtualDevices,
+  2000 BidCos-Wired, wo hs485d läuft) und TLS (42001, 42010, 49292, 42000) mit dem Zertifikat des
+  Systems. lighttpd bedient die Ports; die Schnittstellenprozesse bleiben auf dem Loopback.
+- **Anmeldung:** keine, oder Benutzername und Passwort nur für klassisches RPC — nicht die Konten des
+  Systems, keine API-Tokens. Basic-Auth wie auf einer CCU mit eingeschalteter Authentifizierung, von
+  lighttpd geprüft. Das Passwort wird getippt (mindestens 12 Zeichen) oder erzeugt (32 Zeichen, einmal
+  angezeigt) und nur als SHA-512-crypt gespeichert.
+- **Firewall:** Jeder offene Port bekommt eine Regel *Classic RPC* aus den local networks, wie OpenCCU
+  sie erlaubt hat; weiter oder enger stellt man sie auf der Firewall-Seite.
+- **Von OpenCCU:** Waren die XMLRPC-Ports offen, ist klassisches RPC danach eingeschaltet, mit den
+  bisherigen Freigaben. Hatte OpenCCU eine Anmeldung verlangt (`authEnabled`, mit den ReGa-Konten, die
+  es hier nicht gibt), bleibt es aus, bis Benutzername und Passwort gesetzt sind.
+- **Wie auf einer CCU:** keine Rechte pro Methode, kein Trace, keine Sperre nach Fehlversuchen. Die
+  Schnittstellenprozesse rufen den Client unter der Adresse zurück, die er anmeldet; er muss vom
+  System aus erreichbar sein. BIN-RPC über lighttpd geht nicht, wie bei OpenCCU.
+- **Geplant: lite-rpc** — Anfragen und Ereignisse über den Web-Port mit API-Tokens, SSE/WebSocket statt
+  Rückrufen, mit Rechten pro Token und einem Trace.
 
-- **Third-party components.** Some included components are licensed differently and remain under their respective terms. For example, **Buildroot/Linux** is licensed under **[GPLv2](http://www.gnu.org/licenses/gpl-2.0.html)**, which may have implications when modifying sources or redistributing derived images. **[OpenCCU-Base](https://github.com/OpenCCU/OpenCCU-Base)** is redistributed under its respective component licenses—primarily **[HMSL 2.0, with documented exceptions](https://github.com/OpenCCU/OpenCCU-Base/blob/main/licenses/licenses.md)**.
+### Zertifikate und HTTPS
 
-- **Branding & artwork.** The OpenCCU logo and other graphics in this repository and in the downloadable images are copyrighted by their respective authors. Any commercial or non-commercial reuse—especially in redistributed binaries or forks—**is prohibited without prior written permission**.
+- **Drei Wege zum Zertifikat** (System → Zertifikat):
+  - **selbstsigniert**, der Standard (zehn Jahre, Hostname und Adresse im SAN);
+  - **ACME**, eingebaut ohne zweiten Prozess: Let's Encrypt, ZeroSSL (mit External Account Binding)
+    oder eine eigene CA wie step-ca, per HTTP-01 oder DNS-01 (Cloudflare, Hetzner, netcup, DuckDNS
+    oder ein eigenes Skript); *Test* läuft gegen die Staging-Umgebung, geprüft wird zweimal täglich,
+    erneuert unter 30 Tagen oder der halben Laufzeit;
+  - **manuell**: Zertifikat, Kette und Schlüssel als PEM oder DER hochladen, oder Schlüssel und
+    Zertifikatsanforderung auf dem System erzeugen — dann verlässt der Schlüssel das System nie.
 
-### Disclaimer of Warranty
+  Nach jeder Installation lädt lighttpd neu, und die Addons der Gruppe `certs` starten neu. Die
+  Statusseite warnt 14 Tage vor dem Ablauf und nach einer fehlgeschlagenen Erneuerung.
+- **HTTPS-Umleitung und HSTS** (System → Zertifikat): Die Umleitung von HTTP auf HTTPS ist ein
+  Schalter. HSTS lässt sich nur mit einem nicht selbstsignierten Zertifikat einschalten, mit
+  `max-age` 7 Tage als Standard und höchstens 730. Vorher sagt eine Rückfrage, was es kostet: Das
+  Recovery-System und die Installationsphase eines System-Updates sprechen nur HTTP und sind dann
+  nur noch über die IP-Adresse erreichbar, und ein Weg zurück zu OpenCCU oder ein Reset mit
+  selbstsigniertem Zertifikat ist unter dem Namen bis zum Ablauf gesperrt. **Ausschalten** sendet
+  deshalb `Strict-Transport-Security: max-age=0`, so lange wie das bisherige `max-age`, höchstens
+  30 Tage, und die Seite nennt die Namen, die man in jedem Browser einmal öffnen sollte. Dasselbe
+  geschieht vor dem Wechsel zurück auf selbstsigniert und wenn ein Weg zurück zu OpenCCU bereitgelegt
+  wird.
+- **Recovery per IP-Adresse:** Das Recovery-System hat kein TLS. Jeder Weg hinein — der Neustart ins
+  Recovery im Power-Menü, der Hinweis bei der Installation eines Updates — verlinkt `http://<IP>/`,
+  denn HSTS gilt nie für eine IP-Adresse.
+- **Vom kurzen auf den vollständigen Namen:** Ein Schalter, standardmäßig aus, leitet
+  `https://<host>/` mit `302` auf `https://<host>.<domain>/` um, Pfad und Query bleiben; zusammen mit
+  der HTTPS-Umleitung auch `http://<host>/` in einem Schritt. Ein Browser hat so einen Namen für das
+  System: ein Cookie, einen HSTS-Eintrag, ein gespeichertes Passwort. Umgeleitet werden nur `GET` und
+  `HEAD`, nie `/api`, der ACME-Pfad, der Loopback, IP-Adressen oder andere Namen; `302` statt `301`,
+  weil ein Browser eine `301` behält. Die Umleitung gilt nur, solange das Zertifikat den
+  vollständigen Namen abdeckt, und ruht nach einer Umbenennung oder einem Domainwechsel, bis ein
+  passendes Zertifikat da ist.
 
-Unless required by applicable law or agreed to in writing, OpenCCU is provided by the Contributors (and each Contributor provides its Contributions) on an **"AS IS"** BASIS, **WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND**, either express or implied, including, without limitation, any warranties or conditions of **TITLE, NON-INFRINGEMENT, MERCHANTABILITY,** or **FITNESS FOR A PARTICULAR PURPOSE**. You are solely responsible for determining the appropriateness of using or redistributing OpenCCU and assume any risks associated with Your exercise of permissions under this License.
+### Außerdem
 
-[more...](https://github.com/OpenCCU/OpenCCU/wiki/Einleitung#lizenz--haftung)
+- **Keine ReGaHSS:** kein HM-Script-Interpreter, kein Port 8181 oder 8183, nichts, das Skripte aus
+  dem LAN ausführt.
+- **Ein Log:** Das System und die Addons schreiben ins Journal und in keine Log-Datei; der Build
+  bricht ab, wenn eine mitgelieferte Konfiguration eine `.log`-Datei nennt. Ausnahmen sind nur das
+  Recovery-System und die Installationsphase eines System-Updates, die kein Journal haben; ihr Log
+  wird beim nächsten Boot ins Journal übernommen. lighttpds Access-Log ist standardmäßig aus.
+  **Remote-Syslog** schickt jeden Journal-Eintrag — Syslog, die Ausgaben der Units, den Kernel — als
+  RFC 5424 über UDP an den eingestellten `LOGHOST`.
+- **Verschlüsselte Backups:** Eine `.sbk` enthält das ganze Userfs — den BidCos-Schlüssel, das
+  HmIP-Schlüsselmaterial, die Passwort-Hashes, die Tokens der DNS-Provider, den TLS-Schlüssel.
+  Sobald ein Wiederherstellungscode eingerichtet ist, wird jede Sicherung auf Freigaben, auf USB und
+  als Download mit age verschlüsselt (`.sbk.age` um die unveränderte `.sbk`), und zwar für zwei
+  Schlüssel: den des Systems, der in keiner Sicherung liegt und ihre eigenen Sicherungen ohne Eingabe
+  öffnet, und den **Wiederherstellungscode** — kurz, gruppiert, mit Prüfsumme, im Browser erzeugt und
+  nie auf dem System gespeichert —, der sie auf jedem anderen System öffnet. Ein unverschlüsselter
+  Download verlangt das Passwort erneut und steht im Journal. Ältere Sicherungen behalten ihren
+  Schlüssel, und die Seite zeigt, welchen jede braucht. Das Recovery-System stellt nur
+  unverschlüsselte `.sbk` wieder her; das Notfallkit erklärt das Entschlüsseln am PC.
+- **Bluetooth** ist nur in den Raspberry-Pi-Images und standardmäßig aus (`disable-bt`, der Chip ganz
+  abgeschaltet); Einschalten ändert `config.txt` und braucht einen Neustart.
+- **Standard-Sicherheitsschlüssel:** Solange BidCos-RF mit dem öffentlich bekannten
+  Standardschlüssel läuft, warnt die Statusseite und führt direkt zum Schlüsselfeld der
+  Schnittstellen-Seite.
 
-## :book: Literature
+## Startzeit
 
-If, after reading this documentation, you are still unsure about the pros and cons of using OpenCCU compared to the vendor-provided CCU firmware—or if you would like to explore OpenCCU’s additional features in more depth—please refer to the following (mostly German-language) resources:
+Die systemd-Umstellung hatte OpenCCUs SysV-Reihenfolge in eine streng serielle Kette übersetzt:
+Jeder Schritt wartete auf alle vorigen, auch auf fremde. multimacd wartete auf hs485d, die Erkennung
+des Funkmoduls auf eine blockierende NTP-Synchronisation, occulited auf das Funkmodul, hmipserver auf
+rfd und alle Addons auf hmipserver. openccu-lite startet nach einem Abhängigkeitsgraphen, in dem jede
+Unit nur auf das wartet, was sie braucht; ein Test in der CI schlägt fehl, wenn ein serielles Glied
+zurückkommt.
 
-<a href="https://www.youtube.com/watch?v=regDw7rcIb0"><img alt="Usertreffen Kassel 2019 – OpenCCU" src="https://img.youtube.com/vi/regDw7rcIb0/hqdefault.jpg" width="320"></a>
-<a href="https://www.youtube.com/watch?v=hSmDcrkHb7M"><img alt="Usertreffen Kassel 2018 – OpenCCU" src="https://img.youtube.com/vi/hSmDcrkHb7M/hqdefault.jpg" width="320"></a>
+| Sekunden nach dem Neustart | x86_64-VM | Raspberry Pi 4 | Charly (Raspberry Pi 3 B, CCU3-Klasse) |
+| --- | --- | --- | --- |
+| Weboberfläche antwortet | 48,8 → **36,5** | 81,1 → **48,9** | 60,8 → **45,8** |
+| hmipserver bereit | 67,4 → **55,8** | 108,2 → **95,1** | 111,1 → **97,3** |
+| alle Addons laufen | 98,7 → **86,9** | 142,2 → **128,1** | 148,1 → **133,3** |
 
-* [Vortragsfolien HomeMatic-Usertreffen 2019](https://homematic-forum.de/forum/download/file.php?id=59500)
-* [Vortragsfolien HomeMatic-Usertreffen 2018](https://homematic-forum.de/forum/download/file.php?id=48428)
-* [Vortragsfolien HomeMatic-Usertreffen 2017](https://homematic-forum.de/forum/download/file.php?id=40869)
-* [Vortragsfolien HomeMatic-Usertreffen 2016](https://homematic-forum.de/forum/download/file.php?id=40868)
+Gemessen mit je drei normalen Neustarts (`systemctl reboot`) pro System, Median, gezählt ab dem
+Neustart-Befehl, also mit Herunterfahren und Firmware; ein Client fragte alle 0,25 s
+`/api/system/v1/health` ab, die Zeiten der Units stammen von systemd.
 
-## :clap: Acknowledgements
+- **chrony blockiert nicht mehr.** Bisher hielt ein `ntpdate -b` den Boot rund 10 s auf (9,8 / 10,5 /
+  10,9 s), und ohne Internet beim Boot startete chronyd gar nicht. Jetzt startet chronyd sofort und
+  korrigiert einen großen ersten Versatz selbst: 0,1–0,2 s. Wer eine richtige Uhr braucht, wartet auf
+  ein Uhr-Gate, das durchlässt, sobald die RTC eine plausible Zeit gesetzt hat, chrony synchron ist
+  oder 60 s vergangen sind (dann mit einem Hinweis auf der Statusseite). Das sind die Funk-Daemons,
+  denn hmipserver, rfd und multimacd geben die Systemzeit an Geräte weiter. Auf Systemen mit RTC kostet
+  das nichts; der Pi 4 ohne RTC wartete 6 s auf NTP, während die Funkmodul-Erkennung ohnehin lief.
+- **Der Funkstack startet parallel.** multimacd wartet nicht mehr auf hs485d, rfd und hmipserver
+  starten nebeneinander nach multimacd, und Firmware-Update und Schlüssel der LAN-Gateways kommen vor
+  rfd und hs485d statt nach der Addon-Initialisierung. multimacd ist 9,5–10,8 s früher bereit.
+- **lighttpd startet direkt nach dem Netzwerk**, neben occulited statt danach: aktiv 19–24 s nach dem
+  Kernelstart statt 32–53 s. Solange occulited nicht antwortet — beim Boot, nach einem Neustart oder
+  Absturz —, liefert lighttpd eine statische Warteseite mit Hostname und Version, hell und dunkel,
+  deutsch und englisch. Sie fragt alle 2 s nach und lädt die aufgerufene Adresse neu, sobald
+  occulited da ist; API-Clients bekommen `503` mit `Retry-After` und JSON.
+- **Ein Countdown-Balken** erscheint, wenn man das System über die Oberfläche neu startet. Er beginnt
+  voll und leert sich von links nach rechts bis zu dem Moment, in dem die Weboberfläche wieder
+  antwortet. An den Punkten, die der Browser sieht — das System antwortet nicht mehr, lighttpd antwortet,
+  occulited antwortet —, schätzt er neu, ohne je zurückzuspringen, und die Warteseite von lighttpd
+  führt denselben Balken weiter. Die erwarteten Zeiten kommen zuerst aus den Messungen pro Produkt;
+  danach nimmt jedes System den Median ihrer letzten drei Neustarts pro Phase. Ein zweiter, schmaler
+  Balken zählt anschließend, bis die Funkschnittstellen bereit sind, und Status-, Schnittstellen- und
+  Dienste-Seite zeigen eine startende Schnittstelle als *startet* mit der verstrichenen Zeit statt als
+  ausgefallen.
+- **Addons starten nach Bedarf.** Ein Addon, das mit den Schnittstellen spricht, startet erst, wenn
+  hmipserver und rfd bereit sind — hmipservers Unit ist erst aktiv, wenn sein RPC antwortet —, und
+  beim Boot steht kein RPC-Fehler in den Addon-Logs. Ein Addon, das im Katalog `runtime.needs: []`
+  deklariert, etwa Mosquitto, startet direkt nach dem Netzwerk: Auf dem Pi 4 lief der Broker 25 s vor
+  hmipserver und rund 40 s früher als vorher. Ein Addon ohne Deklaration behält die sichere
+  Reihenfolge. Ein Addon, das im Katalog `runtime.start: "early"` deklariert, kommt mit noch nicht bereiten
+  Schnittstellen zurecht und startet vor ihnen; die Addons-Seite schaltet das ab, für alle Addons oder einzeln, ab dem
+  nächsten Neustart. Feste Wartezeiten gibt es in keiner Unit.
+- **Das Herunterfahren endet absichtlich später.** lighttpd stoppt jetzt nach dem Funkstack, das System
+  antwortet also 2,6–3,0 s länger; dafür erscheint der Hinweis, dass das System vom Strom getrennt
+  werden kann, erst, wenn hmipserver wirklich gestoppt ist.
+- **Was noch dominiert:** auf dem Pi 4 die Erkennung des Funkmoduls (rund 21 s), und seine Firmware
+  braucht vor dem Kernel am längsten; auf der Pi-3-Klasse der Java-Start des hmipservers (42 s,
+  gegenüber 24 s auf dem Pi 4 und 14 s auf der VM). Die Boot-Zeitleiste auf der Dienste-Seite zeigt
+  das für jedes System selbst.
 
-In addition to all **[Contributors](https://github.com/OpenCCU/OpenCCU/graphs/contributors)** who helped make OpenCCU possible, we would like to thank:
+## Was wo liegt
 
-- **Alexander Reinert (@alexreinert)** — for the low-latency
-  **[generic_raw_uart kernel module](https://github.com/alexreinert/piVCCU/tree/master/kernel)** enabling the use of eQ-3 RF modules
-  (RPI-RF-MOD, HM-MOD-RPI-PCB, HmIP-RFUSB), and for the open-hardware adapter boards
-  **[HB-RF-USB](https://github.com/alexreinert/PCB/tree/master/HB-RF-USB)**,
-  **[HB-RF-USB-2](https://github.com/alexreinert/PCB/tree/master/HB-RF-USB-2)**, and
-  **[HB-RF-ETH](https://github.com/alexreinert/PCB/tree/master/HB-RF-ETH)** providing USB/Ethernet interfaces for these modules.
-  
-## :family: Authors
+openccu-lite besteht aus drei Repositories:
 
-OpenCCU is developed by a broad community. For the complete and up-to-date list of authors and contributors, please see **[Contributors](https://github.com/OpenCCU/OpenCCU/graphs/contributors)**.
+| | |
+| --- | --- |
+| **dieses Repository** | Der Buildroot-Baum (Fork von OpenCCU): die Produkte `x86_64-ova`, `aarch64-rpi3`, `aarch64-rpi4`, `aarch64-rpi5`, `lxc-lite_amd64`, `lxc-lite_arm64`, das lite-Overlay mit den systemd-Units, das Paket, das occulited einbaut, der Release-Workflow, `BUILD.md`. |
+| [occulited](https://git.lan.raff.rocks/hobbyquaker/occulited) | Der Systemdienst mit eingebetteter Weboberfläche: `cmd/occulited`, `internal/`, `ui/`, `deploy/` (lighttpd-Verdrahtung, Login-Gate, das `tclrega.so`-Shim), `fixtures/` (der Konformitätskorpus der Metadaten-API). |
+| [openccu-lite-addons](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-addons) | Der Addon-Katalog (`index.json`), aus dem das System installiert. |
 
-## :construction: Changelog
+Die Dokumentation liegt bis auf weiteres im Arbeitsrepository des Maintainers:
+[docs/meta-format.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/meta-format.md) und [docs/meta-api.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/meta-api.md) (der Metadatenspeicher, normativ),
+[docs/system-api.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/system-api.md) und [docs/config.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/config.md) (System- und Auth-API, `occulited.json`),
+[docs/porting-from-rega.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/porting-from-rega.md) und [docs/PORTING-PROMPT.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/PORTING-PROMPT.md) (das Portierungs-Kit für Addon-Maintainer),
+[docs/catalog-format.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/catalog-format.md) (das Katalogformat),
+[docs/addons.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/addons.md), [docs/security.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/security.md), [docs/switching.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/switching.md) (der Wechsel von und zu OpenCCU),
+[docs/hardware-checklist.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/hardware-checklist.md) (die Release-Hürde, D-26), [docs/study-without-rega.md](https://git.lan.raff.rocks/hobbyquaker/openccu-lite-agents/src/branch/master/docs/study-without-rega.md) (der Laborbefund).
+Roadmap, Entscheidungen, offene Fehler und der Arbeitsstand liegen dort unter `openccu-lite/`.
 
-For a detailed, version-by-version list of changes, see **[Releases](https://github.com/OpenCCU/OpenCCU/releases/)** in this repository. Each release includes notes on new features, fixes, and other changes.
+## occulited in einem Absatz
+
+Ein HTTP-Dienst nur auf Loopback, hinter lighttpd. `/api/meta/v1`: Objekte mit Schlüssel
+`<Schnittstelle>.<Adresse>`, Enum-Bäume (Räume, Gewerke, Etagen), Bulk und Import/Export, ein
+SSE-Änderungsstrom, eine JSON-Datei auf der Platte. `/api/system/v1`: Status, Schnittstellen und
+ihre Abonnenten, Dienste und ihre Units, Addons (Installation, Deinstallation, Update-Prüfung,
+der Katalog mit Fortschrittsbalken), Geräte-Firmware automatisch für die angelernten Typen,
+Netzwerk mit Bestätigen-oder-Zurückrollen, Firewall in den Worten von iptables, Zeit, Log-Level
+und Journal, Protokoll. `/api/auth/v1`: lokale Benutzer mit argon2id, Sitzungen, die lighttpds
+Gate für die Addon-Seiten mitbenutzt, API-Tokens für Programme, OpenID Connect — oder gar keine
+Anmeldung für ein System allein in einem vertrauenswürdigen Netz. Die Weboberfläche ist eingebettet;
+sie ist die Shell des Systems und zeigt die eigene Oberfläche jedes Addons in ihrem Menü.
+
+## occulited bauen
+
+Im [occulited](https://git.lan.raff.rocks/hobbyquaker/occulited)-Repository:
+
+```sh
+cd ui && npm ci && npm run build && cd ..   # bettet die Oberfläche ein
+go build ./cmd/occulited                     # oder scripts/build.sh für alle drei Ziele
+go test ./...
+```
+
+Go 1.26 oder neuer, Node 24. `occulited --root <Verzeichnis>` läuft für die Entwicklung gegen ein
+nachgebildetes Dateisystem; Systemkommandos werden in diesem Modus nur protokolliert.
+
+## Lizenz
+
+Apache-2.0 für alles hier Geschriebene; die `occu`-Bestandteile behalten die Bedingungen von eQ-3.
