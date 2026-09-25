@@ -1,0 +1,162 @@
+# openccu-lite: CI for the buildroot fork. Runs on the self-hosted runner (label `buildroot`,
+# host mode) on Gitea today and on GitHub after release day (D-24); only `runs-on` differs.
+# lite-only file (D-22): never part of an upstream PR.
+name: lite-build
+
+on:
+  push:
+    branches: [lite]
+  workflow_dispatch:
+    inputs:
+      product:
+        description: Product to build
+        default: x86_64-ova
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # Gitea today:  runs-on: buildroot
+    # GitHub later: runs-on: [self-hosted, buildroot]
+    runs-on: buildroot
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Host sanity
+        run: |
+          echo "runner: $(hostname), $(nproc) cores, $(free -h | awk '/^Mem/{print $2}') RAM"
+          df -h /ssd /srv
+          make help | head -3
+      - name: No roadmap ids in the lite overlays
+        # units and drop-ins are what `systemctl cat` shows in the unit editor, script output is the
+        # Log page: neither may cite task, decision or bug ids (docs/systemd-scope.md); the guard's
+        # own test first, so a guard that matches nothing cannot pass the fork
+        run: |
+          sh scripts/testcases/lite-id-guard-test.sh
+          sh scripts/lite-id-guard.sh
+      - name: The journal is the one log
+        # the configuration guard the lite post-build runs on the image, the hmipserver log4j2
+        # template as S62HMServer builds it, the journal storage decision and its ram-sync copy, and
+        # the remote syslog forwarder that reads the journal instead of taking journald's socket
+        run: |
+          sh scripts/testcases/lite-log-guard-test.sh
+          sh scripts/testcases/hmipserver-log4j2-test.sh
+          sh scripts/testcases/lite-journal-persist-test.sh
+          sh scripts/testcases/lite-journal-sync-test.sh
+          sh scripts/testcases/lite-syslog-forward-test.sh
+          sh scripts/testcases/multimacd-loglevel-test.sh
+      - name: The out-of-tree modules carry the kernel's key
+        # the guard the lite post-build runs on the image: an updates/ module signed with another key
+        # than the kernel's is refused at boot (CONFIG_MODULE_SIG_FORCE), the radio drivers first
+        run: sh scripts/testcases/lite-module-sig-guard-test.sh
+      - name: The boot order is a dependency graph
+        # the units' After= edges against the intended graph (no serial SysV chain coming back, no
+        # cycle), /var/run a link before any early writer (usbmount's lock under /run, tmpfiles L+),
+        # the addon generator's ordering from an addon's declared needs and its ownership step for
+        # confined addons, and that step's wrapper against a current and an older occulited; the
+        # addon-rc wrapper's inside/outside decision and the init pass over rc.d (never a .script); the
+        # boot path's scripts (HB-RF-ETH wait, board-serial fallback, no flash at boot, the clock
+        # gate, lighttpd's stop wait, the CA bundle) against stand-ins; the writable extension
+        # directories (the layers on the userfs, the overlay or bound copy, the repair and the reset)
+        # against stand-ins for mount, umount and modprobe
+        run: |
+          sh scripts/testcases/lite-unit-order-test.sh
+          sh scripts/testcases/occu-addons-generator-test.sh
+          sh scripts/testcases/lite-addon-own-test.sh
+          sh scripts/testcases/addon-rc-wrapper-test.sh
+          sh scripts/testcases/lite-init-addons-test.sh
+          sh scripts/testcases/lite-boot-path-test.sh
+          sh scripts/testcases/lite-extension-dirs-test.sh
+      - name: The interface daemons run confined
+        # the users table, the udev rules and the tmpfiles line, every daemon unit's user and
+        # sandbox with the device drop-in and its marker condition, occulited's root steps in the
+        # units, the scripts without a lite init case, the container post-build dropping the device
+        # policies, and the lite post-build removing the radio chain's scripts (task 129)
+        run: sh scripts/testcases/lite-radio-confine-test.sh
+      - name: The radio chain decides as the oracle says
+        # upstream's S47/S49/S60/S61/S62 chain in a sandbox over the hardware matrix, its decisions
+        # (hm_mode, the daemon configs, which daemon starts) against the expected files under
+        # scripts/testcases/radio-oracle - an upstream change in a decision fails here at a rebase;
+        # occulited's own detection and plan are checked against the same files (task 129)
+        run: sh scripts/testcases/lite-radio-oracle-test.sh
+      - name: The boot screen
+        # the splash messages follow the units still starting, the splash stays at the end with the
+        # hint and without the bar, nothing draws on it afterwards, and the console line is true
+        run: sh scripts/testcases/lite-boot-screen-test.sh
+      - name: The board LEDs once the radio is known
+        # lite-board-leds (task 158), the LED lines of S99SetupLEDs that occu-board-leds.service runs
+        # after the radio detection: the MODE2 and MODE1 triggers, disableOnboardLED, the RPI-RF-MOD
+        # only in HM-LGW mode, and nothing written on a box without the LEDs
+        run: sh scripts/testcases/lite-board-leds-test.sh
+      - name: A file that leaves an overlay leaves the target
+        # the merged-overlay step on an incremental build: removed from the target, and a package
+        # that installs the same path is marked for reinstall
+        run: sh scripts/testcases/lite-overlay-prune-test.sh
+      - name: smartd on no image, smartctl on the hardware products
+        # the lite product configs, and the post-build step on fake targets: a Pi keeps smartctl and
+        # loses the daemon, its unit, its drop-in and its enable link; a VM loses what an earlier
+        # build left; a smartd the step does not know stops the build
+        run: sh scripts/testcases/lite-smartd-test.sh
+      - name: The lighttpd redirects and the session gate, on a real lighttpd
+        # the base and lite overlays' lighttpd configuration with occulited's fragment and gate, parsed
+        # and driven by curl in an Alpine container (docker, apk over the network): the HTTP -> HTTPS
+        # and FQDN redirects with their markers, HSTS, and the session header the gate sets from a
+        # cookie or ?sid= - against the occulited the fork pins (B-179: the stand-in follows the
+        # fragment's proxy port and the gate's session shapes, so the test only breaks when they do)
+        run: |
+          rev=$(sed -n 's/^OCCULITED_VERSION *= *//p' buildroot-external/package/occulited/occulited.mk)
+          site=$(sed -n 's/^OCCULITED_SITE *= *//p' buildroot-external/package/occulited/occulited.mk)
+          rm -rf /tmp/occulited-pin && mkdir -p /tmp/occulited-pin
+          curl -sSfL "$site/$rev.tar.gz" | tar -xz -C /tmp/occulited-pin
+          bash scripts/lite-lighttpd-redirect-test.sh /tmp/occulited-pin/occulited
+      - name: A POST without a body reaches the API and the addons
+        # every lite product takes board/lite/patches, and lighttpd of the pinned version, built in an
+        # Alpine container (docker, the network): 411 as released, and with the lite patch the bodiless
+        # POST reaches the backend with Content-Length: 0, the body limits unchanged
+        run: sh scripts/testcases/lite-lighttpd-post-test.sh
+      - name: Consistency check (x86_64-ova)
+        # the check clones OpenCCU-Base for the rootfs patch validation; share the download cache so it is fetched once
+        env:
+          BR2_DL_DIR: /mnt/download
+        run: make x86_64-ova-check BR2_DL_DIR="$BR2_DL_DIR"
+
+  build:
+    # Manual only: a full image build is hours, and it should not race a push.
+    if: github.event_name == 'workflow_dispatch'
+    needs: check
+    runs-on: buildroot
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v5
+      - name: Determine parallelism
+        run: |
+          if [ -f /sys/fs/cgroup/cpu.max ]; then
+            read -r quota period < /sys/fs/cgroup/cpu.max
+            [ "$quota" = max ] && J=$(nproc) || J=$(( quota / period ))
+          else
+            J=$(nproc)
+          fi
+          [ "$J" -lt 1 ] && J=1
+          echo "JLEVEL=$J" >> "$GITHUB_ENV"
+      - name: Build ${{ inputs.product }}
+        env:
+          BR2_DL_DIR: /mnt/download
+          BR2_CCACHE_DIR: /mnt/ccache/${{ inputs.product }}
+        run: |
+          mkdir -p "$BR2_CCACHE_DIR"
+          nice -n 19 make PRODUCT=${{ inputs.product }} \
+            BR2_DL_DIR="$BR2_DL_DIR" BR2_CCACHE_DIR="$BR2_CCACHE_DIR" BR2_JLEVEL="$JLEVEL" \
+            release
+      - name: Boot test (x86_64-ova)
+        if: inputs.product == 'x86_64-ova'
+        # the disk image headless in QEMU (TCG, no KVM needed): the units, the journal on the
+        # userfs, the addon generator round trip across a reboot, and occulited, the session gate
+        # and the shell through lighttpd - the same test as the release's smoke test. The board
+        # images and the CT templates are tested on hardware and on Proxmox.
+        run: scripts/lite-qemu-test.sh "build-${{ inputs.product }}/images/sdcard.img" 18090
+      - name: Report
+        if: always()
+        run: |
+          ls -la build-${{ inputs.product }}/images/ 2>/dev/null || true
+          df -h /ssd
