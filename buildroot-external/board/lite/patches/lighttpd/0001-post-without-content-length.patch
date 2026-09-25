@@ -1,0 +1,21 @@
+--- lighttpd/src/request.c.orig
++++ lighttpd/src/request.c
+@@ -1300,13 +1300,11 @@
+     }
+ 
+     if (0 == r->reqbody_length) {
+-        /* POST generally expects Content-Length (or Transfer-Encoding)
+-         * (-1 == r->reqbody_length when Transfer-Encoding: chunked)*/
+-        if (HTTP_METHOD_POST == r->http_method
+-            && r->http_version <= HTTP_VERSION_1_1
+-            && !light_btst(r->rqst_htags, HTTP_HEADER_CONTENT_LENGTH)) {
+-            return http_request_header_line_invalid(r, 411, "POST-request, but content-length missing -> 411");
+-        }
++        /* openccu-lite: a POST without Content-Length and without
++         * Transfer-Encoding has an empty body (RFC 9112 section 6.3, the last
++         * rule for a request), and is taken as one instead of 411 Length
++         * Required, so `curl -X POST` and simple scripts reach the API and the
++         * addons; mod_proxy sends the backend Content-Length: 0 for it. */
+     }
+     else {
+         /* (-1 == r->reqbody_length when Transfer-Encoding: chunked)*/
