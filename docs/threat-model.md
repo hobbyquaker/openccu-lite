@@ -565,6 +565,8 @@ The "to check" rows that were checked, and what became of them. One entry per sl
 | B2 *Spoofing* — a faked `X-Forwarded-For` | lighttpd appends the real address to a client-sent header and occulited takes the first element → **B-230** |
 | B2 *Repudiation* — the log's address | the forwarded one, and therefore the client's choice → **B-230** |
 | — (V6.3) | the login skips argon2 for an unknown account: a timing oracle for names → **B-233** |
+| B3 *Elevation* — every program and prefix, read as an attacker would | `programAllowed` shapes the arguments of `sh` only; `systemd-run`, `systemctl`, `kill`, `ip`, `install_addon`, `restoreBackup.sh` … run with any arguments — a compromised daemon is root → **B-234** |
+| B4 *Tampering* — every write, for symlink and TOCTOU handling | the `symlink` operation checks the link, not its target, and `WriteFile` resolves links before writing → a root write to any file from an allowed prefix → **B-235**; the writes into addon-controlled trees are listed there |
 
 ## How this document is kept
 
