@@ -4,6 +4,7 @@
 # nothing else in the target is touched.
 #
 # Usage: sh scripts/testcases/lite-overlay-prune-test.sh    (from the fork's checkout; needs bash, rsync)
+# shellcheck disable=SC2034  # variables set here are read by check's eval'd expressions
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
 SCRIPT="$HERE/buildroot-external/board/lite/pre-build-systemd.sh"

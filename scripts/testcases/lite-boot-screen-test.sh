@@ -61,7 +61,7 @@ printf 'VERSION=3.89.8.20260719\nLITE=1.0.0-test\n' > "$T/VERSION"
 
 # psplash up, nothing noted, nothing starting, no terminals, no getty
 reset() {
-  rm -rf "$T/state" "$T/activating" "$T/enabled" "$T/console" "$T/issue" "$T/dev" "$T/vt-active"
+  rm -rf "${T:?}/state" "$T/activating" "$T/enabled" "$T/console" "$T/issue" "${T:?}/dev" "$T/vt-active"
   mkdir -p "$T/dev"
   : > "$T/calls"
   : > "$T/running"
@@ -103,7 +103,7 @@ note rfd.service "Starting rfd..." "2026-01-01 00:00:03"
 note crond.service "Starting crond..." "2026-01-01 00:00:05"
 starting rfd.service crond.service hmipserver.service
 in_unit rfd.service
-psp done S61rfd
+psp 'done' S61rfd
 [ "$(writes)" = "MSG Starting HmIP server...|" ] && ok "done: the HmIP server first while it starts, even when another began later" || bad "done wrote: $(writes)"
 [ ! -e "$T/state/rfd.service" ] && ok "done removes the unit's own note" || bad "rfd's note is left"
 [ "$(sysctl_calls)" = 1 ] && grep -q '^systemctl list-units --state=activating' "$T/calls" && ok "one systemctl list-units --state=activating per done" || bad "systemctl calls: $(grep '^systemctl' "$T/calls")"
@@ -114,22 +114,22 @@ note sshd.service "Starting sshd..." "2026-01-01 00:00:02"
 note chrony.service "Starting chronyd..." "2026-01-01 00:00:04"
 starting crond.service sshd.service chrony.service
 in_unit crond.service
-psp done S98crond
+psp 'done' S98crond
 [ "$(writes)" = "MSG Starting chronyd...|" ] && ok "done: the unit that began last among those still starting, not a unit that is up" || bad "done wrote: $(writes)"
 
 reset
 note hmipserver.service "Starting HmIP server..." "2026-01-01 00:00:09"
 starting hmipserver.service
 in_unit hmipserver.service
-psp done S62HMServer
+psp 'done' S62HMServer
 [ "$(writes)" = "MSG Starting services...|" ] && ok "done: its own unit (still activating in ExecStartPost) is not shown" || bad "done wrote: $(writes)"
 
 reset; in_unit crond.service
-psp done S98crond
+psp 'done' S98crond
 [ "$(writes)" = "MSG Starting services...|" ] && ok "done with nothing starting: \"Starting services...\"" || bad "done wrote: $(writes)"
 
 reset; rm -f "$T/running"; in_unit crond.service
-psp done S98crond
+psp 'done' S98crond
 [ -z "$(writes)" ] && [ "$(sysctl_calls)" = 0 ] && ok "done without psplash: no write, no systemctl" || bad "done without psplash: $(cat "$T/calls")"
 
 # --- finish, and nothing afterwards
@@ -139,7 +139,7 @@ psp finish "$(printf 'line one\nline two')"
 [ "$(writes)" = "PROGRESS 0|MSG line one|line two|" ] && ok "finish: the bar emptied, then the message" || bad "finish wrote: $(writes)"
 [ -e "$T/state/boot-finished" ] && [ ! -e "$T/state/crond.service" ] && ok "finish marks the end of the boot and drops the notes" || bad "state after finish: $(ls "$T/state")"
 : > "$T/calls"; in_unit rfd.service
-psp boot S61rfd; psp done S61rfd; psp msg hello; psp progress 50
+psp boot S61rfd; psp 'done' S61rfd; psp msg hello; psp progress 50
 [ -z "$(writes)" ] && [ "$(sysctl_calls)" = 0 ] && [ ! -e "$T/state/rfd.service" ] && ok "after finish: boot, done, msg and progress write nothing, note nothing, call no systemctl" || bad "after finish: $(cat "$T/calls")"
 if grep -rq 'lite-psplash quit' "$EXT/overlay/lite"; then bad "something in the overlay quits the splash"; else ok "nothing in the overlay quits the splash"; fi
 
@@ -264,9 +264,12 @@ printf '# BR2_PACKAGE_PSPLASH is not set\n' > "$T/no-splash.config"
 sh "$CHECK" "$T/no-splash.config" && ok "the post-build check leaves a product without psplash alone" || bad "the post-build check fails a product without psplash"
 grep -qxF 'BR2_PACKAGE_PSPLASH_IMAGE="$(BR2_EXTERNAL_EQ3_PATH)/patches/psplash/logo.png"' "$EXT/configs/rpi4.config" && ok "upstream's products keep upstream's logo" || bad "rpi4.config no longer names patches/psplash/logo.png"
 grep -q 'BR2_PACKAGE_PSPLASH_IMAGE=$(BR2_PACKAGE_PSPLASH_IMAGE)' "$EXT/package/recovery-system/recovery-system.mk" && ok "the recovery system is built with the product's splash image" || bad "recovery-system.mk no longer passes BR2_PACKAGE_PSPLASH_IMAGE"
+# shellcheck disable=SC2046  # the eight bytes are meant to split
 png_size() { set -- $(od -An -tu1 -j16 -N8 "$1"); echo "$(( ($1 << 24) + ($2 << 16) + ($3 << 8) + $4 )) $(( ($5 << 24) + ($6 << 16) + ($7 << 8) + $8 ))"; }
 if [ -f "$EXT/board/lite/psplash/logo.png" ]; then
+  # shellcheck disable=SC2046
   set -- $(png_size "$EXT/board/lite/psplash/logo.png"); lw=$1; lh=$2
+  # shellcheck disable=SC2046
   set -- $(png_size "$EXT/patches/psplash/logo.png"); uw=$1; uh=$2
   [ "$lh" = "$uh" ] && [ "$lw" -gt "$uw" ] && [ "$lw" -le 640 ] && ok "the lite logo (${lw}x${lh}) is as tall as upstream's (${uw}x${uh}), wider by lite, and fits a 640 px screen" || bad "the lite logo is ${lw}x${lh}, upstream's ${uw}x${uh}"
 else

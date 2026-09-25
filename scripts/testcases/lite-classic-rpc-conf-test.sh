@@ -11,6 +11,7 @@
 # script on lite.
 #
 # Usage: sh scripts/testcases/lite-classic-rpc-conf-test.sh    (from the fork's checkout)
+# shellcheck disable=SC2034  # variables set here are read by check's eval'd expressions
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
 SCRIPT="$HERE/buildroot-external/overlay/lite/usr/libexec/occu/lite-classic-rpc-conf"

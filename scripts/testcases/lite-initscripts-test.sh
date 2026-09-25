@@ -119,7 +119,7 @@ if sh "$PBI" "$TD" >"$T/pbi.log" 2>&1; then
   for s in S07logging S11InitLEDs; do
     [ -L "$TD/etc/init.d/$s" ] && [ ! -e "$TD/etc/init.d/$s.script" ] && ok "post-build: $s is the wrapper alone, no script" || bad "post-build: $s must be a wrapper symlink without a .script"
   done
-  n=0; rows | awk '$2 != "-" { print $1 }' | while read -r s; do
+  rows | awk '$2 != "-" { print $1 }' | while read -r s; do
     [ -L "$TD/etc/init.d/$s" ] && [ -f "$TD/etc/init.d/$s.script" ] || echo "$s"; done >"$T/unwrapped"
   [ ! -s "$T/unwrapped" ] && ok "post-build: every other row is wrapped with its .script" || bad "post-build: not wrapped: $(tr '\n' ' ' <"$T/unwrapped")"
   [ -e "$TD/etc/init.d/S99Gone.script" ] && bad "post-build: the orphaned S99Gone.script stays" || ok "post-build: the orphaned .script is removed"

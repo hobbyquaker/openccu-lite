@@ -12,6 +12,7 @@
 # build; a clean target passes, twice.
 #
 # Usage: sh scripts/testcases/lite-smartd-test.sh    (from the fork's checkout)
+# shellcheck disable=SC2034  # variables set here are read by check's eval'd expressions
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
 EXT="$HERE/buildroot-external"

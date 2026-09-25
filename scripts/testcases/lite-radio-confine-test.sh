@@ -181,7 +181,7 @@ fi
 # --- the radio chain's scripts leave the image (task 129, D-83) ----------------------------------
 TABLE="$EXT/overlay/lite/usr/lib/systemd/openccu-lite-initscripts"
 for s in S47InitRFHardware S48UpdateRFHardware S49hs485d S60hs485d S60multimacd S61rfd S62HMServer S58LGWFirmwareUpdate S59SetLGWKey; do
-  grep -qE "^$s[[:space:]]" "$TABLE" && bad "the wrapper table must not list $s" || ok "wrapper table without $s"
+  grep -qE "^${s}[[:space:]]" "$TABLE" && bad "the wrapper table must not list $s" || ok "wrapper table without $s"
 done
 PB="$EXT/board/lite/post-build-initscripts.sh"
 if grep -q 'for lite_radio_script in S47InitRFHardware S48UpdateRFHardware S49hs485d S60hs485d S60multimacd S61rfd S62HMServer S58LGWFirmwareUpdate S59SetLGWKey;' "$PB"; then ok "post-build-initscripts removes the nine radio scripts"; else bad "post-build-initscripts.sh must remove the radio chain's scripts"; fi

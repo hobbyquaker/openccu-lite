@@ -38,7 +38,6 @@ GETTY_VT=2
 
 VERSION=""
 LITE=""
-PRODUCT=""
 # shellcheck source=/dev/null
 [ -r "${VERSION_FILE}" ] && . "${VERSION_FILE}"
 HM_MODE=""

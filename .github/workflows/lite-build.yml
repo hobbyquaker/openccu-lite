@@ -35,6 +35,10 @@ jobs:
         run: |
           sh scripts/testcases/lite-id-guard-test.sh
           sh scripts/lite-id-guard.sh
+      - name: Upstream's shellcheck rules on the delta
+        # the shell scripts of the lite overlays, board/lite and scripts/ with the options OpenCCU's
+        # own CI passes to shellcheck; warnings and errors fail, style notes are printed
+        run: sh scripts/lite-shellcheck.sh
       - name: The journal is the one log
         # the configuration guard the lite post-build runs on the image, the hmipserver log4j2
         # template as S62HMServer builds it, the journal storage decision and its ram-sync copy, and

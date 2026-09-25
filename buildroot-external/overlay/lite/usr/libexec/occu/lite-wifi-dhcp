@@ -3,6 +3,8 @@
 # upstream's dhcp.script it leaves Ethernet's netconfig and routes alone: the address, the default
 # route with the metric of the preference in /etc/config/wifi (5 when Wi-Fi is preferred, below
 # DHCP Ethernet's 10; 600 when not), the nameservers through resolvconf.
+# shellcheck disable=SC2154  # udhcpc hands interface, ip, mask, router, dns and broadcast over the environment
+# shellcheck source=/dev/null
 [ -r /etc/config/wifi ] && . /etc/config/wifi
 metric=600
 [ "${PREFERRED:-eth}" = "wlan" ] && metric=5

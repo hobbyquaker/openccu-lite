@@ -69,7 +69,7 @@ grep -q "asked before the restart" "$T/log" && bad "store: the header was read b
 NEW="$T/journal/$WANT"
 [ -f "$NEW/system@0f8f63d9c1cf440c86f9d5c43ed7b6bf-000000000102de72-00065c35144897c8.journal" ] && ok "store: system.journal archived under its header's name" || bad "store: system.journal not archived: $(ls "$NEW" 2>&1)"
 [ "$(cat "$NEW/system@0f8f63d9c1cf440c86f9d5c43ed7b6bf-000000000102de72-00065c35144897c8.journal")" = live ] && ok "store: the file's content moved" || bad "store: content"
-u=$(ls "$NEW" | grep '^user-8100@' | head -n1)
+u=$(find "$NEW" -maxdepth 1 -name 'user-8100@*' -printf '%f\n' | head -n1)
 case "$u" in
   user-8100@????????????????????????????????-0000000000000000-????????????????.journal) ok "store: a user journal without a readable header still gets the archive shape ($u)" ;;
   *) bad "store: user journal: '$u'" ;;

@@ -5,6 +5,7 @@
 # out single addresses; the prefix and the default route come from the router's announcements),
 # notes it in /run/occulite/dhcp6-<interface> so occulited can remove it when the mode changes, and
 # hands the nameservers to resolvconf as the record <interface>.dhcp6.
+# shellcheck disable=SC2154  # udhcpc6 hands interface, ipv6, dns and the rest over the environment
 IP=${IP:-/sbin/ip}
 RESOLVCONF=${RESOLVCONF:-/sbin/resolvconf}
 STATE_DIR=${STATE_DIR:-/run/occulite}
