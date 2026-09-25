@@ -1,0 +1,1 @@
+a stick that answers 0x000000 as its BidCos address, after the first boot: /etc/config/ids holds the address rfd was given, S47 makes a new random HM_HMRF_ADDRESS up (normalised) while the active one stays the file's

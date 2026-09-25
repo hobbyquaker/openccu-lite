@@ -1,0 +1,6 @@
+multimacd: /bin/multimacd -f /var/etc/multimacd.conf -l 5
+rfd: not started
+hmipserver: not started
+hs485d-init: not started
+hs485d: not started
+hmlangw: exec /bin/hmlangw -b -n 58A9A728D4 -s /dev/mmd_bidcos -r -1 >/var/log/hmlangw.log 2>&1

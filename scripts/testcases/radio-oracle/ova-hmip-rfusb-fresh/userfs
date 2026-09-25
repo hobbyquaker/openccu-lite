@@ -1,0 +1,4 @@
+etc/config/InterfacesList.xml
+etc/config/rfd.conf
+media/usb0
+usr/local/sdcard/.nobackup

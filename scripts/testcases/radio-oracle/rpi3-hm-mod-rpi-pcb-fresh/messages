@@ -1,0 +1,8 @@
+S47InitRFHardware: Identifying Homematic RF-Hardware: HmRF: HM-MOD-RPI-PCB/GPIO@3f201000.serial, HmIP: n/a, OK
+S49hs485d: Starting hs485dLoader: disabled
+S60hs485d: Starting hs485d: disabled
+lite-rfd-listen:
+S60multimacd: Starting multimacd: not required
+S61rfd: Starting rfd: ERROR: /dev/mmd_bidcos missing, no BidCos-RF hardware found
+S62HMServer: Starting HMIPServer: OK
+S61hmlangw:

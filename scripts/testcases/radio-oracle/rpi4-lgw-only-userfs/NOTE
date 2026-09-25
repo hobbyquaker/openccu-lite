@@ -1,0 +1,1 @@
+no radio module at all, a BidCos LAN gateway in rfd.conf: rfd runs on the gateway, BidCos-RF stays in InterfacesList.xml, no HmIP

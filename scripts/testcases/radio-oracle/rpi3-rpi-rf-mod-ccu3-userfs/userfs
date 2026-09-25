@@ -1,0 +1,5 @@
+etc/config/InterfacesList.xml
+etc/config/hmip_address.conf
+etc/config/hs485d.conf
+etc/config/ids
+etc/config/rfd.conf

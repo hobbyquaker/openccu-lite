@@ -1,0 +1,8 @@
+board_serial=MEQ0123456
+rf_board_serial=MEQ0123456
+rf_address=0xABC123
+rf_firmware_version=2.8.6
+hmip_board_serial=
+hmip_firmware_version=
+hmip_address=
+hmip_board_sgtin=

@@ -1,0 +1,1 @@
+a CCU3's userfs restored: rfd.conf without the loopback line and with a LAN gateway, a wired gateway, a BidCos address and an HmIP address of its own, a foreign entry in InterfacesList.xml (lost: S49 re-copies the template)

@@ -1,0 +1,1 @@
+two modules: an RPI-RF-MOD on the header and an HM-MOD-RPI-PCB on an HB-RF-USB - HmRF prefers the PCB, HmIP the RPI-RF-MOD, multimacd runs on the PCB's node for rfd alone, hmipserver uses the RPI-RF-MOD directly

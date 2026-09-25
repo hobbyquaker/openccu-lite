@@ -1,0 +1,1 @@
+an RPI-RF-MOD on the header beside an HM-CFG-USB-2: the adapter takes HmRF before the probe, the module only HmIP; quirk: S60 starts multimacd with an empty device path (the adapter has no node) while S62 uses the module directly

@@ -1,0 +1,37 @@
+# The intended deviations of occulited's radio plan from upstream's chain (task 129), as the
+# harness applies them: "<case-glob> <file> <sed expression>", applied to a copy of the plan's
+# output and of the expected file alike before they are compared. Each line names its reason; the
+# full list with the reasons is in the roadmap item. "1!d;s|.*|(deviation N)|" replaces a whole
+# file whose content the deviation changes.
+#
+# 3: hmipserver's diagram database lives in the daemon's own /var/hmipserver, not in /tmp (D-93)
+* HMServer.conf s|^diagramDatabasePath=/tmp/measurement$|diagramDatabasePath=/var/hmipserver/measurement|
+#
+# (8, the merge of InterfacesList.xml by name, was rejected by D-97: the plan re-copies the template
+# as upstream does, so the case rpi3-rpi-rf-mod-ccu3-userfs needs no allow line for its CCU-Jack entry.)
+#
+# 5: an unplugged HM-CFG-USB-2 has its own section switched off, not the last one (upstream comments
+# the LAN gateway after it out and leaves the adapter's section active)
+rpi4-hmip-rfusb-usb2-gone-userfs rfd.conf 1!d;s|.*|(deviation 5)|
+rpi4-hmip-rfusb-usb2-gone-userfs var-rfd.conf 1!d;s|.*|(deviation 5)|
+#
+# 7: an rfd.conf naming /etc/config/rfd/keys gets that line corrected instead of a reset to the
+# template, which loses every LAN gateway section
+rpi3-rpi-rf-mod-rfd-keys-spoiled-userfs rfd.conf 1!d;s|.*|(deviation 7)|
+rpi3-rpi-rf-mod-rfd-keys-spoiled-userfs var-rfd.conf 1!d;s|.*|(deviation 7)|
+#
+# 9: multimacd runs only on a node that exists; upstream started it with an empty device path when
+# the HM-CFG-USB-2 held BidCos-RF and a header module HmIP
+rpi3-rpi-rf-mod-plus-hm-cfg-usb-2-fresh daemons s|^multimacd: .*|multimacd: (deviation 9)|
+rpi3-rpi-rf-mod-plus-hm-cfg-usb-2-fresh multimacd.conf 1!d;s|.*|(deviation 9)|
+#
+# 15: an HM-MOD-RPI-PCB carries HmIP only through multimacd; upstream starts multimacd with an empty
+# device path beside an HM-CFG-USB-2 and opens the PCB directly, where hmipserver hangs after every
+# reset of the module (the lab box .170, 2026-09-18)
+rpi4-pcb-hb-rf-usb-plus-hm-cfg-usb-2-fresh crRFD.conf s|^Adapter.1.Port=.*|Adapter.1.Port=(deviation 15)|
+rpi4-pcb-hb-rf-usb-plus-hm-cfg-usb-2-fresh daemons s|SerialPorts=/dev/[a-z_0-9-]*|SerialPorts=(deviation 15)|
+rpi4-pcb-hb-rf-usb-plus-hm-cfg-usb-2-fresh multimacd.conf s|^Coprocessor Device Path = .*|Coprocessor Device Path = (deviation 15)|
+#
+# 12 (proposed): a BidCos-Wired entry in InterfacesList.xml when hs485d runs; upstream on lite never
+# writes one (the CCU WebUI's wired page did)
+* interfaces /^BidCos-Wired|/d

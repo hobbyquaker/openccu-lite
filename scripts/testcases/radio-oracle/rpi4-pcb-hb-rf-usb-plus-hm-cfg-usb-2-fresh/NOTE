@@ -1,0 +1,1 @@
+the lab box .170: a dual-protocol HM-MOD-RPI-PCB on an HB-RF-USB beside an HM-CFG-USB-2 - the adapter takes HmRF, the PCB only HmIP; quirk: S60 starts multimacd with an empty device path and S62 opens the PCB directly, where hmipserver hangs after every reset of the module (deviation 15)

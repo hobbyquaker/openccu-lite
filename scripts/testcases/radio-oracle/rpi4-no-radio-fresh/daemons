@@ -1,0 +1,6 @@
+multimacd: not started
+rfd: not started
+hmipserver: java -Dos.arch=aarch64 -Xmx896m -Dio.netty.tryReflectionSetAccessible=true --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED --add-opens java.base/java.nio=ALL-UNNAMED --add-opens java.base/sun.nio.ch=ALL-UNNAMED --add-opens java.base/jdk.internal.misc=ALL-UNNAMED --add-exports java.base/sun.nio.ch=ALL-UNNAMED --add-exports java.base/jdk.internal.misc=ALL-UNNAMED -Dlog4j.configurationFile=file:///var/etc/log4j2.xml -Dfile.encoding=ISO-8859-1 -cp /opt/HMServer/HMServer.jar:/opt/HMServer/coupling/ESHBridge.jar de.eq3.ccu.server.HMServer /var/etc/HMServer.conf
+hs485d-init: not started
+hs485d: not started
+hmlangw: not started

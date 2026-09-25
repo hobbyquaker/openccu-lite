@@ -1,0 +1,8 @@
+S47InitRFHardware: Identifying Homematic RF-Hardware: HmRF: RPI-RF-MOD/GPIO@3f201000.serial, HmIP: RPI-RF-MOD/GPIO@3f201000.serial, OK
+S49hs485d: Starting hs485dLoader: OK
+S60hs485d: Starting hs485d: OK
+lite-rfd-listen:
+S60multimacd: Starting multimacd: OK
+S61rfd: Starting rfd: OK
+S62HMServer: Starting HMIPServer: OK
+S61hmlangw:

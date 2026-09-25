@@ -1,0 +1,51 @@
+#!/bin/sh
+# openccu-lite: rfd listens on the loopback only - the harness's copy of what the image did
+# before task 129's phase 2 (the helper /usr/libexec/occu/lite-rfd-listen ran in front of S61rfd;
+# the plan's render does the same edit now, LoopbackListen in occulited's internal/radio). The
+# differential harness (lite-radio-oracle-test.sh) runs this in front of S61rfd so that the
+# oracle's rfd.conf carries lite's loopback line as the plan's does.
+#
+# The image's rfd.conf template carries "Listen IP = 127.0.0.1", but S61rfd copies the template
+# only when /etc/config/rfd.conf is missing, and a box that came from OpenCCU, a CCU3 or an older
+# image keeps a file without the line: rfd then listens on every address, and only the restrictive
+# firewall keeps its port off the LAN. Run before S61rfd starts rfd: set the line in the userfs
+# file itself, so every later start sees it. OpenCCU's own lighttpd reaches rfd on the loopback,
+# so the setting also holds after a switch back.
+#
+# The file is rewritten in place (same inode, mode and owner), and only when it needs the change.
+
+CONF=/etc/config/rfd.conf
+LINE='Listen IP = 127.0.0.1'
+
+[ -f "$CONF" ] || exit 0
+grep -q '^[[:space:]]*Listen IP[[:space:]]*=[[:space:]]*127\.0\.0\.1[[:space:]]*$' "$CONF" && exit 0
+
+if grep -q '^[[:space:]]*Listen IP[[:space:]]*=' "$CONF"; then
+  mode=replace
+elif grep -q '^[[:space:]]*Listen Port[[:space:]]*=' "$CONF"; then
+  mode=beforeport
+else
+  mode=top
+fi
+
+tmp=$(mktemp /tmp/rfd.conf.XXXXXX) || exit 1
+if ! awk -v mode="$mode" -v line="$LINE" '
+  NR == 1 && mode == "top" { print line }
+  mode == "replace" && /^[[:space:]]*Listen IP[[:space:]]*=/ { if (!done) print line; done = 1; next }
+  mode == "beforeport" && !done && /^[[:space:]]*Listen Port[[:space:]]*=/ { print line; done = 1 }
+  { print }
+' "$CONF" >"$tmp"; then
+  rm -f "$tmp"
+  echo "rfd.conf: could not set the loopback address" >&2
+  exit 1
+fi
+if [ ! -s "$tmp" ] || ! grep -q '^Listen IP = 127\.0\.0\.1$' "$tmp"; then
+  rm -f "$tmp"
+  echo "rfd.conf: could not set the loopback address" >&2
+  exit 1
+fi
+cat "$tmp" >"$CONF"
+rc=$?
+rm -f "$tmp"
+[ $rc -eq 0 ] || { echo "rfd.conf: could not write $CONF" >&2; exit 1; }
+echo "rfd.conf: rfd listens on the loopback only now ($mode)"

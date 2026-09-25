@@ -1,0 +1,8 @@
+S47InitRFHardware: Identifying Homematic RF-Hardware: Error: No radio module found on /dev/raw-uart HmRF: RPI-RF-MOD/HB-RF-ETH@192.168.1.50, HmIP: RPI-RF-MOD/HB-RF-ETH@192.168.1.50, OK
+S49hs485d: Starting hs485dLoader: disabled
+S60hs485d: Starting hs485d: disabled
+lite-rfd-listen:
+S60multimacd: Starting multimacd: OK
+S61rfd: Starting rfd: OK
+S62HMServer: Starting HMIPServer: OK
+S61hmlangw:

@@ -1,0 +1,1 @@
+rfd.conf naming /etc/config/rfd/keys: reset to the template (quirk: the LAN gateway section is lost with it)

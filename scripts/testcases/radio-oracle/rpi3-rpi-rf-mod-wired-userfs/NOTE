@@ -1,0 +1,1 @@
+an RPI-RF-MOD and a wired LAN gateway in hs485d.conf: hs485d runs (the template's InterfacesList.xml carries no BidCos-Wired entry)

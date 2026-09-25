@@ -1,0 +1,1 @@
+rfd.conf with an HM-CFG-USB section and a LAN gateway after it, the adapter unplugged: S61rfd comments the LAST section out (quirk: the gateway, not the adapter)

@@ -1,0 +1,9 @@
+board_serial=1709ADFA5B
+board_sgtin=3014F711A000041709ADFA5B
+rf_board_serial=1709ADFA5B
+rf_address=0xFFxxxx
+rf_firmware_version=4.4.18
+hmip_board_serial=1709ADFA5B
+hmip_firmware_version=4.4.18
+hmip_address=0x7F7A50
+hmip_board_sgtin=3014F711A000041709ADFA5B

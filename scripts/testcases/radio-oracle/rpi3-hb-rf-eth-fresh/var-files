@@ -1,0 +1,9 @@
+board_serial=58A9A728D4
+board_sgtin=3014F711A0001F58A9A728D4
+rf_board_serial=58A9A728D4
+rf_address=0x1F6C2E
+rf_firmware_version=4.4.22
+hmip_board_serial=58A9A728D4
+hmip_firmware_version=4.4.22
+hmip_address=0x3FAE2C
+hmip_board_sgtin=3014F711A0001F58A9A728D4
