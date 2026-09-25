@@ -13,7 +13,8 @@
 #   - lite-radio-stop-wait: no wait outside a shutdown, the wait until the radio units are down,
 #     the limit;
 #   - lite-ca-certificates: the prebuilt bundle without user certificates, the cache built,
-#     reused, and rebuilt when a certificate or the image changes;
+#     reused, and rebuilt when a certificate or the image changes; the userfs distrust file's
+#     deselections (the Trust stores page) build from a generated configuration;
 #   - ca-prebuilt.sh: the links point to the box's paths, one hash link per certificate.
 #
 # S47 and S48 use busybox ash's [[ ]], so those parts run under bash. Their absolute paths are
@@ -335,19 +336,31 @@ mkdir -p "$K/prebuilt" "$K/local" "$K/bin"
 printf 'CERT-A\n' > "$K/prebuilt/ca-certificates.crt"; ln -s /usr/share/ca-certificates/mozilla/A.crt "$K/prebuilt/A.pem"; ln -s A.pem "$K/prebuilt/1234abcd.0"
 cat > "$K/bin/update" <<'EOF'
 #!/bin/sh
-# a stand-in for update-ca-certificates --default --etccertsdir <dir>
+# a stand-in for update-ca-certificates: --default --etccertsdir <dir> --localcertsdir <dir> --certsconf <file>
+# (the boot's usual call), or --fresh --etccertsdir <dir> --localcertsdir <dir> --certsdir <dir> --certsconf <gen>
+# (with deselections: every line of <gen> is an image certificate, "!" for a deselected one)
 echo run >> "$STUBSTATE/updates"
-[ "$1" = --default ] && [ "$2" = --etccertsdir ] && [ "$4" = --localcertsdir ] && [ "$6" = --certsconf ] || exit 3
+if [ "$1" = --default ]; then
+  [ "$2" = --etccertsdir ] && [ "$4" = --localcertsdir ] && [ "$6" = --certsconf ] || exit 3
+  [ -z "$(ls -A "$3")" ] || exit 5
+  cd "$3" || exit 4
+  find "$5" -name '*.crt' | sort | while read -r c; do ln -sf "$c" "$(basename "$c" .crt).pem"; done
+  { echo CERT-A; find "$5" -name '*.crt' | sort | xargs cat; } > ca-certificates.crt
+  exit 0
+fi
+[ "$1" = --fresh ] && [ "$2" = --etccertsdir ] && [ "$4" = --localcertsdir ] && [ "$6" = --certsdir ] && [ "$8" = --certsconf ] || exit 3
 [ -z "$(ls -A "$3")" ] || exit 5
+cp "$9" "$STUBSTATE/gen"
 cd "$3" || exit 4
-find "$5" -name '*.crt' | sort | while read -r c; do ln -sf "$c" "$(basename "$c" .crt).pem"; done
-{ echo CERT-A; find "$5" -name '*.crt' | sort | xargs cat; } > ca-certificates.crt
+{ grep -v '^!' "$9" | while read -r c; do cat "$7/$c"; done; find "$5" -name '*.crt' | sort | xargs cat; } > ca-certificates.crt
 EOF
 chmod 755 "$K/bin/update"
 echo "VERSION=3.89.9 LITE=1.0.0-dev.2" > "$K/VERSION"
 : > "$K/conf"
+mkdir -p "$K/image/mozilla"; printf 'CERT-A\n' > "$K/image/mozilla/A.crt"; printf 'CERT-B\n' > "$K/image/mozilla/B.crt"
 ca_run() {
   CA_ETCCERTSDIR="$K/var/etc/ssl/certs" CA_PREBUILT="$K/prebuilt" CA_LOCALCERTSDIR="$K/local" CA_CERTSCONF="$K/conf" \
+    CA_CERTSDIR="$K/image" CA_DISTRUST="$K/distrust" \
     CA_CACHE="$K/cache" CA_VERSION_FILE="$K/VERSION" CA_UPDATE="$K/bin/update" sh "$LIBEXEC/lite-ca-certificates" > "$K/out" 2>&1
 }
 updates() { cat "$STUBSTATE/updates" 2>/dev/null | wc -l | tr -d ' '; }
@@ -389,7 +402,29 @@ reset_state; ca_run
 [ "$(updates)" = 0 ] && ! grep -q CERT-LAN "$K/var/etc/ssl/certs/ca-certificates.crt" && ok "the user certificates removed: back to the prebuilt bundle" || bad "removed: updates $(updates), $(cat "$K/out")"
 echo "!mozilla/A.crt" > "$K/conf"
 reset_state; ca_run; [ "$(updates)" = 1 ] && ok "a certificate deselected in ca-certificates.conf: built, not the prebuilt" || bad "conf: updates $(updates)"
-: > "$K/conf"; mv "$K/prebuilt" "$K/prebuilt.away"
+: > "$K/conf"
+# the userfs distrust file (the Trust stores page's): a generated configuration in place of --default,
+# the deselected certificate out of the bundle, the rest and the user's in; cached, and rebuilt when
+# the deselections change; nothing but "!" lines counts
+printf '# written by the Trust stores page\n!mozilla/B.crt\n\nmozilla/A.crt\n' > "$K/distrust"
+reset_state; ca_run
+if [ "$(updates)" = 1 ] && [ "$(cat "$STUBSTATE/gen")" = "$(printf 'mozilla/A.crt\n!mozilla/B.crt')" ] &&
+   grep -q CERT-A "$K/var/etc/ssl/certs/ca-certificates.crt" && ! grep -q CERT-B "$K/var/etc/ssl/certs/ca-certificates.crt" &&
+   grep -q '1 deselected' "$K/out"; then
+  ok "a deselection on the userfs: built from a generated configuration without B ($(cat "$K/out"))"
+else
+  bad "deselection: updates $(updates), gen '$(cat "$STUBSTATE/gen" 2>&1)', $(cat "$K/out")"
+fi
+reset_state; ca_run; [ "$(updates)" = 0 ] && grep -q 'cached' "$K/out" && ! grep -q CERT-B "$K/var/etc/ssl/certs/ca-certificates.crt" && ok "the deselection is cached" || bad "deselection cache: updates $(updates), $(cat "$K/out")"
+printf '!mozilla/A.crt\n' > "$K/distrust"
+reset_state; ca_run; [ "$(updates)" = 1 ] && ! grep -q CERT-A "$K/var/etc/ssl/certs/ca-certificates.crt" && grep -q CERT-B "$K/var/etc/ssl/certs/ca-certificates.crt" && ok "a changed deselection: built again" || bad "changed deselection: updates $(updates), $(cat "$K/out")"
+printf 'CERT-LAN\n' > "$K/local/lan-ca.crt"
+reset_state; ca_run; [ "$(updates)" = 1 ] && grep -q CERT-LAN "$K/var/etc/ssl/certs/ca-certificates.crt" && ! grep -q CERT-A "$K/var/etc/ssl/certs/ca-certificates.crt" && ok "a user certificate beside a deselection: both apply" || bad "user cert + deselection: updates $(updates), $(cat "$K/out")"
+rm -f "$K/local/lan-ca.crt"
+printf '# only comments\n' > "$K/distrust"
+reset_state; ca_run; [ "$(updates)" = 0 ] && cmp -s "$K/prebuilt/ca-certificates.crt" "$K/var/etc/ssl/certs/ca-certificates.crt" && ok "a distrust file without ! lines: the prebuilt bundle again" || bad "empty distrust: updates $(updates), $(cat "$K/out")"
+rm -f "$K/distrust"
+mv "$K/prebuilt" "$K/prebuilt.away"
 reset_state; ca_run
 [ "$(updates)" = 1 ] && grep -q '^<4>' "$K/out" && ok "no prebuilt bundle in the image: built, with a warning" || bad "no prebuilt: updates $(updates), $(cat "$K/out")"
 mv "$K/prebuilt.away" "$K/prebuilt"
