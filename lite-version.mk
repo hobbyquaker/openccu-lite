@@ -4,7 +4,7 @@
 # /VERSION's VERSION= line for the recovery. The Makefile includes this after its own
 # PRODUCT_VERSION line, and only the lite products are affected.
 # D-88: every build is 1.0.0-dev.<N>, one number per build round (all products from the same fork
-# commit and pins), N from the build ledger of the agents repository (notes/builds.md):
+# commit and pins), N from the project's build list (never reused):
 #   make PRODUCT=... LITE_VERSION=1.0.0-dev.<N> release
 # The -snapshot.<sha> form of D-44 is not used any more.
 LITE_BASE:=$(shell sed -n 's/^BASE=//p' LITE-VERSION)

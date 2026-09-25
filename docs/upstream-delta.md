@@ -1,6 +1,6 @@
 # openccu-lite: the delta against upstream OpenCCU
 
-This fork exists to build [openccu-lite](https://git.lan.raff.rocks/hobbyquaker/openccu-lite):
+This fork exists to build openccu-lite:
 a Homematic CCU firmware without `ReGaHSS` and without the CCU WebUI. The radio
 and wired stack — `rfd`, `hs485d`, `multimacd`, `hmipserver` — is taken from
 upstream unchanged.
@@ -69,7 +69,7 @@ rebased ones.
 | 17 | The aarch64 board products (D-43, D-39, D-33): `configs/aarch64-rpi3.config`, `configs/aarch64-rpi4.config`, `configs/aarch64-rpi5.config` (task 32, 2026-09-09), `board/{aarch64-rpi3,aarch64-rpi4,aarch64-rpi5}/post-release.sh` (D-44 copies of `board/rpi3`'s and `board/rpi4`'s with the lite names), `release/updatepkg/{aarch64-rpi3,aarch64-rpi4,aarch64-rpi5} -> rpi3`, the D-39/D-43 product map in `board/lite/post-build.sh` and in `package/recovery-system/external/board/post-build.sh`, `LITE_PRODUCTS` in `lite-version.mk` | lite-only | `d1ab5f82c`, `ffcc1a0cf`, `f565cb167`, `a3dadb5de` |
 | 18 | Daemon tracking, restart-with-backoff and the init-script wrapper of the systemd products (B-3), the boot messages on the splash and the console (B-4) and the end-of-boot hint (B-5): `overlay/lite/usr/lib/systemd/{system/*.service,openccu-lite-initscripts}`, `overlay/lite/usr/libexec/occu/{initscript-wrapper,lite-psplash,lite-boot-message,lite-watchdog-marker}`, `board/lite/post-build-systemd.sh` | lite-only, **review on rebase** (the unit set and the table) | `371d1478a` |
 | 19 | The D-41 unit review (task 22): unit conditions, the machine ID, the watchdog in PID 1, the LED merge, `lite-rf-stop`, the `triggerAlarm.tcl` stand-in | lite-only, **review on rebase** | `371d1478a` |
-| 20 | **`package/openccu-base`'s (until 3.89.8 `package/occu`'s) `ln -snf /usr/bin/tclsh $(TARGET_DIR)/bin/tclsh` breaks Tcl on a merged-`/usr` target**: `/bin` *is* `/usr/bin` there, so the command replaces tcl's own `/usr/bin/tclsh -> tclsh8.6` with a link to itself and every Tcl script fails with `ELOOP` — including `setfirewall.tcl`, which `eQ3StartNetwork` runs at every boot without checking its exit code, so the box comes up with no firewall at all (openccu-lite B-11). Repaired for now in `board/lite/post-build-systemd.sh`; upstream's own fix would be to make the link conditional (`[ "$(readlink -f $(TARGET_DIR)/bin)" = "$(readlink -f $(TARGET_DIR)/usr/bin)" ] \|\| ln -snf …`). Hits anyone who builds OpenCCU with `BR2_INIT_SYSTEMD` | **upstreamable** | `371d1478a` |
+| 20 | **`package/openccu-base`'s (until 3.89.8 `package/occu`'s) `ln -snf /usr/bin/tclsh $(TARGET_DIR)/bin/tclsh` breaks Tcl on a merged-`/usr` target**: `/bin` *is* `/usr/bin` there, so the command replaces tcl's own `/usr/bin/tclsh -> tclsh8.6` with a link to itself and every Tcl script fails with `ELOOP` — including `setfirewall.tcl`, which `eQ3StartNetwork` runs at every boot without checking its exit code, so the system comes up with no firewall at all (openccu-lite B-11). Repaired for now in `board/lite/post-build-systemd.sh`; upstream's own fix would be to make the link conditional (`[ "$(readlink -f $(TARGET_DIR)/bin)" = "$(readlink -f $(TARGET_DIR)/usr/bin)" ] \|\| ln -snf …`). Hits anyone who builds OpenCCU with `BR2_INIT_SYSTEMD` | **upstreamable** | `371d1478a` |
 | 21 | **`package/multilib32`'s loader link lands one directory too shallow on a merged-`/usr` target**: `ln -sf ../lib32/ld-linux.so.2 $(TARGET_DIR)/lib/` resolves into `/usr/lib32` instead of `/lib32` when `/lib` is a symlink to `usr/lib`, so `/lib/ld-linux*.so.*` — the interpreter path compiled into every 32-bit binary — dangles (openccu-lite B-12). Repaired in `board/lite/post-build-systemd.sh`; the same conditional would fix it upstream | **upstreamable** | `371d1478a` |
 | 13 | `package/java-azul`: fontconfig/dejavu/liberation are dependencies only when selected (kconfig refused a config without them; upstream's configs select them, so a no-op there) | **upstreamable** | `cb137260a` |
 | 12 | `.github/workflows/lite-release.yml` (draft, never run) and `scripts/lite-sbom.py` (CycloneDX from `make show-info`) — task 16 | lite-only | `b91004861` |
@@ -88,7 +88,7 @@ rebased ones.
 | 34 | No smartd (task 111): `# BR2_PACKAGE_SMARTMONTOOLS is not set` in `configs/x86_64-ova.config`, `configs/lxc-lite_amd64.config`, `configs/lxc-lite_arm64.config`; `board/lite/no-smartd.sh` run at the end of `board/lite/post-build.sh` (the Pi products keep `smartctl` and lose the daemon, its unit, its enable links and its configuration); the `overlay/lite` drop-in `smartd.service.d/10-openccu-lite.conf` removed; `scripts/testcases/lite-smartd-test.sh`, the CI step | lite-only, **review on rebase** (smartmontools' installed file names) | (this commit) |
 | 36 | The interface daemons confined (task 67; D-55, D-93): the users `rfd`, `hmipserver`, `multimacd`, `hs485d`, `hmlangw` (8110–8114) and the resource groups `raw-uart`, `eq3loop`, `mmd-bidcos`, `mmd-hmip` (8120–8123) in `package/occulited/occulited.mk`; `overlay/lite/usr/lib/udev/rules.d/60-openccu-lite-radio.rules`; `overlay/lite/usr/lib/tmpfiles.d/00-openccu-lite-radio.conf`; the units `rfd`, `multimacd`, `hmipserver`, `hs485d`, `hmlangw` as direct, sandboxed units with a `20-devices.conf` drop-in each (`board/lxc-lite/post-build.sh` drops the drop-ins); `overlay/lite/usr/libexec/occu/lite-radio-prep`; the confine test `scripts/testcases/lite-radio-confine-test.sh`, the CI step. (The transitional `init)` case in `S60multimacd`, `S61rfd` and `S62HMServer` and the helper `lite-radio-prep` of this item went again with item 38.) | lite-only | (this commit) |
 | 37 | The radio chain's differential harness (task 129, D-83): `scripts/testcases/lite-radio-oracle-test.sh` runs upstream's S47InitRFHardware, S49hs485d, S60hs485d, S60multimacd, S61rfd, S62HMServer and S61hmlangw (plus lite's `lite-rfd-listen`) in a sandbox over the hardware matrix and compares their decisions with the expected files under `scripts/testcases/radio-oracle/<case>/` (the template `radio-oracle/templates/crRFD.conf` is OpenCCU-Base 3.89.9's `etc/config_templates/crRFD.conf`); the CI step; the harness's copy of the loopback line `radio-oracle/lite-rfd-listen`; the check unit `occu-radio-shadow-check.service` (`occulited radio check`, behind `/usr/local/etc/occulite/radio-shadow`) | lite-only, **review on rebase**: a changed decision of an upstream script fails a case; `--update` after reading the diff, and a new crRFD.conf template when OpenCCU-Base's changes | (this commit) |
-| 38 | The radio stack in occulited, phase 2 (task 129, D-83, D-97): `occu-init-rf-hardware.service` runs `occulited radio run` (the detection, the plan and the render written to the box) and stops with `occulited radio stop`; the daemon units condition on `/run/occulite/radio/<daemon>.enabled` and run `occulited radio prep|ready|stopped <daemon>` as their root steps; `occu-init-hs485d.service` runs the loader's init pass directly; `occu-interface-clock.service` only with rfd (B-142); `occu-update-rf-hardware.service`, `occu-radio-shadow.service`, `lite-radio-prep`, `lite-rf-stop` and `lite-rfd-listen` are gone; **`board/lite/post-build-systemd.sh` removes `S47InitRFHardware`, `S48UpdateRFHardware`, `S49hs485d`, `S60hs485d`, `S60multimacd`, `S61rfd` and `S62HMServer` from the image** and the wrapper table has no row for them (an addon calling `/etc/init.d/S61rfd restart` fails, accepted); `InterfacesList.xml` is re-copied from the template as upstream does (D-97); the switch guarantee in `scripts/lite-qemu-test.sh` (an OpenCCU-shaped userfs with a LAN gateway boots with it) | lite-only. **Review on rebase:** the seven scripts stay in the overlays only as the harness's oracle (item 37); an upstream change in one of them shows as a failing harness case and is carried into occulited's `internal/radio` (the plan), not into the image | (this commit) |
+| 38 | The radio stack in occulited, phase 2 (task 129, D-83, D-97): `occu-init-rf-hardware.service` runs `occulited radio run` (the detection, the plan and the render written to the system) and stops with `occulited radio stop`; the daemon units condition on `/run/occulite/radio/<daemon>.enabled` and run `occulited radio prep|ready|stopped <daemon>` as their root steps; `occu-init-hs485d.service` runs the loader's init pass directly; `occu-interface-clock.service` only with rfd (B-142); `occu-update-rf-hardware.service`, `occu-radio-shadow.service`, `lite-radio-prep`, `lite-rf-stop` and `lite-rfd-listen` are gone; **`board/lite/post-build-systemd.sh` removes `S47InitRFHardware`, `S48UpdateRFHardware`, `S49hs485d`, `S60hs485d`, `S60multimacd`, `S61rfd` and `S62HMServer` from the image** and the wrapper table has no row for them (an addon calling `/etc/init.d/S61rfd restart` fails, accepted); `InterfacesList.xml` is re-copied from the template as upstream does (D-97); the switch guarantee in `scripts/lite-qemu-test.sh` (an OpenCCU-shaped userfs with a LAN gateway boots with it) | lite-only. **Review on rebase:** the seven scripts stay in the overlays only as the harness's oracle (item 37); an upstream change in one of them shows as a failing harness case and is carried into occulited's `internal/radio` (the plan), not into the image | (this commit) |
 | 39 | The radio stack in occulited, phase 4 (task 129, D-99): `occu-lgw-firmware-update.service` and `occu-set-lgw-key.service` run `occulited radio lgw-firmware` and `radio lgw-keys`; **`board/lite/post-build-systemd.sh` also removes `S58LGWFirmwareUpdate`, `S59SetLGWKey` and `/bin/setlgwkey.sh`** (no wrapper rows any more); the USB hotplug: `occu-radio-hotplug.service` (`occulited radio hotplug`) and `overlay/lite/usr/lib/udev/rules.d/61-openccu-lite-radio-hotplug.rules` | lite-only. **Review on rebase:** an upstream change in the two scripts or `setlgwkey.sh` is carried into occulited's `internal/radio/lgw.go` | (this commit) |
 | 40 | The firewall is occulited's (task 157, D-105): `occu-firewall.service` loads `firewall-rules.json` at boot before the network; the lite post-build removes `setfirewall.tcl`, `libfirewall.tcl`, `libsecuritylevel.tcl` and `enforcesecuritylevel.tcl`; `eQ3StartNetwork` (`base`) calls `setfirewall.tcl` only where it is installed; `occu-network.service` orders after `occu-firewall.service` instead of B-152's `occu-init-host.service` | the `eQ3StartNetwork` guard **upstreamable** (it changes nothing where the script is installed); the rest lite-only | (this commit) |
 | 41 | systemd with libseccomp (task 121): `BR2_PACKAGE_LIBSECCOMP=y` in every lite systemd config (`aarch64-rpi3/4/5`, `x86_64-ova`, `lxc-lite_amd64/arm64`), so Buildroot builds systemd with `-Dseccomp=enabled` and the units' and occulited's addon drop-in's seccomp lines are enforced | lite-only | this commit |
@@ -214,7 +214,7 @@ replacement.
   script is now deleted. The call is redirected to `/dev/null` in cron, so the
   failure is silent. It wants replacing by the notification endpoint of roadmap
   task 12.
-- **hmipserver still binds `:::39292` and, on a box with radio hardware, `rfd`
+- **hmipserver still binds `:::39292` and, on a system with radio hardware, `rfd`
   would bind `0.0.0.0:32001` in any image built before item 9.** D-29 is only
   half done: the lighttpd proxies are gone and `rfd` is on the loopback from
   the next build, but `Legacy.BindAddress=127.0.0.1` for hmipserver needs a
@@ -254,7 +254,7 @@ its install always comes last. And `board/lite/post-build.sh` stops the build wh
 `ise`, `pda`) is in the image, or when `/www/rega` is (the step removes `licenseinfo.htm` and the
 directory first, task 179).
 `merge_config.sh` drops a symbol it does not know without a word; the guards are what makes the
-next rename of an option visible instead of a box whose addon settings pages refuse every
+next rename of an option visible instead of a system whose addon settings pages refuse every
 session.
 
 ## 7. `overlay/lite/etc/lighttpd/modules.conf`
@@ -273,7 +273,7 @@ includes `conf.d/occulited.conf` at the end.
 
 A copy of `overlay/RFD/etc/config_templates/rfd.conf` with one line added,
 `Listen IP = 127.0.0.1`, so that `rfd` binds `127.0.0.1:32001` instead of
-`0.0.0.0:32001` (D-29). Verified on the lab box that `rfd` honours the setting.
+`0.0.0.0:32001` (D-29). Verified on the test system that `rfd` honours the setting.
 `S61rfd` copies the template into `/etc/config` on first boot only, so an
 existing `/etc/config/rfd.conf` is left alone — which is the right behaviour for
 an in-place firmware update.
@@ -590,10 +590,10 @@ with occulited's fragment in an Alpine container (lighttpd 1.4.85), runs `S50lig
 the markers present and absent, `lighttpd -tt`, and curl for who is redirected where: the method,
 path and query, capitals and a port in `Host`, an IPv6 literal, other names, the API, the ACME
 path, the loopback, the addon gate, HSTS on the redirect and none on port 80, the HTTPS redirect's
-own answers, and the markers the script refuses. On an `x86_64-ova` box, lighttpd 1.4.82 parsed a
+own answers, and the markers the script refuses. On an `x86_64-ova` system, lighttpd 1.4.82 parsed a
 copy of its full configuration with these files in `/tmp` (`-tt` and `-p`) with no marker, the
 marker with and without the HTTPS redirect, and a name the certificate does not cover, the
-function run by the box's busybox and openssl.
+function run by the system's busybox and openssl.
 
 ## The measurement
 
@@ -616,12 +616,12 @@ file is absent — no defconfig ships it. `Legacy.BindAddress` is a property the
 (verified on OpenCCU 3.89.8: `::ffff:127.0.0.1:32010`). The alternative — a lite copy of the
 63-line vendor template — would need re-reviewing on every occu bump; this is three lines.
 
-**Why upstream wants this:** a CCU whose XML-RPC clients all run on the box (RaspberryMatic with
+**Why upstream wants this:** a CCU whose XML-RPC clients all run on the system (RaspberryMatic with
 addons, an HA add-on) has no reason to expose 32010 to the LAN; today the only way is the
 firewall. The same hook shape fits `rfd`'s `Listen IP` once someone wants it there.
 
 **What it does not cover:** the BidCos-only branch of `S62HMServer` (no HmIP module detected —
-a container without hardware, or a plain HM-only box) starts `HMServer.jar` with
+a container without hardware, or a plain HM-only system) starts `HMServer.jar` with
 `/var/etc/HMServer.conf` (`hmServerPort=39292`), and that server has no bind property in its
 classes. There the firewall's rules keep 39292 off the LAN, as upstream has it. Verified on the
 second lite image: `:::39292` listening in a container, `Listen IP = 127.0.0.1` present in
@@ -685,7 +685,7 @@ are **upstream candidates**. **Files:** `buildroot-external/overlay/lite/usr/lib
 - **`S46chronyd`'s blocking `ntpdate`** is not run: `chrony.service` calls `lite-chrony`, which
   writes S46chronyd's server list into `/var/etc/chrony.conf` and starts chronyd at once (`makestep`
   is already in `/etc/chrony.conf`). Upstream's script exits before starting chronyd when both
-  `ntpdate` attempts fail, which leaves a box that boots without internet unsynchronised until the
+  `ntpdate` attempts fail, which leaves a system that boots without internet unsynchronised until the
   next reboot; the fix there would be to start chronyd in that branch as well.
 - **`occu-clock-valid.service`** finishes when the clock came from an RTC and is not older than the
   image, when chronyd is synchronised, or after 60 s; multimacd, rfd, hmipserver, hs485d and crond
@@ -698,7 +698,7 @@ are **upstream candidates**. **Files:** `buildroot-external/overlay/lite/usr/lib
 ## 32. The status LED: `hss_led` out, the scripts' LED writes narrowed (task 95, D-63)
 
 **Status:** the removal, `lite-status-led` and the unit lines are **lite-only**; the guards in
-`S02InitRTC`, `S47InitRFHardware` and `eQ3StartNetwork` are **upstreamable** — on a box with
+`S02InitRTC`, `S47InitRFHardware` and `eQ3StartNetwork` are **upstreamable** — on a system with
 `hss_led` nothing changes but the network blink, which no longer writes the `rpi_rf_mod:*` devices
 the overlay creates on every Pi, nor an LED that is already owned after the boot. **Files:**
 `buildroot-external/board/lite/post-build.sh`,
@@ -721,7 +721,7 @@ the overlay creates on every Pi, nor an LED that is already owned after the boot
   (`S02InitRTC`'s detection of the module) and no `/var/status/startupFinished` now.
 - **`lite-status-led shutdown|stopped`**: the yellow patterns the controller shows itself, for when
   it is not there — `occu-leds.service`'s stop (the first step of a shutdown) and occulited's
-  `ExecStopPost` (yellow slow: not supervised; the shutdown pattern while the box goes down). Only
+  `ExecStopPost` (yellow slow: not supervised; the shutdown pattern while the system goes down). Only
   with an RPI-RF-MOD in `/var/hm_mode`, never in HM-LGW mode.
 - **The recovery system** keeps its own `S02InitRTC`, `S11InitRFHardware` and `S99SetupLEDs`
   unchanged: magenta, driven by its scripts.
@@ -739,7 +739,7 @@ A rebase that changes the LED blocks of these scripts has to keep the guards.
   same scale as rfd's (eQ-3's 0 to 6). `multimacdLogLevel` answers it when it is a single digit from
   0 to 6, and `LOGLEVEL_RFD` otherwise (unset, empty, a name, two digits). Both `start-stop-daemon`
   lines, the start and the retry in `waitStartupComplete`, take its answer.
-- **Compatibility:** a file without the key, and a backup restored from an older box, start multimacd
+- **Compatibility:** a file without the key, and a backup restored from an older system, start multimacd
   exactly as before. The script's defaults reset `LOGLEVEL_MULTIMACD`, so a value inherited from the
   environment does not count.
 - **Where it is set:** occulited's Log settings (task 101) write the key, or remove it for *same as
@@ -762,7 +762,7 @@ lite-clock-valid,lite-radio-stop-wait}`, `scripts/lite-unit-refs.sh`,
   route for a name) every 0.2 s, at most 60 s, before the HB-RF-ETH is connected; `board_mac` gives
   the board-serial fallback eth0's MAC, else the first physical interface's, instead of the MAC of
   whichever interface holds the default route. Under rcS the network is up before S47 and eth0
-  holds the default route on every CCU-like box, so upstream sees no change; a systemd image can
+  holds the default route on every CCU-like system, so upstream sees no change; a systemd image can
   detect a local radio module while the network comes up.
   **`probe_radio_module`** (task 138, D-92): with `RF_GPIO_PROBE_TIMEOUT=<s>` in the caller's
   environment (the lite unit sets 6), a raw-uart node whose `device_type` is `GPIO@…` is probed
@@ -781,7 +781,7 @@ lite-clock-valid,lite-radio-stop-wait}`, `scripts/lite-unit-refs.sh`,
   lite post-build removes the script (D-90).
 - **The CA bundle**: `board/lite/ca-prebuilt.sh` runs the image's own `update-ca-certificates
   --default` against the target's certificates with the host's openssl and points the links at the
-  box's paths; checked against a box's boot-time bundle (the same links and certificates; busybox
+  system's paths; checked against a system's boot-time bundle (the same links and certificates; busybox
   `sed '$a\'` adds a blank line after each certificate, GNU sed does not).
 - **A rebase** that touches the HB-RF-ETH block, the board-serial fallback, the probe loop or the three flash
   branches of S48 has to keep these edits; the unit-order and boot-path tests fail otherwise.
