@@ -10,7 +10,7 @@
 #
 ################################################################################
 
-OCCULITED_VERSION = d62cd083451709e5b07c5a50ecfdb206f80b540e
+OCCULITED_VERSION = 0d239456d2663441d4261ce7ecd3f4a6bb3f822b
 OCCULITED_SITE = https://git.lan.raff.rocks/hobbyquaker/occulited/archive
 OCCULITED_SOURCE = $(OCCULITED_VERSION).tar.gz
 OCCULITED_LICENSE = GPL-3.0-only
