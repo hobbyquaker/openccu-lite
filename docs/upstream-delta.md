@@ -31,7 +31,9 @@ the commits named below are the new ones. The history before the cleanup is kept
 it replaces. The changes with an `Upstream: candidate` trailer come first, directly on
 upstream: `git log --grep='^Upstream: candidate' upstream/master..lite`.
 
-**The base is OpenCCU `3.89.9.20260914` since 2026-09-15** (task 126; the branch before the
+**The base is OpenCCU `3.89.11.20260919` since 2026-09-25** (task 233: lite's history squashed into area commits and
+rebased onto the tag; the 129 commits before are the branch `lite-history-2026-09` on Gitea, and upstream carries
+item 1 itself since 3.89.11, so its block is gone). Before: **OpenCCU `3.89.9.20260914` since 2026-09-15** (task 126; the branch before the
 rebase is `archive/lite-2026-09-15` on Gitea). That release replaces `package/occu` with
 `package/openccu-base`, which builds the base services from source, and lite's history on top
 of the tag starts with **a marked block of four commits that are not lite's: the commits of
@@ -102,7 +104,7 @@ rebased ones.
 
 ## 1. ReGaHss and the WebUI are options of `package/openccu-base`
 
-**Status:** the upstream pull request [OpenCCU/OpenCCU#4183](https://github.com/OpenCCU/OpenCCU/pull/4183),
+**Status: upstream since OpenCCU 3.89.11** (#4183 merged; nothing of it is carried any more). Before: the upstream pull request [OpenCCU/OpenCCU#4183](https://github.com/OpenCCU/OpenCCU/pull/4183),
 carried as a marked block of its four commits directly on top of the tag `3.89.9.20260914`, before
 lite's own commits; the switch itself is lite's commit *"lite configs: ReGaHss and the WebUI off
 through package/openccu-base's options"*. **Files:** `buildroot-external/package/openccu-base/Config.in`,
