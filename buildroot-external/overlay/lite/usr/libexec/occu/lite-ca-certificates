@@ -1,0 +1,88 @@
+#!/bin/sh
+# openccu-lite: ca-certificates.service - the CA bundle in /var/etc/ssl/certs (where /etc/ssl/certs
+# points) without running update-ca-certificates at every boot.
+#
+# update-ca-certificates --default links every certificate, writes the bundle and hashes the
+# directory: one to three and a half seconds on a Raspberry Pi, for a result that only changes with
+# the image or with the user's own certificates. So:
+#   - no certificate of the user's (no *.crt under /usr/local/share/ca-certificates) and nothing in
+#     /etc/ca-certificates.conf: the directory the image ships prebuilt is copied (the build ran the
+#     same steps as update-ca-certificates --default on the same certificates);
+#   - otherwise the copy cached on the userfs is used, when it was written for this image and for
+#     exactly these certificates (names and contents); if not, update-ca-certificates --default runs
+#     as before and its result replaces the cache. The cache is left out of backups (.nobackup).
+# The directory is copied, not linked, so it stays writable as before: an update-ca-certificates run
+# by hand still works.
+#
+# Usage: lite-ca-certificates
+set -u
+ETC=${CA_ETCCERTSDIR:-/var/etc/ssl/certs}
+PREBUILT=${CA_PREBUILT:-/usr/share/ca-certificates-prebuilt}
+LOCAL=${CA_LOCALCERTSDIR:-/usr/local/share/ca-certificates}
+CONF=${CA_CERTSCONF:-/etc/ca-certificates.conf}
+CACHE=${CA_CACHE:-/usr/local/etc/ca-certificates-cache}
+VERSION_FILE=${CA_VERSION_FILE:-/VERSION}
+UPDATE=${CA_UPDATE:-/usr/sbin/update-ca-certificates}
+
+# install <dir>: replace $ETC by a copy of <dir>
+install_copy() {
+  rm -rf "$ETC.new" &&
+    mkdir -p "${ETC%/*}" &&
+    cp -a "$1" "$ETC.new" &&
+    rm -f "$ETC.new/.key" "$ETC.new/.nobackup" &&
+    rm -rf "$ETC" &&
+    mv "$ETC.new" "$ETC" &&
+    chmod 0755 "$ETC"
+}
+
+# run update-ca-certificates into an empty $ETC, as the boot did before
+run_update() {
+  rm -rf "$ETC" && mkdir -p "$ETC" && chmod 0755 "$ETC" &&
+    "$UPDATE" --default --etccertsdir "$ETC" --localcertsdir "$LOCAL" --certsconf "$CONF" >/dev/null
+}
+
+user_certs=
+[ -d "$LOCAL" ] && user_certs=$(find -L "$LOCAL" -type f -name '*.crt' 2>/dev/null | LC_ALL=C sort)
+conf_lines=
+[ -s "$CONF" ] && conf_lines=$(sed -e '/^[[:space:]]*$/d' -e '/^#/d' "$CONF")
+
+if [ -z "$user_certs" ] && [ -z "$conf_lines" ]; then
+  if [ -f "$PREBUILT/ca-certificates.crt" ] && install_copy "$PREBUILT"; then
+    echo "the image's CA bundle ($(grep -c 'BEGIN CERTIFICATE' "$ETC/ca-certificates.crt") certificates)"
+    exit 0
+  fi
+  echo "<4>the image's prebuilt CA bundle is missing or could not be copied; building it"
+  run_update || exit 1
+  echo "CA bundle built"
+  exit 0
+fi
+
+# the cache's key: this image, the configuration, and every user certificate by name and content
+key=$(
+  {
+    cat "$VERSION_FILE" 2>/dev/null
+    printf '%s\n' "$conf_lines"
+    printf '%s\n' "$user_certs" | while IFS= read -r crt; do
+      printf '%s %s\n' "$crt" "$(cksum < "$crt")"
+    done
+  } | cksum
+)
+count=$(printf '%s\n' "$user_certs" | grep -c .)
+
+if [ -f "$CACHE/.key" ] && [ "$(cat "$CACHE/.key")" = "$key" ] && [ -f "$CACHE/ca-certificates.crt" ] &&
+   install_copy "$CACHE"; then
+  echo "the cached CA bundle with $count certificate(s) of the user's"
+  exit 0
+fi
+
+run_update || exit 1
+echo "CA bundle built with $count certificate(s) of the user's"
+# the new cache: written beside the old one and swapped, so a power cut leaves one or the other
+if rm -rf "$CACHE.new" && cp -a "$ETC" "$CACHE.new" && touch "$CACHE.new/.nobackup" &&
+   printf '%s\n' "$key" > "$CACHE.new/.key" && rm -rf "$CACHE" && mv "$CACHE.new" "$CACHE"; then
+  sync "$CACHE" 2>/dev/null || sync
+else
+  rm -rf "$CACHE.new"
+  echo "<4>the CA bundle could not be cached on the userfs; it is built again at the next boot"
+fi
+exit 0

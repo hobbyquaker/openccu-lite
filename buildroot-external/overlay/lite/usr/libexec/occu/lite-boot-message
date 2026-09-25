@@ -1,0 +1,99 @@
+#!/bin/sh
+# openccu-lite: the end-of-boot screen, run by occu-boot-message.service.
+#
+# What /etc/init.d/rcS did after the last init script: put the version and the box's URL on the
+# splash. This writes the hint
+#
+#   openccu-lite <version> is up.
+#   Host: <hostname>  Address: <ipv4> [<ipv4> ...]
+#   Web UI: http://<ipv4>/
+#   Console: press Alt+F2
+#
+# below the logo on the splash, which stays on the screen without its progress bar; to
+# /dev/console (the tty the kernel cmdline names); and its first three lines to /run/issue -
+# /etc/issue is a symlink to it (board/lite/post-build-systemd.sh), so the getty on tty2 shows
+# them above its login prompt.
+#
+# The splash stays: psplash-systemd sends QUIT once systemd's progress reaches 1.0, right after
+# this unit, so it is stopped first. "lite-psplash finish" empties the bar, draws the hint and ends
+# every later write to the splash. The framebuffer console's cursor on the splash's terminal is
+# hidden, or it blinks in the top left corner of the splash.
+#
+# The console line only where it is true: the getty on tty2 is enabled (the preset) and there are
+# virtual terminals (/dev/tty0, the getty's own condition; not in a container).
+#
+# The paths and commands can be pointed elsewhere for scripts/testcases/lite-boot-screen-test.sh.
+set -u
+
+PSPLASH=${OCCU_PSPLASH:-/usr/libexec/occu/lite-psplash}
+ISSUE=${OCCU_ISSUE:-/run/issue}
+VERSION_FILE=${OCCU_VERSION_FILE:-/VERSION}
+HM_MODE_FILE=${OCCU_HM_MODE_FILE:-/var/hm_mode}
+CONSOLE=${OCCU_CONSOLE:-/dev/console}
+VT_ACTIVE=${OCCU_VT_ACTIVE:-/sys/class/tty/tty0/active}
+TTY_DIR=${OCCU_TTY_DIR:-/dev}
+SYSTEMCTL=${OCCU_SYSTEMCTL:-systemctl}
+# the terminal of the login prompt: getty@tty2.service, enabled in the preset
+GETTY_VT=2
+
+VERSION=""
+LITE=""
+PRODUCT=""
+# shellcheck source=/dev/null
+[ -r "${VERSION_FILE}" ] && . "${VERSION_FILE}"
+HM_MODE=""
+HM_HMRF_SERIAL=""
+# shellcheck source=/dev/null
+[ -r "${HM_MODE_FILE}" ] && . "${HM_MODE_FILE}"
+
+# /VERSION keeps the OpenCCU base tag and the lite release number on its own line.
+full="${VERSION}"
+[ -n "${LITE}" ] && full="${VERSION}-lite.${LITE}"
+
+host=$(hostname 2>/dev/null || echo openccu)
+addrs=$(ip -4 -o addr show scope global 2>/dev/null | awk '{ sub(/\/.*/, "", $4); print $4 }' | tr '\n' ' ')
+addrs=${addrs% }
+first=${addrs%% *}
+
+line1="openccu-lite ${full} is up."
+if [ -n "${addrs}" ]; then
+  line2="Host: ${host}   Address: ${addrs}"
+else
+  line2="Host: ${host}   ERROR: no IP address set"
+fi
+if [ "${HM_MODE}" = "HM-LGW" ]; then
+  line3="LAN-Gateway mode (serial: ${HM_HMRF_SERIAL})"
+elif [ -n "${first}" ]; then
+  line3="Web UI: http://${first}/"
+else
+  line3="Web UI: unavailable until the box has an address"
+fi
+line4=""
+if [ -e "${TTY_DIR}/tty0" ] && "${SYSTEMCTL}" is-enabled --quiet "getty@tty${GETTY_VT}.service" 2>/dev/null; then
+  line4="Console: press Alt+F${GETTY_VT}"
+fi
+
+if pidof psplash >/dev/null 2>&1; then
+  timeout 15 "${SYSTEMCTL}" stop psplash-systemd.service >/dev/null 2>&1 ||
+    echo "could not stop psplash-systemd: the splash may quit once the boot is done"
+  # the splash keeps an empty line above the web address (psplash renders the embedded newlines;
+  # its command separator is TAB, patches/psplash/0003-multiline.patch)
+  splash=$(printf '%s\n%s\n\n%s' "${line1}" "${line2}" "${line3}")
+  [ -n "${line4}" ] && splash=$(printf '%s\n%s' "${splash}" "${line4}")
+  "${PSPLASH}" finish "${splash}" || :
+  fg=$(sed -n 's/^tty\([0-9][0-9]*\)$/\1/p' "${VT_ACTIVE}" 2>/dev/null)
+  [ -n "${fg}" ] && { printf '\033[?25l' >>"${TTY_DIR}/tty${fg}" 2>/dev/null || :; }
+else
+  # no splash: the end of the boot is still marked, so nothing draws on a splash started later
+  "${PSPLASH}" finish "" >/dev/null 2>&1 || :
+fi
+
+# the console keeps the hint, the console line included
+hint=$(printf '%s\n%s\n%s' "${line1}" "${line2}" "${line3}")
+[ -n "${line4}" ] && hint=$(printf '%s\n%s' "${hint}" "${line4}")
+printf '\n%s\n\n' "${hint}" >>"${CONSOLE}" 2>/dev/null || :
+
+# and the getty's /etc/issue (-> /run/issue) shows the first three lines above the login prompt
+printf '%s\n%s\n%s\n\n' "${line1}" "${line2}" "${line3}" >"${ISSUE}" 2>/dev/null || :
+
+exit 0

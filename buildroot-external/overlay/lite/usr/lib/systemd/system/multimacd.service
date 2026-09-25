@@ -1,0 +1,82 @@
+# openccu-lite: replaces /etc/init.d/S60multimacd. The daemon runs confined as its own user;
+# the root work around it is `occulited radio prep|ready multimacd`.
+#
+# The condition step (as root) decides as the script's start action did - the multiplexer is
+# needed only when HmIP and BidCos-RF share one radio module, otherwise the unit is skipped, not
+# failed - then runs the script's init action (multimacd.conf with the module's node, the
+# eq3_char_loop module loaded, /dev/eq3loop there), gives the raw UART and /dev/eq3loop their
+# groups and writes the log level into the environment file ExecStart reads. Ready when the
+# status file carries the daemon's pid and the two endpoints /dev/mmd_bidcos and /dev/mmd_hmip
+# exist; they get their groups then, before rfd and hmipserver, ordered after this unit, open
+# them. The loop module is loaded at boot (modules-load.d): ProtectKernelModules= hides
+# /lib/modules from every step of this unit, the root ones too, so the script's own modprobe only
+# works while the module is already there - and the stop step does not unload it any more.
+#
+# Confined: user multimacd, no capabilities, the file system read-only except /var/status, the
+# raw UART and /dev/eq3loop through their groups, no network at all. Real time: the daemon
+# raises its own threads to SCHED_RR, which needs no capability while RLIMIT_RTPRIO allows it;
+# Nice= is set by systemd before the user switch. LimitNOFILE stays well below FD_SETSIZE for
+# the select() workaround the script carried. RestrictRealtime is therefore not set here.
+#
+# Restart tracking: Type=exec, so multimacd's death deactivates the unit and Restart= brings it
+# back. on-failure, not always: a skipped condition is not a failure and must not be retried.
+[Unit]
+Description=Radio module multiplexer (multimacd)
+# The module's device node and type come from /var/hm_mode (the radio hardware units). The wired
+# daemon has nothing to do with the radio module, so this does not wait for it. Nor for the clock
+# gate: multimacd reads no wall clock (only CLOCK_MONOTONIC), and the BidCos time frames it passes to
+# the module carry the time rfd hands it, which rfd sends only once the clock is trusted (rfd waits
+# for occu-clock-valid). A clock step while it runs cannot touch its monotonic timeouts.
+After=occu-init-rf-hardware.service
+ConditionPathExists=/run/occulite/radio/multimacd.enabled
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+ExecStartPre=+/usr/bin/occulited radio prep multimacd
+ExecStartPre=-+/usr/libexec/occu/lite-psplash boot S60multimacd
+EnvironmentFile=-/run/occulite/radio/multimacd.env
+Environment=MULTIMACD_LOGLEVEL=5
+ExecStart=/bin/multimacd -f /var/etc/multimacd.conf -l ${MULTIMACD_LOGLEVEL}
+ExecStartPost=+/usr/bin/occulited radio ready multimacd
+ExecStartPost=-+/usr/libexec/occu/lite-psplash done S60multimacd
+KillMode=control-group
+TimeoutStartSec=180
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=2
+RestartSteps=8
+RestartMaxDelaySec=300
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+OOMScoreAdjust=-900
+
+User=multimacd
+Group=multimacd
+SupplementaryGroups=raw-uart eq3loop status
+Nice=-15
+LimitRTPRIO=99
+LimitNOFILE=1000
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/status
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

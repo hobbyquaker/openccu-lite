@@ -1,0 +1,43 @@
+# openccu-lite: the root half of a backup run (the nightly timer, or Back up now on the Backup page).
+#
+# `occulited -backup create <instance>`: createBackup.sh once into /usr/local/tmp/occulite-backup
+# (its read-backs stay on the local disk instead of crossing the network four times), the
+# encryption to the recovery key, and the verified copies into the USB directory and the NFS/SMB
+# targets - root's, because the files on a share belong to the identity the write test checks and
+# the mounts are root's. <instance> is nightly (nothing when /etc/config/NoCronBackup is set), all,
+# or one target's id. The SFTP uploads and the cleanup are the deliver unit's, as occulite: a
+# hostile or broken server's answers are never parsed as root.
+#
+# A flag, not a word: an occulited from before the backup targets refuses `-backup` with exit 2
+# instead of starting a second daemon as root.
+[Unit]
+Description=Backup: create, and copy to the directory and share targets (%i)
+Documentation=https://github.com/hobbyquaker/openccu-lite
+# the timer's catch-up at boot waits for the boot; occulited writes the shares' mount units at its start
+After=multi-user.target occulited.service
+Wants=occu-backup-deliver@%i.service
+Before=occu-backup-deliver@%i.service
+ConditionPathExists=/usr/bin/occulited
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/occulited -backup create %i
+Nice=10
+IOSchedulingClass=idle
+# a 1 GB backup onto a slow share over a Pi 3's 100 Mbit
+TimeoutStartSec=3h
+# its own mount namespace (a slave: the targets' automounts below /media reach it); /usr and /etc
+# read-only - ProtectSystem= takes /usr/local with /usr, so the userfs (the staging, the state
+# directory's results, a USB directory behind upstream's /media/usb0 link) and /media are given back
+ProtectSystem=full
+ReadWritePaths=/usr/local /media
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictRealtime=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SyslogIdentifier=occulited-backup

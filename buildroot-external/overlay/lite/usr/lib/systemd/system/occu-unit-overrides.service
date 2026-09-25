@@ -1,0 +1,21 @@
+# openccu-lite: the Services page's unit overrides and its switch, applied
+# before the units they concern start. occulited replays both as well when it starts, but that
+# is after network.target - too late for rfd, hs485d, hmipserver, multimacd and lighttpd on the
+# first start of a boot. See /usr/libexec/occu/lite-unit-overrides. After the units that finalise
+# the userfs (resize, factory reset, backup restore): what they leave there is what counts.
+[Unit]
+Description=Unit overrides and the service switch from the userfs
+After=local-fs.target occu-factory-reset.service occu-backup-restore.service
+Before=multimacd.service hmlangw.service rfd.service hs485d.service hmipserver.service lighttpd.service crond.service occulited.service occu-addons.service addons.target
+ConditionPathExists=|/usr/local/etc/occulite/unit-overrides
+ConditionPathExists=|/usr/local/etc/occulite/unit-switch.json
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-unit-overrides
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

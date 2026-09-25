@@ -1,0 +1,38 @@
+# openccu-lite: the occulite half of a backup run, after occu-backup-create@<instance>.service.
+#
+# `occulited -backup deliver <instance>`: the uploads to the SSH targets (SFTP, as occulite, with the
+# target's own key and the server's pinned key), the record of the files handed out, and the
+# staging directory emptied. It runs whether the create unit succeeded or not (Wants=, not
+# Requires=): a failed backup still leaves its staging to clean, and a note it reads says so.
+[Unit]
+Description=Backup: upload to the SSH targets and clean up (%i)
+Documentation=https://github.com/hobbyquaker/openccu-lite
+After=occu-backup-create@%i.service
+ConditionPathExists=/usr/local/tmp/occulite-backup/run.json
+
+[Service]
+Type=oneshot
+User=occulite
+Group=occulite
+ExecStart=/usr/bin/occulited -backup deliver %i
+Nice=10
+TimeoutStartSec=3h
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/usr/local/etc/occulite -/usr/local/tmp/occulite-backup
+PrivateTmp=yes
+PrivateDevices=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+UMask=0077
+SyslogIdentifier=occulited-backup

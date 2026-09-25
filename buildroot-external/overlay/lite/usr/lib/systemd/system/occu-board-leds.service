@@ -1,0 +1,29 @@
+# openccu-lite: the board LEDs as soon as the radio hardware is known.
+#
+# The LED half of upstream's S99SetupLEDs: the ACT/PWR (and other boards') triggers to
+# HM_LED_*_MODE2, "none" with /etc/config/disableOnboardLED, and in HM-LGW mode the RPI-RF-MOD
+# blue. occu-leds.service ran it at the very end of the boot, after the addons; it keeps the other
+# half - the boot-finished gate (rc.postlocal, safe mode, startupFinished, the RemoteAPI ports) -
+# and still runs the whole script there, which writes the same triggers a second time.
+#
+# After occu-init-rf-hardware.service: /var/hm_mode then holds the LED paths (S01InitHost) and the
+# radio mode (occulited's radio run). Nothing else - not the network, the interfaces or the addons.
+#
+# The stop puts MODE1 back; at a shutdown it runs after occu-leds.service's stop (it started
+# earlier), whose status LED shutdown pattern stays on the RPI-RF-MOD (this touches that LED only in
+# HM-LGW mode, where it writes the same yellow as S99SetupLEDs' stop).
+[Unit]
+Description=Board LEDs
+After=occu-init-rf-hardware.service occu-init-host.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-board-leds start
+ExecStop=/usr/libexec/occu/lite-board-leds stop
+UMask=0022
+StandardOutput=journal
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

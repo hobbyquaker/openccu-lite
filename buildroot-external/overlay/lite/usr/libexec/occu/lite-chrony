@@ -1,0 +1,82 @@
+#!/bin/sh
+# openccu-lite: chronyd for chrony.service, without the blocking one-shot sync in front of it.
+#
+# S46chronyd ran "ntpdate -b" against the configured servers, then against the default ones, and
+# only then started chronyd. When both attempts failed - no internet at boot: a power cut where the
+# router comes up after the box, a LAN without NTP, a DNS outage - it exited before starting chronyd,
+# and the box ran without time synchronisation until the next reboot. And while the network was
+# there, it held every later unit back by ten seconds.
+#
+# Here chronyd starts at once, with the servers in its configuration: "makestep" in
+# /etc/chrony.conf steps the first large offsets, "iburst" makes the first measurements quick, and a
+# server whose name does not resolve yet is resolved again later, so the clock is set whenever the
+# network comes. Units that need a correct clock order after occu-clock-valid.service.
+#
+# The server list is S46chronyd's: /etc/config/ntpclient (from the template when missing), the
+# DHCP-provided servers in front of it unless /etc/config/noDHCPNTP exists, the default gateway when
+# the list is empty. S46chronyd fell back to the template's servers when the user's did not answer;
+# here they are configured as well and the user's are marked "prefer", which chronyd honours
+# whenever one of them is usable. /var/status/hasNTP appears once chronyd reports a synchronised
+# clock, and is removed at stop.
+set -u
+DAEMON=/usr/sbin/chronyd
+CLIENT=/usr/bin/chronyc
+TEMPLATES=/etc/config_templates
+CONF=/var/etc/chrony.conf
+PIDFILE=/run/chrony/chronyd.pid
+
+case "${1:-}" in
+  start)
+    [ -x "$DAEMON" ] || exit 0
+    [ -e /etc/config/ntpclient ] || cp "$TEMPLATES/ntpclient" /etc/config/
+    NTPSERVERS=
+    [ -r /etc/config/ntpclient ] && . /etc/config/ntpclient
+    if [ "${NTPSERVERS}" = "ntp.homematic.com" ]; then
+      cp "$TEMPLATES/ntpclient" /etc/config/
+      . /etc/config/ntpclient
+    fi
+    user_servers=${NTPSERVERS}
+    if [ -s /var/etc/ntp-dhcp.conf ] && [ ! -f /etc/config/noDHCPNTP ]; then
+      NTPSERVERS_DHCP=
+      . /var/etc/ntp-dhcp.conf
+      user_servers="${NTPSERVERS_DHCP} ${user_servers}"
+    fi
+    # shellcheck disable=SC2086
+    if [ -z "$(echo ${user_servers})" ]; then
+      user_servers=$(/sbin/ip route | grep default | head -1 | cut -d' ' -f3)
+    fi
+    default_servers=$(NTPSERVERS=; . "$TEMPLATES/ntpclient"; echo "${NTPSERVERS}")
+
+    mkdir -p /var/lib/chrony /var/etc
+    chown chrony:chrony /var/lib/chrony
+    # chronyd refuses its command socket unless its run directory belongs to it and nobody else may
+    # enter ("Wrong permissions on /var/run/chrony"); chronyc then only works over UDP
+    install -d -o chrony -g chrony -m 0770 /run/chrony
+    {
+      cat /etc/chrony.conf
+      echo "# the servers, written by lite-chrony at start"
+      for s in ${user_servers}; do echo "server ${s} iburst prefer"; done
+      for s in ${default_servers}; do
+        case " ${user_servers} " in
+          *" ${s} "*) ;;
+          *) echo "server ${s} iburst" ;;
+        esac
+      done
+    } > "$CONF.tmp" && mv -f "$CONF.tmp" "$CONF" || exit 1
+
+    rm -f /var/status/hasNTP
+    start-stop-daemon -S -q -x "$DAEMON" -- -f "$CONF" || exit 1
+    # hasNTP once the clock is synchronised; the waiter stays in the unit's cgroup and ends with it
+    ( "$CLIENT" -n waitsync 0 0 0 10 >/dev/null 2>&1 && touch /var/status/hasNTP ) </dev/null >/dev/null 2>&1 &
+    echo "chronyd started with $(grep -c '^server ' "$CONF") server(s)"
+    ;;
+  stop)
+    start-stop-daemon -K -q -p "$PIDFILE"
+    rm -f /var/status/hasNTP
+    ;;
+  *)
+    echo "Usage: $0 {start|stop}" >&2
+    exit 1
+    ;;
+esac
+exit 0

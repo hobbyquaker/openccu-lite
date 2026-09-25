@@ -1,0 +1,51 @@
+#!/bin/sh
+# openccu-lite: the `init` half of the addon ABI at boot - what /etc/init.d/S55InitAddons does,
+# without run-parts.
+#
+# S55InitAddons runs `run-parts -a init /etc/config/rc.d`. On this product every addon's rc.d entry
+# is the addon-rc wrapper and the addon's own script sits beside it as <name>.script - and busybox
+# run-parts takes a dot in a name, so it ran every <name>.script directly, as root, past the
+# wrapper, at every boot. This runs `init` on the entries themselves, in name order, with run-parts'
+# name filter (letters, digits, '_', '-', a non-leading '.') and never on a *.script; the wrapper
+# decides per addon (a confined addon's init runs in its unit as its user, a root addon's here).
+# The rest is S55InitAddons as upstream has it: nothing outside HM_MODE=NORMAL, nothing in safe
+# mode, rc.prelocal first (120 s), the OOM score inherited by the scripts, their output dropped.
+#
+#   lite-init-addons start|stop      (occu-init-addons.service)
+set -u
+RCD=${OCCU_ADDON_RCD:-/usr/local/etc/config/rc.d}                 # overridable for tests
+HM_MODE_FILE=${OCCU_HM_MODE_FILE:-/var/hm_mode}                   # (scripts/testcases/lite-init-addons-test.sh)
+SAFEMODE=${OCCU_SAFEMODE_FILE:-/etc/config/safemode}
+PRELOCAL=${OCCU_RC_PRELOCAL:-/usr/local/etc/rc.prelocal}
+OOM=${OCCU_OOM_SCORE_FILE:-/proc/$$/oom_score_adj}
+
+start() {
+  HM_MODE=
+  # shellcheck disable=SC1090
+  [ -r "$HM_MODE_FILE" ] && . "$HM_MODE_FILE"
+  [ "${HM_MODE:-}" = NORMAL ] || return 0
+  printf 'Initializing Third-Party Addons: '
+  if [ -e "$SAFEMODE" ]; then
+    echo "skipping (safemode)"
+    return 0
+  fi
+  # others are killed first in a low-memory situation (inherited by every script below)
+  echo 100 > "$OOM" 2>/dev/null
+  if [ -x "$PRELOCAL" ]; then
+    printf 'rc.prelocal, '
+    timeout 120 "$PRELOCAL"
+  fi
+  for f in "$RCD"/*; do
+    [ -f "$f" ] && [ -x "$f" ] || continue
+    case "${f##*/}" in .*|*.script|*[!A-Za-z0-9_.-]*) continue ;; esac
+    "$f" init >/dev/null 2>&1
+  done
+  echo OK
+}
+
+case "${1:-}" in
+  start) start ;;
+  stop) ;;
+  *) echo "Usage: $0 {start|stop}" >&2; exit 1 ;;
+esac
+exit 0

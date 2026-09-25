@@ -1,0 +1,68 @@
+# openccu-lite: replaces S61hmlangw (package/hmlangw installs that
+# script for busybox init only). LAN-gateway mode only; the serial and the device node come from
+# /var/hm_mode, which S47InitRFHardware writes. Output goes to the journal instead of
+# /var/log/hmlangw.log - and not to the console: this daemon is chatty and the console is the
+# boot screen.
+#
+# The daemon runs confined as its own user: no capabilities, the file system read-only,
+# /dev/mmd_bidcos through the mmd-bidcos group (`occulited radio prep hmlangw` sets it before the start), the
+# LAN over IPv4 and IPv6, since a CCU connects to this box as to a LAN gateway. UNVERIFIED on a
+# box in LAN-gateway mode: none is in the lab. The address-family and realtime lines take effect
+# once systemd is built with seccomp.
+#
+# Restart tracking: Type=exec plus Restart=always with the exponential backoff below. The device-node
+# check stays an ExecStartPre (not an ExecCondition): on a LAN-gateway box a missing /dev node is a
+# fault worth retrying, not a reason to stay stopped.
+#
+# HM-LGW mode stays, on the ARM products only - a LAN gateway is a Pi with a
+# radio module bolted to it, and x86_64-ova never runs as one (docs/systemd-scope.md, "HM-LGW
+# mode"). ConditionVirtualization=no says so where systemctl shows it; the mode itself is still
+# switched on by /usr/local/HMLGW, which is what every branch in the init scripts reads.
+[Unit]
+Description=LAN gateway mode (hmlangw)
+After=multimacd.service
+ConditionVirtualization=no
+ConditionPathExists=/run/occulite/radio/hmlangw.enabled
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+EnvironmentFile=/var/hm_mode
+ExecStartPre=-+/usr/libexec/occu/lite-psplash boot S61hmlangw
+ExecStartPre=+/usr/bin/occulited radio prep hmlangw
+ExecStartPre=/bin/sh -c 'test -c "$$HM_HMRF_DEVNODE"'
+ExecStart=/bin/sh -c 'exec /bin/hmlangw -b -n "$$HM_HMRF_SERIAL" -s /dev/mmd_bidcos -r -1'
+ExecStartPost=-+/usr/libexec/occu/lite-psplash done S61hmlangw
+TimeoutStartSec=60
+TimeoutStopSec=60
+Restart=always
+RestartSec=2
+RestartSteps=8
+RestartMaxDelaySec=300
+UMask=0002
+
+User=hmlangw
+Group=hmlangw
+SupplementaryGroups=mmd-bidcos status
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/status
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,39 @@
+# openccu-lite: replaces /etc/init.d/S46chronyd and overrides
+# buildroot's chrony.service. No timesyncd.
+#
+# /usr/libexec/occu/lite-chrony starts chronyd at once, with S46chronyd's server list (the user's,
+# the DHCP-provided ones, the gateway, the template's as fallback) in a generated configuration.
+# S46chronyd's blocking one-shot ntpdate is gone: it held the boot back by ten seconds, and when
+# it failed (no internet at boot) the script exited without starting chronyd at all, leaving the
+# box unsynchronised until the next reboot. chronyd steps the first large offsets itself (makestep)
+# and resolves a server name that does not resolve yet again later. Whoever needs a correct clock
+# orders after occu-clock-valid.service.
+#
+# Restart tracking: Type=forking with chronyd's pid file and without RemainAfterExit, so the death of
+# chronyd deactivates the unit and Restart= brings it back. chronyd is always started now, so the
+# pid file always appears.
+[Unit]
+Description=Time synchronisation (chrony)
+After=occu-network.service network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=forking
+PIDFile=/run/chrony/chronyd.pid
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S46chronyd
+ExecStart=/usr/libexec/occu/lite-chrony start
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S46chronyd
+ExecStop=/usr/libexec/occu/lite-chrony stop
+KillMode=control-group
+TimeoutStartSec=60
+TimeoutStopSec=60
+Restart=always
+RestartSec=2
+RestartSteps=8
+RestartMaxDelaySec=300
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

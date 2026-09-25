@@ -1,0 +1,47 @@
+# openccu-lite: the init script -> unit table of the systemd products.
+#
+# One line per /etc/init.d script that a unit in ../system/ wraps: "<script> <unit>".
+# Two consumers:
+#
+#   - board/lite/post-build-systemd.sh renames every script listed here to
+#     /etc/init.d/<name>.script and puts /usr/libexec/occu/initscript-wrapper in its place,
+#     so a hand-invoked (or addon-invoked) "/etc/init.d/S50lighttpd restart" becomes
+#     "systemctl restart lighttpd.service" instead of a daemon started outside its unit;
+#   - the wrapper itself reads it to find the unit for the name it was called as.
+#
+# A unit of "-" means "no unit on this product": start/stop/restart/reload do nothing
+# (S07logging is journald's job here, S98StartAddons' run-parts half is the generator's).
+# The units' own Exec lines call /etc/init.d/<name>.script directly and never the wrapper.
+#
+# REVIEW ON EVERY REBASE (docs/upstream-delta.md item 12): a rebase that adds, renames or
+# deletes an init script has to add, rename or delete its line here as well - a script that
+# is not listed keeps running outside systemd when someone calls it by hand.
+#
+# The radio chain's scripts (S47InitRFHardware, S48UpdateRFHardware, S49hs485d, S60hs485d,
+# S60multimacd, S61rfd, S62HMServer) are not in the image any more (
+# board/lite/post-build-systemd.sh removes them; occulited's `radio run` and the direct units
+# replaced them), so they have no row: an addon that calls /etc/init.d/S61rfd restart fails, as
+# the roadmap item accepts. Re-detection is `systemctl restart occu-init-rf-hardware`.
+#
+# script                unit
+S00watchdog             occu-watchdog-marker.service
+S01InitHost             occu-init-host.service
+S01InitZRAMSwap         occu-zram-swap.service
+S01USBGadgetMode        occu-usb-gadget.service
+S02InitRTC              occu-init-rtc.service
+S03CheckUserFSResize    occu-userfs-resize.service
+S04CheckFactoryReset    occu-factory-reset.service
+S05CheckBackupRestore   occu-backup-restore.service
+S05seedrng              occu-seedrng.service
+S06InitSystem           occu-init-system.service
+S07logging              -
+S11InitLEDs             -		# merged into occu-leds.service
+S13irqbalance           irqbalance.service
+S40network              occu-network.service
+S46chronyd              chrony.service
+S50lighttpd             lighttpd.service
+S50sshd                 sshd.service
+S55InitAddons           occu-init-addons.service
+S98crond                crond.service
+S98StartAddons          addons.target
+S99SetupLEDs            occu-leds.service

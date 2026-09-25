@@ -1,0 +1,33 @@
+#!/bin/sh
+# openccu-lite: a confined addon's files belong to its user before its unit starts.
+#
+# The occu-addons generator runs this as root before every start of a confined addon's unit
+# (ExecStartPre=+-/usr/libexec/occu/lite-addon-own <name>), so whoever starts the unit - the addon's
+# own update script right after it copied its files as root, the Services page, occulited, the boot -
+# the addon's directories are walked first: `occulited -addon-own <name>` follows no link, stays on
+# one file system, changes only entries with another owner, and writes a line to the journal when it
+# changed something.
+#
+# An occulited older than that subcommand refuses the flag and exits 2 ("flag provided but not
+# defined: -addon-own") before it does anything; that answer is taken as "not there yet" and nothing
+# is said, so this file and the occulited binary may reach a box in either order.
+OCCULITED=/usr/bin/occulited
+
+if [ $# -ne 1 ]; then
+  echo "usage: lite-addon-own <addon name>" >&2
+  exit 2
+fi
+[ -x "${OCCULITED}" ] || exit 0
+
+# stdout goes to the journal as it comes; stderr is kept to tell the older binary's refusal apart
+exec 3>&1
+err=$("${OCCULITED}" -addon-own "$1" 2>&1 >&3 3>&-)
+rc=$?
+exec 3>&-
+if [ "${rc}" = 2 ]; then
+  case "${err}" in
+    *"flag provided but not defined: -addon-own"*) exit 0 ;;
+  esac
+fi
+[ -n "${err}" ] && printf '%s\n' "${err}" >&2
+exit "${rc}"

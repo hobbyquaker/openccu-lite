@@ -1,0 +1,9 @@
+# openccu-lite: replaces /etc/init.d/S98StartAddons. The generated
+# addon-<name>.service units are WantedBy= and PartOf= this target, so "systemctl stop
+# addons.target" is S98StartAddons stop. Ordered after everything an addon could talk to.
+[Unit]
+Description=Addons
+After=occu-addons.service network.target lighttpd.service rfd.service hmipserver.service occulited.service
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+# openccu-lite: the boot splash starts when the framebuffer appears, not only if it is there early.
+#
+# psplash-start.service is wanted by sysinit.target with ConditionPathExists=/dev/fb0, so a board
+# without a framebuffer skips it instead of failing. On the Pis the firmware's simple framebuffer
+# registers a second or three after that check, so the splash was skipped at every boot, screen or
+# none. The framebuffer's appearance pulls the splash in (the condition then holds), and its removal
+# stops it: where the display driver replaces the simple framebuffer, the splash stops with the old
+# fb0 and starts again on the new one, and on a headless board whose fb0 goes away it ends as a
+# stop, not a failure.
+ACTION=="add", SUBSYSTEM=="graphics", KERNEL=="fb0", TAG+="systemd", ENV{SYSTEMD_WANTS}+="psplash-start.service psplash-systemd.service"
+ACTION=="remove", SUBSYSTEM=="graphics", KERNEL=="fb0", RUN+="/usr/bin/systemctl --no-block stop psplash-start.service"

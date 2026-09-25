@@ -1,0 +1,5 @@
+#!/bin/sh
+# openccu-lite: overlay/base/bin/setclock restarts chronyd through
+# /etc/init.d/S46chronyd, which under systemd would start a second chronyd outside its unit's
+# cgroup. Same effect, through the unit. Review against the base copy on every rebase.
+systemctl restart chrony.service

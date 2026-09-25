@@ -1,0 +1,27 @@
+#!/bin/sh
+# openccu-lite: exit 0 when the radio configuration names a LAN gateway - the ExecCondition of
+# occu-lgw-firmware-update.service and occu-set-lgw-key.service, which have nothing to do without one.
+#
+#   lite-lgw-configured [step]   step names the unit for the journal line when there is none
+#
+# The test is S58LGWFirmwareUpdate's own, on the same two files: an RF LAN gateway is a line
+# "Type = HMLGW2" or "Type = Lan Interface" in /etc/config/rfd.conf, a wired one "Type = HMWLGW" in
+# /etc/config/hs485d.conf. S59SetLGWKey applies a *.keychange file to one of those two files, so it
+# has nothing to do without a gateway in them either. Without one the unit is skipped - not failed -
+# and one journal line says why: S58 would otherwise wait for an address, pinging the default gateway
+# up to five times, before finding nothing to update. A box with a LAN gateway runs both scripts
+# unchanged.
+set -u
+
+RFD=${OCCU_RFD_CONF:-/etc/config/rfd.conf}
+HS485D=${OCCU_HS485D_CONF:-/etc/config/hs485d.conf}
+LOGGER=${OCCU_LOGGER:-logger}
+
+if grep -qm1 "^Type = \(HMLGW2\|Lan Interface\)" "${RFD}" 2>/dev/null; then
+  exit 0
+fi
+if grep -qm1 "^Type = HMWLGW" "${HS485D}" 2>/dev/null; then
+  exit 0
+fi
+"${LOGGER}" -p user.info -t lite-lgw-configured "no LAN gateway in ${RFD} or ${HS485D}: ${1:-the LAN gateway step} is skipped" 2>/dev/null
+exit 1

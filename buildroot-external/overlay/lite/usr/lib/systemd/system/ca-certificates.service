@@ -1,0 +1,26 @@
+# openccu-lite: replaces /etc/init.d/S07ca-certificates (buildroot's
+# ca-certificates package with the fork's 0014-ca-certificates-local patch, which installs that
+# script for busybox init only). /etc/ssl/certs is a symlink into /var/etc/ssl/certs.
+#
+# /usr/libexec/occu/lite-ca-certificates fills it: with no certificate of the user's in
+# /usr/local/share/ca-certificates it copies the bundle the image ships prebuilt; with some it copies
+# the bundle cached on the userfs, and runs update-ca-certificates only when the user's certificates
+# or the image changed since that cache was written.
+#
+# Not a step the network waits for: the bundle is ordered before network-online.target and before
+# the units that make TLS connections (occulited, chrony, the syslog forwarder, the addons).
+[Unit]
+Description=CA certificate bundle
+After=occu-init-system.service
+Before=network-online.target occulited.service chrony.service occu-syslog-forward.service occu-addons.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-ca-certificates
+StandardOutput=journal
+StandardError=journal
+UMask=0002
+
+[Install]
+WantedBy=multi-user.target

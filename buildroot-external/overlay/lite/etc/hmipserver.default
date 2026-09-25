@@ -1,0 +1,18 @@
+# openccu-lite: the HmIP server's XML-RPC port (Legacy.Port, 32010) binds the loopback only.
+# Every client runs on the box; a client on the LAN has no proxy to talk to anyway.
+# Sourced by /etc/init.d/S62HMServer when present; /etc/config/hmipserver.default (the user
+# partition) is sourced after it and may override. /etc/default itself is a symlink into
+# /etc/config on a CCU, which is why this file does not live there.
+HMIP_BIND_ADDRESS=127.0.0.1
+
+# The journal is the one log here. The image's log4j2 template writes every message to the
+# server's stdout with a syslog level prefix, and with this S62HMServer starts the JVM as a plain
+# background child that keeps hmipserver.service's stdout - start-stop-daemon -b would detach it -
+# so the messages reach the journal under the identifier hmipserver with their own priorities,
+# and no log file is written. Setting it to 0 would lose the server's messages entirely.
+HMIP_LOG_STDOUT=1
+
+# The server's log level when /etc/config/syslog does not set LOGLEVEL_HMIP (the Log page writes it
+# there, and that setting wins): warnings and errors. S62HMServer's own default is error, which
+# hides the warnings that explain why a device or a client misbehaves.
+LOGLEVEL_HMIP=warn

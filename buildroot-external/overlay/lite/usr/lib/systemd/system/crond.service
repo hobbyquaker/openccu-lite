@@ -1,0 +1,34 @@
+# openccu-lite: replaces /etc/init.d/S98crond. The system's own recurring jobs are timers
+# (occu-*.timer); crond stays for the user crontab, which addons extend.
+#
+# The script's init action merges /usr/local/crontabs/root with /etc/crontab.root (empty here)
+# into the spool, as its start() did before the daemon; the daemon is then started by this unit
+# directly, in the foreground, with the script's own command line, so that systemd supervises
+# the daemon and not a script that forked it: systemd's main process is crond, its death deactivates the unit and Restart= brings it back, with the
+# merge in front of it.
+[Unit]
+Description=Scheduled jobs (busybox crond)
+# The crontabs live on the userfs, and the jobs run by the clock
+After=occu-init-system.service occu-clock-valid.service
+Wants=occu-clock-valid.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+ExecStartPre=/etc/init.d/S98crond.script init
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S98crond
+ExecStart=/usr/sbin/crond -f -l 9
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S98crond
+KillMode=control-group
+TimeoutStartSec=120
+TimeoutStopSec=60
+Restart=always
+RestartSec=2
+RestartSteps=8
+RestartMaxDelaySec=300
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

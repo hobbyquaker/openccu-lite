@@ -1,0 +1,26 @@
+# openccu-lite: replaces the run-parts half of /etc/init.d/S98StartAddons.
+# The addon units are written by the occu-addons generator from /usr/local/etc/config/rc.d, but
+# generators run before /usr/local is mounted; this reruns them once the userfs is final and pulls
+# the new units into the addons.target job that is already queued. occulited runs the same reload
+# when an addon is installed. Nothing here starts an addon directly.
+[Unit]
+Description=Addon units from rc.d
+# occu-etc-writable makes /etc/passwd and /etc/group writable; addon-users below cannot
+# recreate a confined addon's user without it. Wants= rather than Requires=: if it failed, the
+# addons should still start as root rather than not at all.
+# Not after hmipserver: every addon unit carries its own ordering (the generator), so an addon
+# that needs no interface is not held back behind the HmIP server's start.
+After=occu-init-addons.service local-fs.target occu-etc-writable.service
+Wants=occu-etc-writable.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/addon-users
+# The addon-rc wrapper in front of every rc.d script, before the units are generated
+ExecStart=/usr/libexec/occu/lite-addon-rc adopt
+ExecStart=/usr/bin/systemctl daemon-reload
+ExecStart=/usr/bin/systemctl --no-block start addons.target
+
+[Install]
+WantedBy=multi-user.target

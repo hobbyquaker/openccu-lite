@@ -1,0 +1,52 @@
+#!/bin/sh
+# openccu-lite: what the Services page decided, applied BEFORE the units start.
+#
+# occulited keeps two things on the userfs that systemd has to know at boot: the unit overrides
+# (/usr/local/etc/occulite/unit-overrides/<unit>.conf, edited on the Services page) and the
+# switch (unit-switch.json, the services a user turned off). occulited replays both when it
+# starts - but occulited starts after network.target, and rfd, hs485d, hmipserver and multimacd
+# are up by then: an override would not be in effect until the next restart, and a switched-off
+# service would start and then be stopped, at every boot. This unit runs before them.
+#
+# Runtime only: /run/systemd/system is tmpfs, nothing on the rootfs is touched, and a firmware
+# update brings its new units intact with the overrides and masks going back on top.
+set -u
+
+STATE=/usr/local/etc/occulite
+OVR="$STATE/unit-overrides"
+SWITCH="$STATE/unit-switch.json"
+changed=0
+
+# ---- overrides: <unit>.conf -> /run/systemd/system/<unit>.d/50-occulite.conf --------------------
+if [ -d "$OVR" ]; then
+  for f in "$OVR"/*.conf; do
+    [ -f "$f" ] || continue
+    unit=$(basename "$f" .conf)
+    case "$unit" in
+      *[!A-Za-z0-9@._-]*|"") echo "unit-overrides: skipping '$unit' (not a unit name)"; continue ;;
+    esac
+    grep -q '^\[' "$f" || { echo "unit-overrides: skipping $unit (no [Section])"; continue; }
+    d="/run/systemd/system/$unit.d"
+    mkdir -p "$d" || continue
+    if ! cmp -s "$f" "$d/50-occulite.conf" 2>/dev/null; then
+      cp "$f" "$d/50-occulite.conf" && chmod 644 "$d/50-occulite.conf" && changed=1
+      echo "unit-overrides: $unit"
+    fi
+  done
+fi
+[ "$changed" = 1 ] && systemctl daemon-reload
+
+# ---- the switch: a runtime mask for every unit the user turned off ------------------------------
+# The file is occulited's own JSON, {"masked":["hmipserver.service", ...]}; the names were checked
+# when they were written. Without --now: nothing has started yet, that is the point.
+if [ -r "$SWITCH" ]; then
+  for unit in $(sed -n 's/.*"masked":\[\([^]]*\)\].*/\1/p' "$SWITCH" | tr -d '" ' | tr ',' ' '); do
+    case "$unit" in
+      occulited.service|occulited-helper.service|"") continue ;;
+      *[!A-Za-z0-9@._-]*) continue ;;
+    esac
+    systemctl --runtime --quiet is-enabled "$unit" 2>/dev/null | grep -q masked && continue
+    systemctl --runtime mask "$unit" && echo "unit-switch: masked $unit"
+  done
+fi
+exit 0

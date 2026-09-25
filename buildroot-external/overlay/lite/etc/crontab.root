@@ -1,0 +1,3 @@
+# openccu-lite: the system's recurring jobs are systemd timers (occu-*.timer in
+# /usr/lib/systemd/system); this file, which S98crond merges into the root crontab, carries none.
+# /usr/local/crontabs/root (the user's and the addons' lines) is merged and served by crond as before.

@@ -1,0 +1,28 @@
+# openccu-lite: a stable machine ID, part two - deriving it from the board.
+#
+# The ID is derived from the board serial, so a userfs wipe (factory reset, a fresh
+# backup restore) does not change the box's identity. /var/board_serial is written by
+# S47InitRFHardware and /var is a tmpfs, so the serial exists only from that point in the boot
+# on - which is why this is a second unit at the end of the radio chain and not part of
+# occu-machine-id.service, which has to run before journald.
+#
+# It does nothing once a valid ID is stored (the normal case, every boot after the first one) -
+# the check is the helper's rather than a ConditionPathExists=, so that a truncated or corrupted
+# store file is rewritten instead of leaving the box on a transient ID for ever. On the
+# boot that derives it, the ID is also applied in place: /run/machine-id is rewritten, journald
+# is restarted on the final ID, and the journal written so far under the transient ID moves into
+# the final ID's directory as archived files, so the box ends its first boot on its final
+# ID with that boot fully logged - the resize, the factory reset and the restore included.
+[Unit]
+Description=Machine ID from the board serial
+After=occu-init-rf-hardware.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-machine-id store
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

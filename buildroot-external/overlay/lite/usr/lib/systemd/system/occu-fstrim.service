@@ -1,0 +1,14 @@
+# openccu-lite: the job behind occu-fstrim.timer.
+[Unit]
+Description=Filesystem trim
+# A run the timer catches up at boot (Persistent=, a Saturday missed while the box was off) waits
+# until the boot is done instead of trimming the card while the radio detection reads it. A run on
+# the schedule finds multi-user.target reached and starts at once.
+After=multi-user.target
+ConditionPathExists=!/etc/config/NoFSTRIM
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/fstrim --listed-in /etc/fstab:/proc/self/mountinfo --verbose --quiet-unsupported
+Nice=10
+SyslogIdentifier=fstrim

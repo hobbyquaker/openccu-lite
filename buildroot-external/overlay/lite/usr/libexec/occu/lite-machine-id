@@ -1,0 +1,190 @@
+#!/bin/sh
+# openccu-lite: the box's machine ID, without ever writing to the rootfs.
+#
+# The rootfs is read-only and /etc/machine-id is the empty file buildroot's systemd package
+# installs, so PID 1 generates a transient ID at every boot, writes it to /run/machine-id and
+# bind-mounts that over /etc/machine-id. journald names its directory after the ID, so a fresh
+# one per boot leaves a /var/log/journal/<id>/ per boot that no size cap ever vacuums.
+#
+# Two things are settled: the ID is derived from the board serial, and it is installed
+# with a bind mount instead of a "mount -o remount,rw /" of the rootfs.
+#
+#   install  - runs before systemd-journald (occu-machine-id.service), with the userfs mounted:
+#              takes the ID stored on the userfs and makes it the running one by writing
+#              /run/machine-id, which is what /etc/machine-id is already bound to. No new mount
+#              in the normal case, and nothing on the userfs is pinned - a bind mount whose
+#              source is /usr/local/etc/machine-id would hold a reference on the userfs and
+#              S03CheckUserFSResize/S04CheckFactoryReset's "umount -f /usr/local" would fail.
+#   store    - runs after S47InitRFHardware (occu-machine-id-store.service), which is what
+#              writes /var/board_serial: derives the ID from that serial (sha256, truncated to
+#              128 bit, with the UUID version and variant nibbles systemd's own id128 helpers
+#              set) and stores it on the userfs, so the box keeps its identity across a userfs
+#              wipe as long as the radio module stays. Without a serial - no module attached -
+#              it generates a random one, once. /var is a tmpfs, so the serial cannot be read at
+#              "install" time on any boot; this is why the ID is written on one boot and picked
+#              up by the next, and why the first boot applies it in place (below).
+#
+# PID 1 keeps the ID it read at startup in memory either way; only journald and everything that
+# reads /etc/machine-id see the final one before the next reboot.
+set -u
+
+# the paths, overridable for scripts/testcases/lite-machine-id-test.sh
+STORE=${LITE_MACHINE_ID_STORE:-/usr/local/etc/machine-id}
+SERIAL=${LITE_BOARD_SERIAL:-/var/board_serial}
+ETC_ID=${LITE_ETC_MACHINE_ID:-/etc/machine-id}
+RUN_ID=${LITE_RUN_MACHINE_ID:-/run/machine-id}
+JOURNAL_DIR=${LITE_JOURNAL_DIR:-/var/log/journal}
+JOURNALCTL=${LITE_JOURNALCTL:-journalctl}
+SYSTEMCTL=${LITE_SYSTEMCTL:-systemctl}
+
+log() { printf 'lite-machine-id: %s\n' "$*"; }
+
+# 32 lower-case hex digits and not all zero - systemd's definition of a machine ID
+valid() {
+	case "${1}" in
+		"" | *[!0-9a-f]*) return 1 ;;
+	esac
+	[ "${#1}" -eq 32 ] || return 1
+	[ "${1}" != "00000000000000000000000000000000" ]
+}
+
+# the UUID version (4) and variant (8) nibbles, as sd_id128_randomize() sets them
+fix() {
+	printf '%s4%s8%s\n' \
+		"$(printf %s "${1}" | cut -c1-12)" \
+		"$(printf %s "${1}" | cut -c14-16)" \
+		"$(printf %s "${1}" | cut -c18-32)"
+}
+
+derive() { fix "$(printf 'openccu-lite-machine-id:%s' "${1}" | sha256sum | cut -c1-32)"; }
+generate() { fix "$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')"; }
+
+read_id() { { tr -d '[:space:]' <"${1}"; } 2>/dev/null; }
+
+# make ${1} the running machine ID: /etc/machine-id is PID 1's bind mount of /run/machine-id,
+# so writing that file is enough; only a box where PID 1 could not set one up needs the mount.
+install_id() {
+	[ "$(cat "${ETC_ID}" 2>/dev/null)" = "${1}" ] && return 0
+	printf '%s\n' "${1}" >"${RUN_ID}" || return 1
+	# in the normal case /etc/machine-id is PID 1's bind mount of the file just written, so it
+	# now reads the new ID and there is nothing else to do. The mount below is the fallback for
+	# a box where PID 1 could not set that up; "-o bind" rather than "--bind" because /bin/mount
+	# is busybox's here (BR2_PACKAGE_UTIL_LINUX_MOUNT is not set), and comparing the contents
+	# again is a more reliable test than "mountpoint" on a file.
+	[ "$(cat "${ETC_ID}" 2>/dev/null)" = "${1}" ] && return 0
+	mount -o bind "${RUN_ID}" "${ETC_ID}" || return 1
+	return 0
+}
+
+# archive_name FILE PREFIX: the name journald gives a journal file it archives -
+# <prefix>@<sequential number id>-<head sequential number>-<head realtime>.journal, the three
+# from the file's own header - so the vacuum by size and age treats the file as one of its own
+# (a name it cannot parse is never vacuumed). Without a readable header: a random id, sequence
+# number 0 and the time now, still in that shape.
+archive_name() {
+	h=$("${JOURNALCTL}" --header --file "${1}" 2>/dev/null) || h=""
+	seq=$(printf '%s\n' "${h}" | sed -n 's/^Sequential number ID: *\([0-9a-f]*\).*/\1/p' | head -n1)
+	hs=$(printf '%s\n' "${h}" | sed -n 's/^Head sequential number:.*(\([0-9a-f]*\))$/\1/p' | head -n1)
+	hr=$(printf '%s\n' "${h}" | sed -n 's/^Head realtime timestamp:.*(\([0-9a-f]*\))$/\1/p' | head -n1)
+	valid "${seq}" || seq=$(generate)
+	[ -n "${hs}" ] || hs=0
+	[ -n "${hr}" ] || hr=$(printf '%x' "$(( $(date +%s) * 1000000 ))")
+	printf '%s@%s-%016s-%016s.journal' "${2}" "${seq}" "${hs}" "${hr}" | tr ' ' 0
+}
+
+# adopt_journal OLD NEW: the journal of this boot so far - written under the transient ID and
+# flushed to ${JOURNAL_DIR}/OLD by occu-persist - moves into the directory of the final ID as
+# archived files, so the boot that derived the ID (a factory reset's, a fresh image's first) is
+# fully logged: the resize, the reset, the restore (openccu-lite B-182). Before, the directory
+# was removed: journald refuses to *write* a file whose header carries another machine ID, and
+# the directory of a foreign ID is read only with journalctl --merge, so its lines were as good
+# as gone. Reading an archived file checks no machine ID. Called after journald was restarted on
+# NEW, so the old files are closed (offline) and nothing writes to them any more; a live file
+# (system.journal) gets its archive name from its header, an archived one keeps its name.
+adopt_journal() {
+	src="${JOURNAL_DIR}/${1}"
+	dst="${JOURNAL_DIR}/${2}"
+	[ -d "${src}" ] || return 0
+	if [ ! -d "${dst}" ]; then
+		mkdir -p "${dst}" || return 1
+		chgrp systemd-journal "${dst}" 2>/dev/null && chmod 2755 "${dst}" 2>/dev/null
+	fi
+	n=0
+	for f in "${src}"/*; do
+		[ -f "${f}" ] || continue
+		name=$(basename "${f}")
+		case "${name}" in
+			*@*.journal | *.journal~) to="${name}" ;;
+			*.journal) to=$(archive_name "${f}" "${name%.journal}") ;;
+			*) continue ;;
+		esac
+		[ -e "${dst}/${to}" ] && to="$(printf '%s' "${to%.journal}")-$$.journal"
+		mv "${f}" "${dst}/${to}" || { log "ERROR: could not move ${f} into ${dst}"; return 1; }
+		n=$((n+1))
+	done
+	rmdir "${src}" 2>/dev/null || log "${src} is not empty and stays"
+	log "journal of this boot so far: ${n} file(s) moved from ${src} into ${dst}"
+	return 0
+}
+
+case "${1:-}" in
+	install)
+		if [ ! -s "${STORE}" ]; then
+			log "nothing stored yet, keeping PID 1's transient ID for this boot"
+			exit 0
+		fi
+		id=$(read_id "${STORE}")
+		if ! valid "${id}"; then
+			log "stored ID '${id}' is not a machine ID, ignoring it"
+			exit 0
+		fi
+		if install_id "${id}"; then
+			log "machine ID ${id} (from ${STORE})"
+		else
+			log "ERROR: could not install machine ID ${id}"
+			exit 1
+		fi
+		;;
+	store)
+		if ! mountpoint -q /usr/local; then
+			log "userfs is not mounted, not storing a machine ID"
+			exit 0
+		fi
+		id=$(read_id "${STORE}")
+		if valid "${id}"; then
+			install_id "${id}" || log "ERROR: could not install the stored machine ID ${id}"
+			exit 0
+		fi
+		serial=$(read_id "${SERIAL}")
+		if [ -n "${serial}" ]; then
+			id=$(derive "${serial}")
+			src="board serial ${serial}"
+		else
+			id=$(generate)
+			src="random (no ${SERIAL})"
+		fi
+		valid "${id}" || { log "ERROR: derived '${id}' is not a machine ID"; exit 1; }
+		mkdir -p "$(dirname "${STORE}")"
+		printf '%s\n' "${id}" >"${STORE}" || { log "ERROR: could not write ${STORE}"; exit 1; }
+		log "machine ID ${id} stored in ${STORE} (${src})"
+		old=$(cat "${ETC_ID}" 2>/dev/null)
+		if [ "${old}" != "${id}" ]; then
+			install_id "${id}" || { log "ERROR: could not install machine ID ${id}"; exit 1; }
+			# This boot started on PID 1's transient ID; journald is restarted so it writes
+			# under the final one, and what it wrote so far - flushed to
+			# ${JOURNAL_DIR}/<transient>/ by occu-persist.service - moves along (B-182), the
+			# journald restart first so the old files are closed.
+			"${SYSTEMCTL}" try-restart systemd-journald.service
+			log "journald restarted on ${id}"
+			if [ -n "${old}" ]; then
+				adopt_journal "${old}" "${id}" || log "ERROR: the journal of this boot so far stays under ${old}"
+			fi
+		fi
+		;;
+	*)
+		echo "Usage: $0 {install|store}" >&2
+		exit 1
+		;;
+esac
+
+exit 0

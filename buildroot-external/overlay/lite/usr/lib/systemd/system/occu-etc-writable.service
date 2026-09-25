@@ -1,0 +1,23 @@
+# openccu-lite: /etc/passwd and /etc/group are on the read-only rootfs, so a confined
+# addon's user could never be created. This copies them into /run and bind-mounts them back, before
+# anything that creates a user runs - occu-addons.service (addon-users) and occulited, which calls
+# adduser through the privilege helper when an addon is switched to confined.
+#
+# The condition is the point of the unit: on a system where /etc is already writable - a container,
+# a development root - there is nothing to do and the unit skips rather than shadowing the real
+# files with copies.
+[Unit]
+Description=Writable /etc/passwd and /etc/group for confined addons
+After=local-fs.target
+Before=occu-addons.service occulited.service
+ConditionPathIsReadWrite=!/etc
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/etc-writable
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

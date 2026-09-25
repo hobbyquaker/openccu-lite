@@ -1,0 +1,66 @@
+#!/bin/sh
+# openccu-lite (task 158): the board LEDs as soon as the radio hardware is known.
+#
+#   start  the final triggers: HM_LED_*_MODE2 from /var/hm_mode (S01InitHost), or "none" with
+#          /etc/config/disableOnboardLED; in HM-LGW mode with an RPI-RF-MOD its LED blue (or dark
+#          with /etc/config/disableLED)
+#   stop   the MODE1 triggers again; in HM-LGW mode the RPI-RF-MOD yellow ("going down")
+#
+# These are the LED lines of upstream's S99SetupLEDs, which occu-leds.service still runs at the end
+# of the boot as the boot-finished gate (rc.postlocal, safe mode, startupFinished, the RemoteAPI
+# ports). occu-board-leds.service runs this right after occu-init-rf-hardware.service instead, so
+# the board LEDs no longer wait for the addons. S99SetupLEDs writes the same values again when the
+# boot has finished: the same triggers, nothing changes. The script stays byte-identical
+# (docs/upstream-delta.md).
+#
+# LITE_ROOT prefixes every path, for scripts/testcases/lite-board-leds-test.sh.
+
+R=${LITE_ROOT:-}
+
+# shellcheck source=/dev/null
+[ -r "${R}/var/hm_mode" ] && . "${R}/var/hm_mode"
+
+set_trigger() { # <led directory> <trigger>
+  [ -n "$1" ] && [ -n "$2" ] && [ -f "${R}$1/trigger" ] && echo "$2" >"${R}$1/trigger"
+}
+
+rgb() { # <red> <green> <blue>: the RPI-RF-MOD's LED in HM-LGW mode, where S99SetupLEDs owns it
+  [ "${HM_MODE}" = "HM-LGW" ] || return 0
+  [ "${HM_HMIP_DEV}" = "RPI-RF-MOD" ] || [ "${HM_HMRF_DEV}" = "RPI-RF-MOD" ] || return 0
+  led="${R}/sys/class/leds/rpi_rf_mod"
+  [ -e "${led}:green/trigger" ] || return 0
+  echo "$1" >"${led}:red/trigger"
+  echo "$2" >"${led}:green/trigger"
+  echo "$3" >"${led}:blue/trigger"
+}
+
+case "$1" in
+  start)
+    if [ -e "${R}/etc/config/disableOnboardLED" ]; then
+      HM_LED_GREEN_MODE2=none
+      HM_LED_RED_MODE2=none
+      HM_LED_YELLOW_MODE2=none
+    fi
+    set_trigger "${HM_LED_GREEN}" "${HM_LED_GREEN_MODE2}"
+    set_trigger "${HM_LED_RED}" "${HM_LED_RED_MODE2}"
+    set_trigger "${HM_LED_YELLOW}" "${HM_LED_YELLOW_MODE2}"
+    if [ -e "${R}/etc/config/disableLED" ]; then
+      rgb none none none
+    else
+      rgb none none default-on
+    fi
+    echo "board LEDs set"
+    ;;
+  stop)
+    rgb default-on default-on none
+    set_trigger "${HM_LED_GREEN}" "${HM_LED_GREEN_MODE1}"
+    set_trigger "${HM_LED_RED}" "${HM_LED_RED_MODE1}"
+    set_trigger "${HM_LED_YELLOW}" "${HM_LED_YELLOW_MODE1}"
+    echo "board LEDs back to the boot triggers"
+    ;;
+  *)
+    echo "usage: $0 start|stop" >&2
+    exit 2
+    ;;
+esac
+exit 0

@@ -1,0 +1,85 @@
+# openccu-lite: replaces /etc/init.d/S61rfd. The daemon runs confined as its own user; the
+# root work around it is `occulited radio prep|ready rfd`.
+#
+# The condition step (as root) runs the script's init action - rfd.conf checked and copied to
+# /var/etc with the port forced - and decides as the script's start action did: without an
+# [Interface n] section there is no BidCos-RF hardware and the unit is skipped, not failed. It
+# also makes the files rfd writes rfd's (its device files, the security keys, the callback
+# registrations) at every start, because a backup restore or an update from OpenCCU leaves them
+# root-owned, and writes the log level into the environment file ExecStart reads.
+#
+# Confined: user rfd, no capabilities, the file system read-only except what it writes,
+# /dev/mmd_bidcos through the mmd-bidcos group (an HM-CFG-USB-2's USB node through the same
+# group and libusb), the loopback and the LAN gateways over IPv4/IPv6. rfd.conf carries the LAN
+# gateways' keys and stays root:rfd 0640: readable to rfd, to no addon. The address-family and
+# realtime lines take effect once systemd is built with seccomp.
+#
+# Restart tracking: Type=exec, so rfd's death deactivates the unit and Restart= brings it back
+# with the preparation in front of it; ready when the status file carries the daemon's pid (the
+# script's waitStartupComplete).
+[Unit]
+Description=BidCos-RF Interface
+# /dev/mmd_bidcos comes from multimacd; a BidCos LAN gateway in rfd.conf gets its firmware update
+# and key change first (occu-set-lgw-key orders after occu-lgw-firmware-update)
+# rfd hands the system time to the radio module and the LAN gateways: a trusted clock first.
+After=multimacd.service hmlangw.service occu-set-lgw-key.service occu-clock-valid.service
+Wants=occu-clock-valid.service
+ConditionPathExists=/run/occulite/radio/rfd.enabled
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+ExecStartPre=+/usr/bin/occulited radio prep rfd
+ExecStartPre=-+/usr/libexec/occu/lite-psplash boot S61rfd
+EnvironmentFile=-/run/occulite/radio/rfd.env
+Environment=LOGLEVEL_RFD=5
+ExecStart=/bin/rfd -f /var/etc/rfd.conf -l ${LOGLEVEL_RFD}
+ExecStartPost=+/usr/bin/occulited radio ready rfd
+ExecStartPost=-+/usr/libexec/occu/lite-psplash done S61rfd
+KillMode=control-group
+TimeoutStartSec=180
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=2
+RestartSteps=8
+RestartMaxDelaySec=300
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+OOMScoreAdjust=-900
+
+User=rfd
+Group=rfd
+SupplementaryGroups=mmd-bidcos status
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ProtectSystem=strict
+# userfs paths are optional ("-"): a directory a restored backup or a factory reset does not have
+# is made by the prep step, which cannot run while a missing path fails the namespace setup
+ReadWritePaths=/var/status -/usr/local/etc/config/rfd
+ReadWritePaths=-/usr/local/etc/config/keys -/var/RFD.handlers
+# /var/etc: the prep step renders rfd.conf there from /etc/config at every start,
+# so a changed setting takes effect with a restart and needs no reboot.
+# It runs inside this namespace - the "+" prefix gives it privileges, not a way out of the mount
+# namespace - so without this line the write lands on a read-only file system. It opens nothing to
+# the daemon: /var/etc is root:root 0775 and rfd.conf root:rfd 0640, and rfd is not root.
+ReadWritePaths=/var/etc
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+# AF_NETLINK: libLanDeviceUtils (the LAN gateway code) lists the interfaces with getifaddrs()
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

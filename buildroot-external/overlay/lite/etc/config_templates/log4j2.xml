@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  openccu-lite: hmipserver logs to the journal. S62HMServer copies this template to
+  /var/etc/log4j2.xml at every start and sets every level attribute from LOGLEVEL_HMIP
+  (the Log page's level setting). There is no file appender and no syslog appender: the only
+  appender writes to the JVM's stdout, which hmipserver.service hands to journald, and each
+  line starts with its syslog level so journald stores the real priority. A stack trace keeps
+  one journal entry per line, and every line carries the prefix of the event's level.
+  No timestamp: the journal has its own. "direct" writes to the stdout file descriptor itself,
+  so a server that redirects System.out into its logger cannot loop through this appender.
+-->
+<Configuration status="warn">
+	<Appenders>
+		<Console name="JOURNAL" target="SYSTEM_OUT" direct="true">
+			<PatternLayout>
+				<LevelPatternSelector defaultPattern="%replace{%c [%t] %m%n%ex}{(?m)^(?=.)}{&lt;6&gt;}" alwaysWriteExceptions="false">
+					<PatternMatch key="FATAL" pattern="%replace{%c [%t] %m%n%ex}{(?m)^(?=.)}{&lt;2&gt;}"/>
+					<PatternMatch key="ERROR" pattern="%replace{%c [%t] %m%n%ex}{(?m)^(?=.)}{&lt;3&gt;}"/>
+					<PatternMatch key="WARN" pattern="%replace{%c [%t] %m%n%ex}{(?m)^(?=.)}{&lt;4&gt;}"/>
+					<PatternMatch key="INFO" pattern="%replace{%c [%t] %m%n%ex}{(?m)^(?=.)}{&lt;6&gt;}"/>
+					<PatternMatch key="DEBUG" pattern="%replace{%c [%t] %m%n%ex}{(?m)^(?=.)}{&lt;7&gt;}"/>
+					<PatternMatch key="TRACE" pattern="%replace{%c [%t] %m%n%ex}{(?m)^(?=.)}{&lt;7&gt;}"/>
+				</LevelPatternSelector>
+			</PatternLayout>
+		</Console>
+	</Appenders>
+	<Loggers>
+		<Logger name="de.eq3" level="info"/>
+		<Logger name="org" level="error"/>
+		<Logger name="com" level="error"/>
+		<Root level="info">
+			<AppenderRef ref="JOURNAL"/>
+		</Root>
+	</Loggers>
+</Configuration>

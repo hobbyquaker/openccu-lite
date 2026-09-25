@@ -1,0 +1,12 @@
+# openccu-lite: a radio stick plugged in or pulled starts occu-radio-hotplug.service, which
+# re-plans the radio stack and restarts only the interface daemons whose plan changed. The raw
+# UART class covers the sticks with a radio module (HmIP-RFUSB, HmIP-RFUSB-TK, HB-RF-USB, and the
+# modules on an HB-RF-USB-2); the HM-CFG-USB-2 has no node and is matched as a USB device. At
+# boot the coldplug events start the unit too: it waits for the boot's detection and finds the
+# hardware unchanged.
+SUBSYSTEM=="raw-uart", ACTION=="add|remove", RUN+="/bin/systemctl --no-block start occu-radio-hotplug.service"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ENV{PRODUCT}=="1b1f/c00f/*", ACTION=="add|remove", RUN+="/bin/systemctl --no-block start occu-radio-hotplug.service"
+# A USB stick pulled while a daemon holds its node leaves the raw UART node registered (with
+# connection_state 0) until it is closed, so there is no raw-uart remove event: any USB device that
+# goes starts the unit too (the rescan probes nothing it already knows, so it is cheap).
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ACTION=="remove", RUN+="/bin/systemctl --no-block start occu-radio-hotplug.service"

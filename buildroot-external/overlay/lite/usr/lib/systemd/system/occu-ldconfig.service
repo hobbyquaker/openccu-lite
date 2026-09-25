@@ -1,0 +1,18 @@
+# openccu-lite: replaces the "ldconfig -C /var/cache/ld.so.cache" line of
+# /etc/init.d/rcS. /etc/ld.so.cache is a symlink into /var (tmpfs) and /etc/ld.so.conf lists
+# /usr/local/lib and the lib32 directories, so the cache has to exist before the first program
+# that needs a library outside the default paths.
+[Unit]
+Description=Shared library cache
+DefaultDependencies=no
+After=systemd-tmpfiles-setup.service local-fs.target
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/mkdir -p /var/cache
+ExecStart=/sbin/ldconfig -C /var/cache/ld.so.cache
+
+[Install]
+WantedBy=sysinit.target

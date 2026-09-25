@@ -1,0 +1,39 @@
+#!/bin/sh
+# openccu-lite: lighttpd.service's ExecStop - while the system shuts down, the web server keeps
+# answering until the radio stack is down.
+#
+# A page that tells the user to unplug the box once the web server stops answering must not see
+# that while hmipserver is still writing or the radio module is handed to its bootloader. An
+# ordering would do it (lighttpd Before= the radio detection), but it orders the start as well, and
+# the radio detection then waited for the web server at every boot. So the stop waits instead:
+# until hmipserver, rfd, multimacd and the radio detection are all inactive, polled every 0.2 s,
+# at most the given number of seconds (then with a warning, and the web server stops anyway).
+#
+# Only while the system shuts down (systemctl is-system-running says "stopping"): a plain stop or
+# restart of the web server does not wait for a radio stack that keeps running.
+#
+# Usage: lite-radio-stop-wait [limit in seconds, default 120]
+set -u
+LIMIT=${1:-120}
+SYSTEMCTL=${RADIO_STOP_SYSTEMCTL:-systemctl}
+UNITS="hmipserver.service rfd.service multimacd.service occu-init-rf-hardware.service"
+
+[ "$("$SYSTEMCTL" is-system-running 2>/dev/null)" = stopping ] || exit 0
+
+rounds=$((LIMIT * 5))
+i=0
+while :; do
+  # shellcheck disable=SC2086
+  states=$("$SYSTEMCTL" is-active $UNITS 2>/dev/null)
+  if ! printf '%s\n' "$states" | grep -Eqx 'active|activating|deactivating|reloading|refreshing'; then
+    [ "$i" -gt 0 ] && echo "the radio stack is down after $((i / 5)).$((i % 5 * 2)) s; the web server stops"
+    exit 0
+  fi
+  if [ "$i" -ge "$rounds" ]; then
+    # <4>: journald stores the line as a warning
+    echo "<4>the radio stack is not down after $LIMIT s ($(printf '%s' "$states" | tr '\n' ' ')); the web server stops anyway"
+    exit 0
+  fi
+  i=$((i + 1))
+  sleep 0.2
+done

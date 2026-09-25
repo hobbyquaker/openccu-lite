@@ -1,0 +1,209 @@
+#!/bin/sh
+# openccu-lite: one systemd unit per third-party addon, generated at boot
+# and on every daemon-reload from the rc.d scripts the addon ABI installs — the addons themselves
+# are not changed. This replaces the "run-parts -a start|stop /etc/config/rc.d" of
+# /etc/init.d/S98StartAddons: every script becomes addon-<name>.service (Type=oneshot,
+# RemainAfterExit, ExecStart "<script> start", ExecStop "<script> stop", KillMode=control-group),
+# so the cgroup tracks whatever the script started, stop is reliable, status shows the real
+# processes and their output lands in the journal. The units are not ordered against each other:
+# addons start side by side, so one whose start script is slow or hangs (up to TimeoutStartSec)
+# no longer holds back every addon after it in name order. run-parts' order was never a contract
+# between addons; one that needs another started first would declare it.
+#
+# Every addon gets the generated unit; an addon cannot bring its own. A unit file in the addon's
+# directory (/usr/local/addons/<name>/etc/systemd/<name>.service, or drop-ins beside it) is never
+# read, only named in the journal: a confined addon owns that directory, and a unit it wrote there
+# would run "ExecStartPre=+..." or "User=root" as root at the next boot. What an addon needs beyond
+# the generated unit comes from occulited's policy and the catalogue's runtime block.
+#
+# /usr/local is not mounted when generators run at boot; occu-addons.service reruns them
+# (daemon-reload) once the userfs is final and starts addons.target. Safe mode
+# (/etc/config/safemode) generates nothing, as S98StartAddons skipped the addons.
+#
+# The name filter is busybox run-parts' invalid_name(): letters, digits, '_', '-', non-leading '.'.
+# The environment is what S98StartAddons gave the scripts: /etc/profile and
+# /usr/local/etc/profile.d sourced, umask 0002, oom_score_adj 100.
+#
+# Before=addons.target as well as PartOf=: being in addons.target.wants pulls a unit in but
+# does not order it, so the target was reached while the addons were still starting - and
+# occu-rc-local, occu-leds and occu-boot-message all say After=addons.target because they are meant
+# to come after the addons, exactly as they did after S98StartAddons on the busybox product. An
+# addon that hangs now delays them by its TimeoutStartSec, which is what the init script did too.
+#
+# What an addon needs comes from its catalogue entry: occulited writes
+# /usr/local/etc/config/addon-policy/<name>.needs, one line - "none", or interface ids out of rfd,
+# hmipserver and hs485d. An addon without that file, or with anything else in it, gets the safe
+# default: after rfd and hmipserver, whose RPC answers once their units are active, so an addon
+# never meets a refused connection at boot. "none" starts right after the network, the web server
+# and occulited (an MQTT broker, say), without waiting for the HmIP server's start.
+#
+# An addon that copes with interfaces that do not answer yet - it retries within seconds and logs no
+# errors while it waits - may start before them (task 119, D-75): its catalogue entry declares
+# runtime.start "early", and occulited writes /usr/local/etc/config/addon-policy/<name>.start with
+# the one line "early" unless the user switched that off on the Addons page. Such a unit is ordered
+# after the network, the web server, occulited and occu-addons only, and Wants= its interface units
+# (its needs, or rfd and hmipserver when it declares none) without After= on them. A missing file or
+# any other content keeps the ordering above.
+
+ROOT=${OCCU_ADDONS_ROOT:-}
+EARLY_DIR=${2:?generator early dir}
+RCD="${ROOT}/usr/local/etc/config/rc.d"
+ADDONS="${ROOT}/usr/local/addons"
+
+[ -d "${RCD}" ] || exit 0
+[ -e "${ROOT}/usr/local/etc/config/safemode" ] && exit 0
+
+WANTS="${EARLY_DIR}/addons.target.wants"
+mkdir -p "${WANTS}"
+
+# the release from which an addon's own unit file is ignored, for the journal line below
+OWN_UNITS_IGNORED_SINCE=1.0.0-alpha.0
+KMSG=${OCCU_ADDONS_KMSG:-/dev/kmsg}
+
+# say: one line for the journal. A generator cannot use syslog (systemd.generator(7)); journald
+# reads /dev/kmsg. Where that cannot be written (a container) the line goes to stderr.
+say() {
+  { printf '<4>occu-addons: %s\n' "$1" >>"${KMSG}"; } 2>/dev/null || printf 'occu-addons: %s\n' "$1" >&2
+}
+
+# prints "none" or the declared interface units; returns 1 for no usable declaration
+needs_of() {
+  f="${ROOT}/usr/local/etc/config/addon-policy/$1.needs"
+  [ -f "${f}" ] || return 1
+  line=$(head -n 1 "${f}" | tr '\t' ' ')
+  # shellcheck disable=SC2086
+  set -- ${line}
+  [ $# -gt 0 ] || return 1
+  if [ "$*" = none ]; then
+    echo none
+    return 0
+  fi
+  out=
+  for w in "$@"; do
+    case "${w}" in
+      rfd|hmipserver|hs485d) out="${out} ${w}.service" ;;
+      *) return 1 ;;
+    esac
+  done
+  echo "${out# }"
+}
+
+# true for an addon occulited lets start before its interfaces (<name>.start says "early")
+early_of() {
+  f="${ROOT}/usr/local/etc/config/addon-policy/$1.start"
+  [ -f "${f}" ] || return 1
+  [ "$(head -n 1 "${f}" | tr -d ' \t\r')" = early ]
+}
+
+for script in "${RCD}"/*; do
+  [ -f "${script}" ] && [ -x "${script}" ] || continue
+  name=${script##*/}
+  case "${name}" in
+    .*|*.script|*[!A-Za-z0-9_.-]*) continue ;;
+  esac
+  unit="addon-${name}.service"
+  # The unit always runs rc.d/<name>. With the addon-rc wrapper in front that is the wrapper: inside
+  # its own unit it runs the addon's script (<name>.script) itself, as run-parts ran it before -
+  # a plain sh script with $0 set to rc.d/<name>, which scripts derive their addon directory from.
+  # Running <name>.script directly handed such a script "<name>.script" as its name, and one of
+  # them deleted rfd's device descriptions at every boot. Without a wrapper it is the script itself.
+  real="/usr/local/etc/config/rc.d/${name}"
+
+  needs=$(needs_of "${name}") || needs=
+  # An addon's own unit file or drop-ins in its directory: named, never used (see the top). Only
+  # tested for existence - nothing in the addon's directory is read or linked.
+  own="${ADDONS}/${name}/etc/systemd/${name}.service"
+  if [ -e "${own}" ] || [ -L "${own}" ] || [ -e "${own}.d" ] || [ -L "${own}.d" ]; then
+    say "addon ${name} ships its own unit file; ignored since openccu-lite ${OWN_UNITS_IGNORED_SINCE}, the generated unit is used"
+  fi
+  # occu-addons.service first: it creates the confined addons' users (addon-users) before the
+  # daemon-reload that makes these units exist, and a unit with User=addon-<id> fails if its
+  # user is not there yet
+  after="network.target lighttpd.service occulited.service occu-addons.service"
+  wants=
+  if early_of "${name}"; then
+    # started early: the interfaces are wanted, not waited for
+    case "${needs}" in
+      none) ;;
+      '') wants="Wants=rfd.service hmipserver.service" ;;
+      *) wants="Wants=${needs}" ;;
+    esac
+  else
+    case "${needs}" in
+      none) ;;
+      '') after="${after} rfd.service hmipserver.service" ;;
+      *)
+        after="${after} ${needs}"
+        wants="Wants=${needs}"
+        ;;
+    esac
+  fi
+  # written as a new file: never through a link that might be in the way
+  rm -f "${EARLY_DIR}/${unit}"
+  cat >"${EARLY_DIR}/${unit}" <<UNIT
+# generated by /usr/lib/systemd/system-generators/occu-addons (openccu-lite) from
+# /usr/local/etc/config/rc.d/${name}; the rc.d script is the addon's, unchanged. Not a file to
+# edit: a drop-in in /etc/systemd/system/${unit}.d/ survives, this does not.
+[Unit]
+Description=Addon ${name} (/usr/local/etc/config/rc.d/${name})
+After=${after}
+${wants}
+PartOf=addons.target
+Before=addons.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c '. /etc/profile; exec ${real} start'
+ExecStop=/bin/sh -c '. /etc/profile; exec ${real} stop'
+KillMode=control-group
+TimeoutStartSec=300
+TimeoutStopSec=120
+OOMScoreAdjust=100
+UMask=0002
+SyslogIdentifier=addon-${name}
+UNIT
+  # occulited's policy for the addon (its own user and grants, or root) is a drop-in on
+  # the userfs; a file without a [Service] section means "root" and is left alone
+  policy="${ROOT}/usr/local/etc/config/addon-policy/${name}.conf"
+  if [ -f "${policy}" ] && grep -q '^\[Service\]' "${policy}"; then
+    mkdir -p "${EARLY_DIR}/${unit}.d"
+    cp "${policy}" "${EARLY_DIR}/${unit}.d/10-policy.conf"
+    # A root addon without CAP_SYS_ADMIN: the CCU-era "mount -o remount,rw /" in its script is
+    # refused by design, and a script that ends on it exits with mount's 32. That is the expected
+    # outcome, not a failed addon (the page marks the refused remount on its own), so 32 counts as
+    # success for such a unit - and only for it: a confined addon and a root one that may mount
+    # keep every non-zero exit a failure.
+    if grep -qx 'CapabilityBoundingSet=~CAP_SYS_ADMIN' "${policy}"; then
+      cat >"${EARLY_DIR}/${unit}.d/40-remount-refused.conf" <<REMOUNT
+# generated by /usr/lib/systemd/system-generators/occu-addons (openccu-lite)
+[Service]
+SuccessExitStatus=32
+REMOUNT
+    fi
+    # A confined addon (its own user): before every start of the unit, whoever starts it, the
+    # addon's directories are given to that user again - an update script copies the new files as
+    # root and then starts the unit itself. "+" runs the step as root despite User=, "-" lets the
+    # addon start when the step fails (the Status page still names root-owned files).
+    if grep -q '^User=addon-' "${policy}"; then
+      cat >"${EARLY_DIR}/${unit}.d/20-addon-own.conf" <<OWN
+# generated by /usr/lib/systemd/system-generators/occu-addons (openccu-lite)
+[Service]
+ExecStartPre=+-/usr/libexec/occu/lite-addon-own ${name}
+OWN
+      # A confined addon's `init` runs here, as the unit's user, right before its start - not as root
+      # from S55InitAddons' run-parts, which the wrapper answers with nothing for such an addon: the
+      # script behind rc.d/<name> is the addon's own code in its own directory. After the ownership
+      # step above (the drop-ins' ExecStartPre lines run in file order), so the addon owns its files
+      # by then. "-": a script without an init case (a usage line, exit 1) does not keep the addon
+      # from starting. A root addon keeps S55's init, as on every CCU.
+      cat >"${EARLY_DIR}/${unit}.d/30-addon-init.conf" <<INIT
+# generated by /usr/lib/systemd/system-generators/occu-addons (openccu-lite)
+[Service]
+ExecStartPre=-/bin/sh -c '. /etc/profile; exec ${real} init'
+INIT
+    fi
+  fi
+  ln -sf "../${unit}" "${WANTS}/${unit}"
+done
+exit 0

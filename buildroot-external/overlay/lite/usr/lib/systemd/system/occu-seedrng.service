@@ -1,0 +1,22 @@
+# openccu-lite: replaces /etc/init.d/S05seedrng. The script runs unchanged; the
+# cgroup keeps whatever it starts (KillMode=control-group), so stop and status are systemd's.
+# systemd-random-seed is not built (BR2_PACKAGE_SYSTEMD_RANDOMSEED off); the seed file stays
+# where upstream keeps it, in the user partition, and the stop action writes it back.
+[Unit]
+Description=Random seed
+After=occu-backup-restore.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S05seedrng
+ExecStart=/etc/init.d/S05seedrng.script start
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S05seedrng
+ExecStop=/etc/init.d/S05seedrng.script stop
+KillMode=control-group
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+# openccu-lite: the LEDs and the end of the boot.
+#
+# Replaces /etc/init.d/S99SetupLEDs, and it is the only LED unit left. The three
+# that existed drove the same two or three LEDs on the same ARM boards:
+#
+#   - occu-init-leds.service (S11InitLEDs) set an RPI-RF-MOD to constant yellow if HM_RTC was
+#     rx8130 - the same three writes S02InitRTC (occu-init-rtc.service) had just done one unit
+#     earlier, in the branch where it detects the RX8130 that sits on the module. It is gone; the
+#     early "booting" light is S02InitRTC's, and once the box is up occulited's status LED
+#     controller owns the RPI-RF-MOD's LED (hss_led is no longer in the image).
+#   - the final board LED triggers (HM_LED_*_MODE2, or "none" with /etc/config/disableOnboardLED)
+#     and, in HM-LGW mode with an RPI-RF-MOD, the blue light: occu-board-leds.service now
+#     sets them right after the radio hardware is known, instead of this unit after the addons.
+#     The script below still writes them too - the same values, nothing changes - because upstream's
+#     S99SetupLEDs stays byte-identical (docs/upstream-delta.md).
+#
+# The rest of S99SetupLEDs is not about LEDs at all and stays exactly where it was:
+# rc.postlocal, clearing safe mode, /var/status/startupFinished and the lighttpd reload that opens
+# the RemoteAPI ports - i.e. this unit is the boot-finished gate, and occu-boot-message.service
+# still orders after it. startupFinished means "everything is up" to its readers (the RemoteAPI
+# ports, the not-ready 503, eQ3StartNetwork), so the gate does not move. Its stop action is the
+# first thing at shutdown: startupFinished away, ports closed, LEDs to MODE1, rc.shutdown, and the
+# status LED's shutdown pattern.
+#
+# The script runs unchanged; the cgroup keeps whatever it starts (KillMode=control-group), so
+# stop and status are systemd's.
+[Unit]
+Description=Boot finished
+After=occu-rc-local.service addons.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S99SetupLEDs
+ExecStart=/etc/init.d/S99SetupLEDs.script start
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S99SetupLEDs
+ExecStop=/etc/init.d/S99SetupLEDs.script stop
+# the status LED's shutdown pattern (yellow, fast), also when occulited is not running
+ExecStop=-/usr/libexec/occu/lite-status-led shutdown
+KillMode=control-group
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

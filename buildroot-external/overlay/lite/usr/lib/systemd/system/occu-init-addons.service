@@ -1,0 +1,25 @@
+# openccu-lite: replaces /etc/init.d/S55InitAddons. lite-init-addons does what the script does -
+# rc.prelocal, then `init` on every rc.d entry - without run-parts, which took the addons' own
+# <name>.script files behind the addon-rc wrapper for entries and ran them directly as root. The
+# cgroup keeps whatever they start (KillMode=control-group), so stop and status are systemd's.
+# The start/stop half of the addon ABI is addons.target.
+[Unit]
+Description=Addon initialisation (rc.prelocal, rc.d init)
+# The addons' init actions read /var/hm_mode and may reload lighttpd, which upstream started
+# before S55; they need no sshd
+After=occu-init-rf-hardware.service lighttpd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S55InitAddons
+ExecStart=/usr/libexec/occu/lite-init-addons start
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S55InitAddons
+ExecStop=/usr/libexec/occu/lite-init-addons stop
+KillMode=control-group
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

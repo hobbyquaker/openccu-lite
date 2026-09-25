@@ -1,0 +1,30 @@
+# openccu-lite: replaces /etc/init.d/S58LGWFirmwareUpdate, which is not in the image: occulited's
+# `radio lgw-firmware` does what the script did (eq3configcmd update-coprocessor -lgw and
+# update-lgw-firmware for the RF gateways, update-lgw-firmware for the wired ones), and a failed
+# update fails the unit with its reason in the journal - the script exited 0 whatever happened.
+[Unit]
+Description=LAN gateway firmware update
+# It updates the LAN gateways named in rfd.conf and hs485d.conf, so it needs an address and
+# HM_MODE, and it has to be done before rfd and hs485d start (they order after occu-set-lgw-key).
+# It has nothing to do with the addon initialisation it used to wait for.
+After=occu-network.service occu-init-rf-hardware.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Only with a LAN gateway in rfd.conf or hs485d.conf, the script's own test: without one it would
+# still wait for an address and ping the default gateway before finding nothing to update. The
+# condition skips the unit (not a failure) and says so in the journal.
+ExecCondition=/usr/libexec/occu/lite-lgw-configured occu-lgw-firmware-update
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S58LGWFirmwareUpdate
+ExecStart=/usr/bin/occulited radio lgw-firmware
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S58LGWFirmwareUpdate
+KillMode=control-group
+# up to 20 s for the network, then three eq3configcmd calls of at most 120 s each
+TimeoutStartSec=420
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

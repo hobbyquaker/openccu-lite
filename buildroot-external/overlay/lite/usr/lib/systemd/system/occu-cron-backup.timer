@@ -1,0 +1,23 @@
+# openccu-lite: replaces the crontab.root line
+#   7 0 * * * [ ! -e /etc/config/NoCronBackup ] && /bin/nice /bin/cronBackup.sh
+# Since the backup targets (USB directory, NFS, SMB, SFTP) it starts occulited's pipeline instead of
+# upstream's cronBackup.sh, which stays in the image unused: the backup is created once and copied
+# to every enabled target; the nightly switch (NoCronBackup) is the pipeline's to read.
+# Timers are wanted by multi-user.target and carry no default dependencies: the implicit
+# Before=timers.target (part of basic.target) would form a cycle with After=occu-persist.service,
+# which puts the stamp directory on the userfs and is itself after basic.target.
+[Unit]
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+Description=Scheduled backup (nightly)
+After=occu-persist.service
+
+[Timer]
+Unit=occu-backup-create@nightly.service
+OnCalendar=*-*-* 00:07:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=multi-user.target

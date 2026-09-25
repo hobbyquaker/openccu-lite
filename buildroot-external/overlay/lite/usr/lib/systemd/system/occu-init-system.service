@@ -1,0 +1,24 @@
+# openccu-lite: replaces /etc/init.d/S06InitSystem. The script runs unchanged; the
+# cgroup keeps whatever it starts (KillMode=control-group), so stop and status are systemd's.
+#
+# After the backup restore, as S06 came after S05: the script empties /usr/local/tmp, where
+# restoreBackup.sh leaves the archive the restore unpacks at boot. Run first, it deleted the
+# archive and the restore found nothing to do.
+[Unit]
+Description=System initialisation
+After=occu-persist.service occu-init-host.service occu-init-rtc.service occu-backup-restore.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S06InitSystem
+ExecStart=/etc/init.d/S06InitSystem.script start
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S06InitSystem
+ExecStop=/etc/init.d/S06InitSystem.script stop
+KillMode=control-group
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,102 @@
+# openccu-lite: replaces /etc/init.d/S60hs485d. The loader and the daemon run confined as
+# their own user; the root work is `occulited radio prep hs485d`.
+#
+# The condition step (as root) decides as the script did - without an [Interface x] section in
+# /var/etc/hs485d.conf (written by S49hs485d, occu-init-hs485d.service) there is no wired
+# hardware and the unit is skipped, not failed - makes the device files the daemon's, keeps
+# hs485d.conf root:hs485d 0640 (it carries the wired LAN gateway's key), and writes the log
+# level into the environment file ExecStart reads.
+#
+# The loader and the daemon write four files directly under /var (the loader's pid file under
+# /var/run, the daemon's pid file, its unix socket /var/socket_hs485d and /var/log/hs485d.log),
+# which no user but root may create there. So the unit shows them a /var of their own: an
+# empty, writable tmpfs, with the real /var/etc, /var/hm_mode and /var/status mounted in, and
+# /var/run and /var/log from the unit's runtime directory /run/hs485d (made at boot by tmpfiles:
+# the bind sources must exist before the condition step, which runs inside the mount namespace
+# despite its "+"), where the loader's pid file lands for PIDFile=. Verified on 2026-09-22 on the
+# first system with BidCos-Wired hardware it ran on (an HMW-LGW on a Charly): the loader
+# daemonises, writes the pid file there, and /bin/hs485d stays in the unit's cgroup.
+#
+# Confined: user hs485d, no capabilities, the file system read-only except what it writes,
+# serial adapters through the dialout group (a wired LAN gateway is reached over TCP), IPv4 and
+# IPv6. The address-family and realtime lines take effect once systemd is built with seccomp.
+#
+# Restart tracking: hs485dLoader daemonises itself and writes its pid file (the script's stop
+# action killed it through that file), so Type=forking with PIDFile= tracks the loader, and
+# killing the unit's cgroup takes hs485d with it.
+[Unit]
+Description=BidCos-Wired Interface
+# /var/etc/hs485d.conf comes from occu-init-hs485d; a wired LAN gateway gets its firmware update
+# and key change first. Independent of the radio module and of multimacd.
+After=occu-init-hs485d.service occu-set-lgw-key.service occu-clock-valid.service
+# Wants=, not After= alone - a start outside a boot (a gateway added on the Interfaces
+# page, `systemctl start hs485d`) has to pull the loader's init pass in, which is what writes the
+# BidCos-Wired entry of /etc/config/InterfacesList.xml.
+Wants=occu-init-hs485d.service occu-clock-valid.service
+ConditionPathExists=/run/occulite/radio/hs485d.enabled
+StartLimitIntervalSec=0
+
+[Service]
+Type=forking
+PIDFile=/run/hs485d/run/hs485dLoader.pid
+ExecStartPre=+/usr/bin/occulited radio prep hs485d
+ExecStartPre=-+/usr/libexec/occu/lite-psplash boot S60hs485d
+EnvironmentFile=-/run/occulite/radio/hs485d.env
+Environment=LOGLEVEL_HS485D=5
+ExecStart=/bin/hs485dLoader -l ${LOGLEVEL_HS485D} -dw /var/etc/hs485d.conf
+ExecStartPost=-+/usr/libexec/occu/lite-psplash done S60hs485d
+KillMode=control-group
+TimeoutStartSec=120
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=2
+RestartSteps=8
+RestartMaxDelaySec=300
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+OOMScoreAdjust=-900
+
+User=hs485d
+Group=hs485d
+SupplementaryGroups=dialout status
+RuntimeDirectory=hs485d
+RuntimeDirectoryPreserve=yes
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ProtectSystem=strict
+# userfs paths are optional ("-"): a directory a restored backup or a factory reset does not have
+# is made by the prep step, which cannot run while a missing path fails the namespace setup
+ReadWritePaths=/var/status -/usr/local/etc/config/hs485d
+ReadWritePaths=-/usr/local/etc/config/hs485types
+# /var/etc as in rfd.service: the prep step renders hs485d.conf there from /etc/config at every
+# start, inside this namespace, so the bind below is read-write and the path is listed here. The
+# daemon itself cannot write there - /var/etc is root:root 0775 and its file root:hs485d 0640.
+ReadWritePaths=/var/etc
+# the file hs485d writes its registered XML-RPC callbacks into. Without the bind below it
+# lands in the unit's own /var tmpfs, where occulited cannot read it and the Interfaces page shows
+# no subscriber for BidCos-Wired; tmpfiles.d makes it at boot so the bind has a source.
+ReadWritePaths=-/var/HS485D.handlers
+TemporaryFileSystem=/var:mode=1777
+BindReadOnlyPaths=-/var/hm_mode
+BindPaths=/var/etc
+BindPaths=-/var/status -/var/HS485D.handlers -/run/hs485d/run:/var/run -/run/hs485d/log:/var/log
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictRealtime=yes
+MemoryDenyWriteExecute=yes
+# AF_NETLINK: libLanDeviceUtils (the LAN gateway code) lists the interfaces with getifaddrs()
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

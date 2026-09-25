@@ -1,0 +1,43 @@
+#!/bin/sh
+# openccu-lite (task 95): the status LED when occulited's controller cannot show it itself.
+#
+#   shutdown  occu-leds.service's stop, the first step of a shutdown: yellow, fast blink
+#   stopped   occulited has stopped: yellow, slow blink ("not supervised") - or the shutdown
+#             pattern when the box is going down (occu-leds has removed startupFinished)
+#
+# The controller shows the same patterns while it runs; this covers a controller that is not there.
+# Only an RPI-RF-MOD's LED is written - the overlay gives every Pi the rpi_rf_mod devices, on GPIOs
+# nothing may be connected to - and nothing in HM-LGW mode, where S99SetupLEDs owns the LED.
+
+# shellcheck source=/dev/null
+[ -r /var/hm_mode ] && . /var/hm_mode
+[ "${HM_MODE}" = "HM-LGW" ] && exit 0
+[ "${HM_HMIP_DEV}" = "RPI-RF-MOD" ] || [ "${HM_HMRF_DEV}" = "RPI-RF-MOD" ] || exit 0
+led=/sys/class/leds/rpi_rf_mod
+[ -w "${led}:red/trigger" ] || exit 0
+
+case "$1" in
+  shutdown) delay=100 ;;
+  stopped)
+    if [ -e /var/status/startupFinished ]; then
+      delay=500
+    else
+      delay=100
+    fi
+    ;;
+  *)
+    echo "usage: $0 shutdown|stopped" >&2
+    exit 2
+    ;;
+esac
+
+# every channel off first, then red and green back to back, so yellow blinks without fringes
+for c in red green blue; do
+  echo none >"${led}:${c}/trigger"
+done
+for c in red green; do
+  echo timer >"${led}:${c}/trigger"
+  echo "${delay}" >"${led}:${c}/delay_on"
+  echo "${delay}" >"${led}:${c}/delay_off"
+done
+exit 0

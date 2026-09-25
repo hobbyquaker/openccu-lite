@@ -1,0 +1,66 @@
+# openccu-lite: the units of overlay/lite that the image boots with.
+# Buildroot runs "systemctl preset-all" when it assembles the rootfs; a unit not listed anywhere
+# follows systemd's default and is enabled too, so this is the explicit list for the rebase review
+# (docs/systemd-scope.md), not a policy change. occulited.service comes from package/occulited.
+enable occulited-helper.service
+enable occulited.service
+enable addons.target
+enable ca-certificates.service
+enable chrony.service
+enable occu-clock-valid.service
+enable occu-wifi.service
+enable crond.service
+enable hmipserver.service
+enable hmlangw.service
+enable hs485d.service
+enable lighttpd.service
+enable multimacd.service
+enable occu-addons.service
+enable occu-backup-restore.service
+enable occu-board-leds.service
+enable occu-boot-message.service
+enable occu-cron-backup.timer
+enable occu-etc-writable.service
+enable occu-extension-dirs.service
+enable occu-unit-overrides.service
+enable occu-factory-reset.service
+enable occu-fstrim.timer
+enable occu-init-addons.service
+enable occu-init-host.service
+enable occu-init-hs485d.service
+enable occu-init-rf-hardware.service
+enable occu-init-rtc.service
+enable occu-init-system.service
+enable occu-interface-clock.timer
+enable occu-ldconfig.service
+enable occu-leds.service
+enable occu-lgw-firmware-update.service
+enable occu-machine-id.service
+enable occu-machine-id-store.service
+enable occu-network.service
+enable occu-firewall.service
+enable occu-persist.service
+enable occu-radio-shadow-check.service
+enable occu-journal-sync.service
+enable occu-syslog-forward.service
+enable occu-rc-local.service
+enable occu-seedrng.service
+enable occu-clock-save.service
+enable occu-clock-save-hourly.timer
+enable occu-set-lgw-key.service
+enable occu-usb-gadget.service
+enable occu-userfs-resize.service
+enable occu-watchdog-marker.service
+enable occu-zram-swap.service
+enable qemu-guest-agent.service
+# buildroot's psplash units - the splash the boot messages are written to.
+enable psplash-start.service
+enable psplash-systemd.service
+# a login prompt on tty2 (Alt+F2) while the splash keeps tty1; buildroot's own getty setting is off
+enable getty@.service tty2
+enable rfd.service
+enable sshd.service
+# buildroot's wpa_supplicant package: its D-Bus supplicant (-u) would run on every Pi without any
+# Wi-Fi configuration. eQ3StartNetwork starts a supplicant for an interface that has one
+# (/etc/config/wpa_supplicant.conf). This file sorts before 50-wpa_supplicant.preset, so this wins.
+disable wpa_supplicant.service

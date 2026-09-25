@@ -1,0 +1,100 @@
+#!/bin/sh
+# openccu-lite addon-rc wrapper. Do not edit: this file is installed by
+# /usr/libexec/occu/lite-addon-rc over an addon's rc.d script, and the addon's own script is
+# beside it as <name>.script. Everything is passed through to that script unchanged, except
+# start, stop and restart from OUTSIDE the addon's unit: those go to systemd, so that an addon's
+# settings page pressing its own "restart" restarts addon-<name>.service instead of leaving a
+# daemon behind in lighttpd's cgroup. Inside the unit the script is called
+# as it always was.
+#
+# "Inside the unit" is decided by the own cgroup: /proc/self/cgroup names the cgroup
+# this process runs in, and inside addon-<name>.service that path ends in /addon-<name>.service.
+# It used to be INVOCATION_ID, which systemd sets for every unit it starts - including the
+# transient scope occulited runs an addon's install script in (systemd-run --scope). An update
+# script's `rc.d/<name> stop` then ran the addon's script directly instead of stopping the unit,
+# and its `start` left the new daemon in the install scope, with the unit "active" and empty.
+# The scope and the unit are independent, so stopping the unit from inside the scope cannot
+# block the installer occulited waits for.
+#
+# As root that is systemctl. As the addon's own user (confined) systemctl is not allowed;
+# the unit is reached through occulited with the addon's control token, which only permits
+# start/stop/restart of the addon's own unit (POST /api/system/v1/addonctl).
+#
+# `init` of a CONFINED addon from root outside its unit - S55InitAddons' run-parts at boot, or an
+# installer in its scope - runs nothing: the script is the addon's own code in its own directory,
+# and it runs as the addon's user inside its unit instead, as an ExecStartPre the occu-addons
+# generator writes. Confined is read off occulited's policy drop-in (User=addon-<name>). A root
+# addon's init runs as it always did.
+NAME=${0##*/}
+DIR=${0%/*}; [ "$DIR" = "$0" ] && DIR=.
+REAL="$DIR/$NAME.script"
+[ -f "$REAL" ] || { echo "$0: $REAL is missing (wrapper without its script)" >&2; exit 1; }
+CGROUP=${OCCU_ADDON_CGROUP:-/proc/self/cgroup}                   # overridable for tests
+TOKENS=${OCCU_ADDON_TOKEN_DIR:-/run/occulite/addon-tokens}       # (scripts/testcases/addon-rc-wrapper-test.sh)
+POLICIES=${OCCU_ADDON_POLICY_DIR:-/usr/local/etc/config/addon-policy}
+
+# run_script: the addon's own script, called the way run-parts called it before the wrapper existed.
+# A plain /bin/sh script is read by the shell with $0 set to its rc.d name (rc.d/<name>, this
+# wrapper's own path), not rc.d/<name>.script: scripts derive their addon directory from
+# `basename $0`, and one that found "/usr/local/addons/<name>.script" missing ran its install branch
+# with an unexpanded glob and deleted every rfd device description from the root filesystem. The
+# positional parameters and the exit status are the script's, as with exec. A symlink (the usual
+# case, pointing into the addon's directory, where `readlink -f $0` must resolve) and any other
+# interpreter are executed directly, as before.
+run_script() {
+  if [ ! -L "$REAL" ] && IFS= read -r first < "$REAL" 2>/dev/null; then
+    first=$(printf '%s' "$first" | tr -d '\r')
+    case "$first" in
+      '#!/bin/sh'|'#! /bin/sh'|'#!/bin/ash'|'#! /bin/ash')
+        exec /bin/sh -c '. "$0.script"' "$DIR/$NAME" "$@" ;;
+    esac
+  fi
+  exec "$REAL" "$@"
+}
+
+# confined: occulited's policy drop-in gives the addon its own user
+confined() {
+  grep -q '^User=addon-' "$POLICIES/$NAME.conf" 2>/dev/null
+}
+
+# in_unit: the own cgroup path ends in /addon-<name>.service (cgroup v2 has the one line
+# "0::<path>"; on v1 every controller line carries the same path, any of them will do).
+in_unit() {
+  [ -r "$CGROUP" ] || return 1
+  while IFS=: read -r _id _ctl path; do
+    case "$path" in
+      */addon-"$NAME".service|*/addon-"$NAME".service/*) return 0 ;;
+    esac
+  done < "$CGROUP"
+  return 1
+}
+
+case "${1:-}" in
+  start|stop|restart)
+    if in_unit; then run_script "$@"; fi
+    UNIT="addon-$NAME.service"
+    if [ "$(id -u)" = 0 ] && command -v systemctl >/dev/null 2>&1; then
+      exec systemctl "$1" --no-pager -- "$UNIT"
+    fi
+    TOKEN="$TOKENS/$NAME"
+    if [ -r "$TOKEN" ]; then
+      if wget -q -O - --post-data="{\"action\":\"$1\"}" --header='Content-Type: application/json' \
+           --header="Authorization: Bearer $(cat "$TOKEN")" http://127.0.0.1:8183/api/system/v1/addonctl >/dev/null 2>&1; then
+        exit 0
+      fi
+      echo "$0: occulited refused '$1' for $UNIT" >&2
+      exit 1
+    fi
+    # nothing to reach the unit with (an image without occulited's tokens): as it always was
+    run_script "$@"
+    ;;
+  init)
+    if [ "$(id -u)" = 0 ] && ! in_unit && confined; then
+      exit 0    # its unit runs init as the addon's user
+    fi
+    run_script "$@"
+    ;;
+  *)
+    run_script "$@"
+    ;;
+esac

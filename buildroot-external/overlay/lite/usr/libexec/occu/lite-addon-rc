@@ -1,0 +1,73 @@
+#!/bin/sh
+# openccu-lite: put the addon-rc wrapper in front of every addon's rc.d script, or
+# take it away again.
+#
+#   lite-addon-rc adopt [name ...]    every script in rc.d (or the named ones) becomes
+#                                     <name>.script with the wrapper as <name>; a wrapper that is
+#                                     the image's current one is left alone, an older copy is
+#                                     replaced by it; a real script that replaced the wrapper (an
+#                                     addon update copied its own over it) is adopted again - the
+#                                     stale .script goes
+#   lite-addon-rc release <name>      the addon's script back in place, no wrapper
+#
+# Runs from occu-addons.service before the daemon-reload that generates the units, and from
+# occulited after an addon install. The generator skips *.script and runs rc.d/<name> - the wrapper,
+# which runs <name>.script inside the addon's unit.
+set -u
+RCD=${OCCU_ADDON_RCD:-/usr/local/etc/config/rc.d}          # overridable for tests
+WRAPPER=${OCCU_ADDON_RC_WRAPPER:-/usr/libexec/occu/addon-rc-wrapper}
+MARK='openccu-lite addon-rc wrapper'
+
+# busybox may be built without cmp; sha256sum is there on every product
+same_file() {
+  if command -v cmp >/dev/null 2>&1; then
+    cmp -s "$1" "$2"
+  else
+    [ "$(sha256sum < "$1")" = "$(sha256sum < "$2")" ]
+  fi
+}
+
+adopt_one() {
+  f="$RCD/$1"
+  [ -f "$f" ] && [ -x "$f" ] || return 0
+  case "$1" in .*|*.script|*[!A-Za-z0-9_.-]*) return 0 ;; esac
+  if grep -q "$MARK" "$f" 2>/dev/null; then
+    [ -f "$f.script" ] || echo "addon-rc: $1 is a wrapper without its script" >&2
+    # The copy in rc.d lives on the userfs and outlives the image that put it there, so a wrapper
+    # changed by a later image stays the old one until it is replaced here (the copies of
+    # 2026-09-09 still decided by INVOCATION_ID, which an install scope and a CGI of lighttpd both
+    # carry). Written beside it and renamed, so a caller running the wrapper right now keeps a
+    # whole file.
+    if ! same_file "$WRAPPER" "$f"; then
+      if cp "$WRAPPER" "$f.new" && chmod 755 "$f.new" && mv -f "$f.new" "$f"; then
+        echo "addon-rc: $1 wrapper refreshed"
+      else
+        rm -f "$f.new"; echo "addon-rc: could not refresh the wrapper of $1" >&2; return 1
+      fi
+    fi
+    return 0
+  fi
+  # a real script: the addon's own (first time), or a fresh copy from an update over the wrapper
+  mv -f "$f" "$f.script" && cp "$WRAPPER" "$f" && chmod 755 "$f" || { echo "addon-rc: could not adopt $1" >&2; return 1; }
+  echo "addon-rc: $1 -> $1.script, wrapper in place"
+}
+
+case "${1:-}" in
+  adopt)
+    shift
+    [ -d "$RCD" ] || exit 0
+    if [ $# -gt 0 ]; then
+      for n in "$@"; do adopt_one "$n"; done
+    else
+      for f in "$RCD"/*; do [ -f "$f" ] && adopt_one "${f##*/}"; done
+    fi
+    ;;
+  release)
+    n=${2:?name}; f="$RCD/$n"
+    if [ -f "$f.script" ] && grep -q "$MARK" "$f" 2>/dev/null; then
+      mv -f "$f.script" "$f" && echo "addon-rc: $n released"
+    fi
+    ;;
+  *) echo "usage: lite-addon-rc adopt [name ...] | release name" >&2; exit 2 ;;
+esac
+exit 0

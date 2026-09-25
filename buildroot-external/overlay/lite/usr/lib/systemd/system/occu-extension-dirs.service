@@ -1,0 +1,24 @@
+# openccu-lite: writable extension directories on the read-only system partition - today
+# /firmware/rftypes, where an addon links the device descriptions of devices the image does not
+# know. An overlay on the userfs (or, on a kernel without overlayfs, a copy on the userfs bound over
+# the directory), mounted before rfd reads the directory and before the addons write to it. No addon
+# unit has CAP_SYS_ADMIN, so an addon script's `mount -o remount,rw /` is refused - and not needed.
+# The image's own files are back at every boot whatever an addon removed; occulited's Interfaces
+# page resets the directory to the image (lite-extension-dirs reset).
+[Unit]
+Description=Writable extension directories for addons
+# after the userfs is final (resize, factory reset, restore) and /var exists
+After=occu-init-system.service
+RequiresMountsFor=/usr/local
+Before=rfd.service occu-addons.service
+ConditionPathExists=/firmware/rftypes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-extension-dirs start
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

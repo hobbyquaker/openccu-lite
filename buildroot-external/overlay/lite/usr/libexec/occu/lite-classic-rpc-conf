@@ -1,0 +1,66 @@
+#!/bin/sh
+# openccu-lite (task 143, D-95): the classic CCU RPC sockets, written by S50lighttpd at every
+# start and reload into the file proxy.conf includes after its :443 blocks.
+#
+# Upstream's webui_remoteapi.conf is not used on lite: it carries the ReGa sockets (1999, 8181
+# and their TLS twins), which never come to lite. This writes only what occulited's System ->
+# Remote access page switched on - userfs markers, so a backup carries them:
+#   /etc/config/classicRpcPlain        2001 BidCos-RF, 2010 HmIP-RF, 9292 VirtualDevices
+#   /etc/config/classicRpcTLS          42001, 42010, 49292
+#   2000 / 42000 BidCos-Wired only where hs485d runs (/run/occulite/radio/hs485d.enabled)
+#   /etc/config/classic-rpc.htpasswd   the pair: basic auth for every client but the loopback,
+#                                      realm "theRealm" as on a CCU
+# Nothing when both switches are off. Until /var/status/startupFinished exists every enabled
+# socket answers 503, as upstream's not-ready variant does - decided per request by
+# classic-rpc-notready.lua, so the output does not depend on it and the end of the boot needs no
+# lighttpd reload (the reload's graceful restart cut every long-lived connection). The Lua list
+# keeps the session-header strip the global setting runs everywhere else.
+#
+# Usage: lite-classic-rpc-conf [output]    (default /var/etc/lighttpd_webui_remoteapi.conf)
+# LITE_ROOT prefixes every path it reads (the test case runs it on a fake tree).
+R=${LITE_ROOT:-}
+OUT=${1:-$R/var/etc/lighttpd_webui_remoteapi.conf}
+CONF=$R/etc/config
+HTPASSWD=/etc/config/classic-rpc.htpasswd
+
+plain=""
+tls=""
+[ -f "$CONF/classicRpcPlain" ] && plain="2001:32001 2010:32010 9292:39292"
+[ -f "$CONF/classicRpcTLS" ] && tls="42001:32001 42010:32010 49292:39292"
+if [ -f "$R/run/occulite/radio/hs485d.enabled" ]; then
+  [ -n "$plain" ] && plain="$plain 2000:32000"
+  [ -n "$tls" ] && tls="$tls 42000:32000"
+fi
+auth=""
+if [ -s "$R$HTPASSWD" ]; then
+  auth=1
+  # B-120: lighttpd runs as www-data and reads the pair through its group (occulited writes it so
+  # too; this repairs a pair written before the switch)
+  if grep -q '^www-data:' "$R/etc/group" 2>/dev/null; then
+    chgrp www-data "$R$HTPASSWD" 2>/dev/null
+    chmod 0640 "$R$HTPASSWD" 2>/dev/null
+  fi
+fi
+block() { # <port> <backend port> <ssl.engine>
+  for sock in ":$1" "[::]:$1"; do
+    echo "else \$SERVER[\"socket\"] == \"$sock\" {"
+    echo "  ssl.engine = \"$3\""
+    if [ -n "$auth" ]; then
+      echo "  \$HTTP[\"remoteip\"] !~ \"^(127\\.0\\.0\\.1|::ffff:127\\.0\\.0\\.1|::1)\$\" {"
+      echo "    auth.backend = \"htpasswd\""
+      echo "    auth.backend.htpasswd.userfile = \"$HTPASSWD\""
+      echo "    auth.cache = ( \"max-age\" => \"600\" )"
+      echo "    auth.require = ( \"\" => ( \"method\" => \"basic\", \"realm\" => \"theRealm\", \"require\" => \"valid-user\" ) )"
+      echo "  }"
+    fi
+    echo "  magnet.attract-raw-url-to = ( \"/etc/lighttpd/occulite-session-header.lua\", \"/etc/lighttpd/classic-rpc-notready.lua\" )"
+    echo "  proxy.server = ( \"\" => ( \"localhost\" => ( \"host\" => \"127.0.0.1\", \"port\" => $2 ) ) )"
+    echo "}"
+  done
+}
+
+{
+  echo "# openccu-lite: classic RPC, written by lite-classic-rpc-conf - do not edit"
+  for s in $plain; do block "${s%%:*}" "${s##*:}" disable; done
+  for s in $tls; do block "${s%%:*}" "${s##*:}" enable; done
+} >"$OUT.tmp" && mv -f "$OUT.tmp" "$OUT"

@@ -1,0 +1,51 @@
+#!/bin/sh
+# openccu-lite: the unclean-shutdown marker half of /etc/init.d/S00watchdog.
+#
+# The script did two unrelated things in one "start": feed the hardware watchdog, and compare
+# /usr/local/tmp/.watchdog against the last shutdown to set /var/status/uncleanShutdown. The
+# daemon half is PID 1's now (RuntimeWatchdogSec= in
+# /etc/systemd/system.conf.d/lite-watchdog.conf); this is the other half, run by
+# occu-watchdog-marker.service - it has to happen on boxes without a /dev/watchdog too.
+#
+# The flag in /run (a tmpfs, so it is per boot) keeps a restart of the unit from re-evaluating
+# the marker: without it, the second start of the day would see its own marker and report an
+# unclean shutdown that never happened.
+#
+# The marker is to get back the consumer it lost with monit: occulited is to read
+# /var/status/uncleanShutdown and show it on the Status page. That half is **not written yet**
+# (openccu-lite BUGS.md, the occulited follow-ups); until it is, the file is the whole
+# interface. The paths and their semantics are in docs/systemd-scope.md, "The unclean-shutdown
+# marker".
+set -u
+
+MARKER=/usr/local/tmp/.watchdog
+FLAG=/run/occu-watchdog-marker.done
+
+case "${1-}" in
+  set)
+    [ -e "${FLAG}" ] && exit 0
+    : >"${FLAG}"
+    if [ -f "${MARKER}" ]; then
+      if [ ! -d /var/status ]; then
+        mkdir -p /var/status
+        chown root:status /var/status
+        chmod 2775 /var/status
+      fi
+      touch /var/status/uncleanShutdown
+      echo "watchdog: previous shutdown was unclean"
+    else
+      mkdir -p /usr/local/tmp
+      touch "${MARKER}"
+      sync
+    fi
+    ;;
+  clear)
+    rm -f "${MARKER}"
+    sync
+    ;;
+  *)
+    echo "usage: ${0##*/} {set|clear}" >&2
+    exit 1
+    ;;
+esac
+exit 0

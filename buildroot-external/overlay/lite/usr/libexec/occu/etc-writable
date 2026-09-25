@@ -1,0 +1,35 @@
+#!/bin/sh
+# openccu-lite: make /etc/passwd and /etc/group writable.
+#
+# Both live on the read-only rootfs - package/openccu-base links only /etc/shadow onto the userfs - so
+# adduser and addgroup could not run at all, and PUT /addons/<id>/policy {"mode":"confined"}
+# answered 422 "addgroup: /etc/group: Read-only file system". A confined addon needs its own user,
+# so the two files are copied into /run and bind-mounted back over themselves.
+#
+# Why /run and not a symlink onto the userfs, the other option considered:
+#
+#   /run is tmpfs, so the copy is rebuilt from the rootfs at every boot. The base therefore always
+#   comes from the NEW rootfs, and a firmware update that adds a system account is picked up rather
+#   than frozen at the moment of the first boot - which matters, because the occulite user itself
+#   was added that way. The addon users are put back afterwards by addon-users, from the policy
+#   files on the userfs, which carry the uid so ownership on the userfs stays right.
+#
+# Nothing here is addon-specific: it makes the files writable and stops.
+set -eu
+
+RUN=/run/openccu-lite
+mkdir -p "${RUN}"
+
+for f in passwd group; do
+    # Already bind-mounted - a restart of this unit, or a hand-run - so leave the live file alone.
+    # Rebuilding it from the rootfs here would drop every user created since boot.
+    if grep -q " /etc/${f} " /proc/self/mountinfo 2>/dev/null; then
+        echo "etc-writable: /etc/${f} is already writable"
+        continue
+    fi
+    cp -a "/etc/${f}" "${RUN}/${f}"
+    mount -o bind "${RUN}/${f}" "/etc/${f}"
+    echo "etc-writable: /etc/${f} -> ${RUN}/${f}"
+done
+
+exit 0

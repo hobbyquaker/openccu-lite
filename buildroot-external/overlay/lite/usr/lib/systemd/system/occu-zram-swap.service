@@ -1,0 +1,20 @@
+# openccu-lite: replaces /etc/init.d/S01InitZRAMSwap. The script runs unchanged; the
+# cgroup keeps whatever it starts (KillMode=control-group), so stop and status are systemd's.
+[Unit]
+Description=ZRAM swap
+After=occu-init-host.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S01InitZRAMSwap
+ExecStart=/etc/init.d/S01InitZRAMSwap.script start
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S01InitZRAMSwap
+ExecStop=/etc/init.d/S01InitZRAMSwap.script stop
+KillMode=control-group
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

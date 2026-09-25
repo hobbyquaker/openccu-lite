@@ -1,0 +1,44 @@
+# openccu-lite: replaces /etc/init.d/S50sshd and overrides buildroot's sshd.service.
+#
+# The script's init action does what its start() did before the daemon - the host keys in
+# /usr/local/etc, the ssh userdir, the key permissions, and the compromised-default-password
+# wipe - and exits 1 when sshd must not run: SSH is off, or the wipe just ran and removed the
+# marker. It runs as ExecCondition=, so that case is a skip, not a failure. The daemon is then
+# started by this unit directly, in the foreground, with the script's own binary, so that systemd
+# supervises the daemon and not a script that forked it: systemd's main process is sshd, its death deactivates the unit and Restart= brings it
+# back with the preparation in front of it. sshd still writes /run/sshd.pid on its own, for
+# anything that reads the pid file as it did under busybox init.
+#
+# The path condition is the script's own sshEnabled check, so a box without SSH shows the unit
+# as skipped rather than active. KillMode=control-group takes the sessions with a stop or
+# restart, as the forking unit before this one did (no logind on this image).
+#
+# The order is what the preparation reads: the userfs as S06 leaves it - after the restore at boot,
+# which can bring back sshEnabled, the shadow file and the host keys - and the network. The wired
+# interface's preparation (S49hs485d), which the old numbering put in front of S50, is none of it.
+[Unit]
+Description=SSH server
+After=occu-init-system.service network.target
+ConditionPathExists=/etc/config/sshEnabled
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+ExecCondition=/etc/init.d/S50sshd.script init
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S50sshd
+ExecStart=/usr/sbin/sshd -D
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S50sshd
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=control-group
+TimeoutStartSec=180
+TimeoutStopSec=60
+Restart=always
+RestartSec=2
+RestartSteps=8
+RestartMaxDelaySec=300
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,17 @@
+# openccu-lite: a radio stick plugged in or pulled while the box runs (an HmIP-RFUSB, an
+# HmIP-RFUSB-TK, an HB-RF-USB, an HM-CFG-USB-2). Started by the udev rule
+# 61-openccu-lite-radio-hotplug.rules; `occulited radio hotplug` lists the nodes again, probes only
+# the new ones (a node a daemon holds keeps the result of the boot's detection), makes the plan and
+# restarts only the interface daemons whose plan changed. A stick nothing uses changes nothing but
+# the results under /run/occulite/radio. It waits for the boot's detection, and stands aside while
+# a coprocessor flash or a connection change of occulited runs (both re-run the detection).
+[Unit]
+Description=Radio stick hotplug
+After=occu-init-rf-hardware.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/occulited radio hotplug
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal

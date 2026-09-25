@@ -1,0 +1,29 @@
+# openccu-lite: replaces /etc/init.d/S01USBGadgetMode. The script runs unchanged; the
+# cgroup keeps whatever it starts (KillMode=control-group), so stop and status are systemd's.
+#
+# Gadget mode stays, on the ARM products only. dwc2 and g_ether are the Pi's
+# OTG controller and its USB-Ethernet gadget - they do not exist on x86, where the script found
+# no flag file (or found one and failed two modprobes) and the unit ended "active (exited)"
+# having done nothing. ConditionVirtualization=no keeps it off the x86_64-ova product, and the
+# flag file the script itself checks is now the unit's condition as well, so a box that has not
+# switched gadget mode on does not spawn a shell for it and "systemctl status" says why.
+[Unit]
+Description=USB gadget mode
+After=occu-init-host.service
+ConditionVirtualization=no
+ConditionPathExists=/etc/config/usbGadgetModeEnabled
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S01USBGadgetMode
+ExecStart=/etc/init.d/S01USBGadgetMode.script start
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S01USBGadgetMode
+ExecStop=/etc/init.d/S01USBGadgetMode.script stop
+KillMode=control-group
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+# openccu-lite: the radio stack's self-check. Once the interface daemons are up (or
+# skipped), what the detection rendered is compared with the box: /var/hm_mode and the RF files,
+# the daemons' files under /var/etc and the userfs, InterfacesList.xml, which units run and with
+# which command line. Every difference is one journal line ("shadow: DIFFERENCE ..."), the report
+# is /run/occulite/radio/shadow.json, and the unit fails when there is a difference so that it
+# shows on the Services page. In the shadow phase it compared the plan with upstream's chain; now
+# it compares the run step with itself and the units - a difference is a bug of the run step or of
+# a unit (a daemon that did not start, or was started with another command line).
+#
+# Switched on by the marker /usr/local/etc/occulite/radio-shadow (the lab boxes); without it the
+# unit is skipped.
+[Unit]
+Description=Radio plan check (shadow)
+After=occu-init-rf-hardware.service occu-init-hs485d.service multimacd.service rfd.service hmipserver.service hs485d.service hmlangw.service
+ConditionPathExists=/usr/local/etc/occulite/radio-shadow
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/occulited radio check
+TimeoutStartSec=60
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

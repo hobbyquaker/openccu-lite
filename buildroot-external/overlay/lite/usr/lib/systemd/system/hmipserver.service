@@ -1,0 +1,113 @@
+# openccu-lite: replaces /etc/init.d/S62HMServer. The JVM runs confined as its own user; the
+# root work around it is `occulited radio prep|ready|stopped hmipserver`.
+#
+# The condition step (as root) runs the script's init action - /var/etc/crRFD.conf and
+# HMServer.conf, the log4j2 configuration, the diagram data copied from the USB stick - then
+# moves the diagram database into the daemon's own /var/hmipserver (the unit's /tmp is private
+# and the copy at start and stop runs outside it), computes the JVM's options as the script's
+# start action did (the heap from the box's memory, the reflective access Netty needs, the
+# adapter's node), makes the files the server writes the server's (crRFD, eshlight, the
+# callback registrations) and writes the command line into the environment file ExecStart
+# reads. Ready when the server touches /var/status/HMServerStarted, which the script waited up
+# to 300 s for, hence the start timeout. The stop step copies the diagram data back to the stick.
+#
+# Confined: user hmipserver, no capabilities, the file system read-only except what it writes,
+# /dev/mmd_hmip through the mmd-hmip group (the raw UART through raw-uart where the server uses
+# the module directly), /run/lock through the lock group for the serial library's lock file,
+# IPv4 and IPv6 with no address filter: the LAN routing to HmIP access points and the key
+# server need the LAN. No MemoryDenyWriteExecute: the JVM's JIT writes code. The address-family
+# and realtime lines take effect once systemd is built with seccomp.
+#
+# Logging: the image's log4j2 template writes to the JVM's stdout, every line prefixed with its
+# syslog level (<3> error, <4> warning, <6> info, <7> debug), and the JVM is this unit's main
+# process, so the messages carry the identifier hmipserver and their real priorities, a remote
+# syslog server gets them through occu-syslog-forward like every other message, and no log file
+# is written. Not to the console: at info or debug the server is chatty, and the console is the
+# boot screen.
+#
+# Restart tracking: Type=exec, so the JVM's death deactivates the unit and Restart= brings it
+# back. A missing device node fails the condition step, which fails the unit and is then
+# retried with the backoff below.
+[Unit]
+Description=HmIP, HmIPW and VirtualDevices Interface
+# /dev/mmd_hmip comes from multimacd. rfd is not needed: the two start side by side. The server
+# answers every device that asks for the time with the system clock: a trusted clock first.
+After=multimacd.service occu-clock-valid.service
+Wants=occu-clock-valid.service
+ConditionPathExists=/run/occulite/radio/hmipserver.enabled
+StartLimitIntervalSec=0
+
+[Service]
+# A start that failed on a known fatal error (the key server rejecting an adapter exchange) is not
+# retried: the ready step leaves this marker with the reason, the pages show it, and the next run of
+# the radio stack (a re-detection, a hotplug, a connection change) removes it. ExecCondition= and not
+# ConditionPathExists=: systemd checks unit conditions at a start, not at Restart='s restarts, and
+# an ExecCondition= "no" is a skip - no failure, and no further restart.
+ExecCondition=/bin/sh -c '! test -e /run/occulite/radio/hmipserver.fatal'
+Type=exec
+# the JVM ends with 143 on SIGTERM: a stop, not a failure
+SuccessExitStatus=143
+ExecStartPre=+/usr/bin/occulited radio prep hmipserver
+ExecStartPre=-+/usr/libexec/occu/lite-psplash boot S62HMServer
+EnvironmentFile=-/run/occulite/radio/hmipserver.env
+Environment=JAVA_HOME=/opt/java/
+Environment=HMIP_CLASSPATH=/opt/HMServer/HMIPServer.jar:/opt/HMServer/coupling/ESHBridge.jar
+Environment=HMIP_CLASS=de.eq3.ccu.server.ip.HMIPServer
+Environment="HMIP_ARGS=/var/etc/crRFD.conf /var/etc/HMServer.conf"
+# hmipserver binds its HTTP port (HMServer.conf's hmServerPort, 39292: VirtualDevices and the group
+# pages) to every interface and has no setting for it. The shim turns that bind into the loopback,
+# as Legacy.BindAddress does for 32010; `occulited radio ready` checks that it took.
+Environment=LD_PRELOAD=/usr/lib/openccu-lite/libbindlo.so
+Environment=BINDLO_PORTS=39292
+ExecStart=/opt/java/bin/java $HMIP_JAVA_OPTS -Dlog4j.configurationFile=file:///var/etc/log4j2.xml -Dfile.encoding=ISO-8859-1 -cp ${HMIP_CLASSPATH} ${HMIP_CLASS} $HMIP_ARGS
+ExecStartPost=+/usr/bin/occulited radio ready hmipserver
+ExecStartPost=-+/usr/libexec/occu/lite-psplash done S62HMServer
+ExecStopPost=-+/usr/bin/occulited radio stopped hmipserver
+KillMode=control-group
+TimeoutStartSec=420
+TimeoutStopSec=120
+Restart=always
+RestartSec=2
+RestartSteps=8
+RestartMaxDelaySec=300
+UMask=0002
+SyslogIdentifier=hmipserver
+StandardOutput=journal
+StandardError=journal
+OOMScoreAdjust=-900
+
+User=hmipserver
+Group=hmipserver
+SupplementaryGroups=mmd-hmip raw-uart status lock
+CapabilityBoundingSet=
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/status /var/hmipserver /run/lock
+# userfs paths are optional ("-"): a directory a restored backup or a factory reset does not have
+# is made by the prep step, which cannot run while a missing path fails the namespace setup
+ReadWritePaths=-/usr/local/etc/config/crRFD -/usr/local/etc/config/eshlight
+ReadWritePaths=-/usr/local/etc/config/hmip_address.conf -/usr/local/etc/config/hmip_networkkey.conf
+# the heating group store: the prep step creates it, the server writes it in place
+ReadWritePaths=-/usr/local/etc/config/groups.gson
+ReadWritePaths=-/var/LegacyService.handlers -/var/HMSERVER.handlers
+# /var/etc: the prep step renders log4j2.xml there from the current /etc/config/syslog before the
+# server starts, so a level set on the Log page needs a restart, not a reboot. It opens
+# nothing to the server: /var/etc is root:root 0775 and hmipserver is not root.
+ReadWritePaths=/var/etc
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

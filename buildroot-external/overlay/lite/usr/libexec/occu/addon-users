@@ -1,0 +1,32 @@
+#!/bin/sh
+# openccu-lite: recreate the addon users from /usr/local/etc/config/addon-policy at boot.
+# /etc/passwd lives on the rootfs and is replaced by every firmware update; the policy files on
+# the userfs carry the uid, so the ownership of the addon's files stays right. occulited writes
+# the files and creates the user at once; this runs before the generator's daemon-reload so
+# every User= in a drop-in resolves. Same busybox adduser/addgroup calls as occulited's.
+ROOT=${OCCU_ADDONS_ROOT:-}
+DIR="${ROOT}/usr/local/etc/config/addon-policy"
+[ -d "${DIR}" ] || exit 0
+for conf in "${DIR}"/*.conf; do
+  [ -f "${conf}" ] || continue
+  grep -q '^\[Service\]' "${conf}" || continue
+  user=$(sed -n 's/^User=//p' "${conf}" | head -1)
+  uid=$(sed -n 's/^# mode=confined uid=\([0-9]*\).*/\1/p' "${conf}" | head -1)
+  name=${conf##*/}; name=${name%.conf}
+  case "${user}" in addon-*) ;; *) continue ;; esac
+  [ -n "${uid}" ] || continue
+  # busybox addgroup/adduser write /etc/group+ and rename, which the read-only rootfs
+  # refuses even though the two files themselves are bind-mounted writable (occu-etc-writable).
+  # Append in place instead - the same lines occulited's helper writes (its "addonuser" op).
+  for f in "${ROOT}/etc/group" "${ROOT}/etc/passwd"; do
+    [ -f "${f}" ] && [ -n "$(tail -c1 "${f}")" ] && echo >> "${f}"
+  done
+  if ! grep -q "^${user}:" "${ROOT}/etc/group"; then
+    echo "${user}:x:${uid}:" >> "${ROOT}/etc/group"
+  fi
+  if ! grep -q "^${user}:" "${ROOT}/etc/passwd"; then
+    echo "${user}:x:${uid}:${uid}::/usr/local/addons/${name}:/bin/false" >> "${ROOT}/etc/passwd"
+    echo "addon-users: recreated ${user} (${uid}) for ${name}"
+  fi
+done
+exit 0

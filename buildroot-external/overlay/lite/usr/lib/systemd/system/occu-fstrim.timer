@@ -1,0 +1,19 @@
+# openccu-lite: replaces the crontab.root line
+#   0 4 * * 6 [ ! -e /etc/config/NoFSTRIM ] && /bin/nice /sbin/fstrim ... | logger -t fstrim
+# Timers are wanted by multi-user.target and carry no default dependencies: the implicit
+# Before=timers.target (part of basic.target) would form a cycle with After=occu-persist.service,
+# which puts the stamp directory on the userfs and is itself after basic.target.
+[Unit]
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+Description=Filesystem trim (weekly)
+After=occu-persist.service
+
+[Timer]
+OnCalendar=Sat *-*-* 04:00:00
+RandomizedDelaySec=1h
+Persistent=true
+
+[Install]
+WantedBy=multi-user.target

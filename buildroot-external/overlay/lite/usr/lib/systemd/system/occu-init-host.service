@@ -1,0 +1,20 @@
+# openccu-lite: replaces /etc/init.d/S01InitHost. The script runs unchanged; the
+# cgroup keeps whatever it starts (KillMode=control-group), so stop and status are systemd's.
+[Unit]
+Description=Host initialisation
+After=occu-watchdog-marker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S01InitHost
+ExecStart=/etc/init.d/S01InitHost.script start
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S01InitHost
+ExecStop=/etc/init.d/S01InitHost.script stop
+KillMode=control-group
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,29 @@
+# openccu-lite: the wired interface's initialisation. Replaces the daemon-start half of upstream's
+# S49hs485d: the loader's init pass (-ds -dd) over the configuration the radio detection rendered
+# into /var/etc/hs485d.conf, as root, before hs485d.service starts the daemon (-dw) confined.
+# Only when the plan runs hs485d (a wired interface in hs485d.conf): the marker is the condition.
+[Unit]
+Description=Wired interface configuration
+After=occu-init-rf-hardware.service
+ConditionPathExists=/run/occulite/radio/hs485d.enabled
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=-/run/occulite/radio/hs485d.env
+Environment=LOGLEVEL_HS485D=5
+# the init pass reads /var/etc/hs485d.conf, which the boot's radio run renders - and does
+# not render on a system that had no wired interface when it booted. prep writes it from the
+# current /etc/config/hs485d.conf, so a gateway added while the system runs needs no reboot.
+ExecStartPre=/usr/bin/occulited radio prep hs485d
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S49hs485d
+ExecStart=/bin/hs485dLoader -l ${LOGLEVEL_HS485D} -ds -dd /var/etc/hs485d.conf
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S49hs485d
+KillMode=control-group
+UMask=0002
+OOMScoreAdjust=-900
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,44 @@
+# openccu-lite: the radio stack's detection, plan and render. Replaces upstream's
+# S47InitRFHardware (the detection), S49hs485d, S60multimacd, S61rfd and S62HMServer (the
+# configuration each script rendered before it started its daemon) and S48UpdateRFHardware (the
+# firmware compare; occulited's Interfaces page shows and flashes newer firmware).
+#
+# `occulited radio run` enumerates the radio nodes, probes each module under a limit (the GPIO
+# header's node for at most 6 s first; when nothing was found, the other nodes again and then the
+# header's node without a limit), decides which daemon runs on which connection (the
+# plan: upstream's own decisions under `auto`, from rfd.conf, hs485d.conf, hmip_user.conf and the
+# HMLGW marker), and writes the box: /var/hm_mode (merged, the host and LED keys kept), the RF
+# files, /var/etc/{multimacd,rfd,crRFD,HMServer,hs485d}.conf and log4j2.xml, /etc/config/rfd.conf
+# and InterfacesList.xml, the environment files and the activation markers under
+# /run/occulite/radio (<daemon>.enabled: the daemon units condition on them, so a daemon the plan
+# does not need is inactive, not failed). It refuses to run while an interface daemon holds the
+# module (occulited stops the stack before a re-detection).
+#
+# Not after the network: only a radio module on the LAN (HB-RF-ETH, an address in
+# /etc/config/hb_rf_eth) needs it, and the detection waits for a route to that address itself; the
+# board-serial fallback reads eth0's MAC address. Not after chrony either: detecting the module
+# needs no time. Not after the web server: its stop waits for this unit instead (lighttpd.service).
+# After S06 and S01 by name: they write /var/hm_mode's HM_HOST and HM_MODE first.
+#
+# The stop sends the coprocessors into the bootloader (up to 120 s each) only when a firmware
+# update is staged (`occulited radio stop` decides); hence TimeoutStopSec=300 stays.
+[Unit]
+Description=Radio hardware detection
+After=occu-init-system.service occu-init-host.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S47InitRFHardware
+ExecStart=/usr/bin/occulited radio run
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S47InitRFHardware
+ExecStop=/usr/bin/occulited radio stop
+KillMode=control-group
+UMask=0022
+TimeoutStartSec=600
+StandardOutput=journal+console
+StandardError=journal+console
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target

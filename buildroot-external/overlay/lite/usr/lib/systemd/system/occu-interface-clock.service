@@ -1,0 +1,28 @@
+# openccu-lite: the job behind occu-interface-clock.timer.
+#
+# Unconditional, on every product (maintainer, 2026-09-06). The review
+# proposed gating this on a configured LAN gateway like the two S58/S59 units; the maintainer
+# reversed that. /bin/SetInterfaceClock is a closed eQ-3 binary from the RFD package and nobody
+# has watched it on a live box: rfd may well pass the time to the built-in radio module as well
+# as to a LAN gateway. One XML-RPC call four times a day costs nothing and rfd decides for
+# itself when there is nothing to update, so the condition would only risk a class of bug that
+# shows up as wrong timestamps days later. The only condition kept is upstream's own: the
+# crontab line does not run when the box is itself a LAN gateway.
+#
+# SetInterfaceClock talks to rfd alone (127.0.0.1:32001); hmipserver answers its devices' time
+# requests itself. So the job runs only while rfd is active: on a box without BidCos (an HmIP-only
+# stick, HmIP straight on the module) or with rfd down, the run is skipped - an ExecCondition= that
+# fails is a skip, not a failed unit that leaves the system degraded. rfd's plan marker is not the
+# condition: it says rfd is planned, not that it runs.
+[Unit]
+Description=Interface clock
+# The timer can fire during boot: a board without a real-time clock starts at an old date, the
+# first time step jumps past one of the four marks, and the job then ran before rfd and
+# hmipserver listened ("write error (error 111)", a failed unit at every such boot). Ordered after
+# the interface daemons, a job started in the same boot waits for them.
+After=rfd.service hmipserver.service hs485d.service
+
+[Service]
+Type=oneshot
+ExecCondition=/usr/bin/systemctl is-active --quiet rfd.service
+ExecStart=/bin/SetInterfaceClock

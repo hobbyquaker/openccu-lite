@@ -1,0 +1,26 @@
+# openccu-lite: replaces /etc/init.d/S59SetLGWKey and /bin/setlgwkey.sh, which are not in the
+# image: occulited's `radio lgw-keys` sends each queued /etc/config/<serial>.keychange to its
+# gateway (eq3configcmd setlgwkey) and removes the file when that worked. It reads the file by its
+# keys: the script's `grep KEY` also took the CURKEY= line, so the key it passed was two lines.
+[Unit]
+Description=LAN gateway key change
+After=occu-lgw-firmware-update.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Only with a LAN gateway in rfd.conf or hs485d.conf: a key change is applied to a gateway named
+# there. The condition skips the unit (not a failure) and says so in the journal.
+ExecCondition=/usr/libexec/occu/lite-lgw-configured occu-set-lgw-key
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S59SetLGWKey
+ExecStart=/usr/bin/occulited radio lgw-keys
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S59SetLGWKey
+KillMode=control-group
+# at most 120 s per queued key change
+TimeoutStartSec=600
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,21 @@
+# openccu-lite: the radio device nodes carry resource groups, so that the interface daemons,
+# which run as users of their own, can open exactly the node each of them needs:
+#
+#   raw-uart    the radio module's raw UART (RPI-RF-MOD, HM-MOD-RPI-PCB, HmIP-RFUSB, HB-RF-USB,
+#               HB-RF-ETH): multimacd, or hmipserver where it uses the module directly
+#   eq3loop     the multiplexer's master device: multimacd
+#   mmd-bidcos  the multiplexer's BidCos-RF endpoint: rfd (and hmlangw in LAN-gateway mode)
+#   mmd-hmip    the multiplexer's HmIP endpoint: hmipserver
+#
+# The mmd_* nodes appear when multimacd creates them, so a rule and not a static permission;
+# multimacd.service also sets the groups itself once the nodes are there, and the prep helper
+# does the same for the raw UART before a daemon starts - the rule is what covers a stick that
+# is plugged in or re-enumerates while the stack runs. An HM-CFG-USB-2 is opened by rfd through
+# libusb: its USB device node gets rfd's endpoint group - and so does its bootloader (1b1f:c010),
+# which the Interfaces page's firmware flash (flash-hmcfgusb, run in that group) switches it to.
+SUBSYSTEM=="raw-uart", GROUP="raw-uart", MODE="0660"
+SUBSYSTEM=="eq3loop", KERNEL=="eq3loop", GROUP="eq3loop", MODE="0660"
+SUBSYSTEM=="eq3loop", KERNEL=="mmd_bidcos", GROUP="mmd-bidcos", MODE="0660"
+SUBSYSTEM=="eq3loop", KERNEL=="mmd_hmip", GROUP="mmd-hmip", MODE="0660"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1b1f", ATTR{idProduct}=="c00f", GROUP="mmd-bidcos", MODE="0660"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1b1f", ATTR{idProduct}=="c010", GROUP="mmd-bidcos", MODE="0660"

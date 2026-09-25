@@ -1,0 +1,14 @@
+# openccu-lite: replaces S11qemu-guest-agent (package/qemu-guest-agent installs
+# that script for busybox init only). The agent runs in the foreground.
+[Unit]
+Description=QEMU guest agent
+ConditionPathExists=/dev/virtio-ports/org.qemu.guest_agent.0
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qemu-ga --fsfreeze-hook -m virtio-serial -p /dev/virtio-ports/org.qemu.guest_agent.0
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

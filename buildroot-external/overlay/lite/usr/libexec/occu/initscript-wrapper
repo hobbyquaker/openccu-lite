@@ -1,0 +1,90 @@
+#!/bin/sh
+# openccu-lite: /etc/init.d/<name> on the systemd products.
+#
+# board/lite/post-build-systemd.sh renames every init script named in
+# /usr/lib/systemd/openccu-lite-initscripts to /etc/init.d/<name>.script and symlinks the
+# original path here. Addons and people do call these scripts by hand - RedMatic's uninstall
+# runs "/etc/init.d/S50lighttpd restart" after removing its lighttpd config - and under systemd
+# that started a second daemon outside the unit's cgroup while the unit stayed "active", which
+# is how lighttpd and sshd ended up dead on a box that was up. So:
+#
+#   start|stop|restart|reload   ->  systemctl <action> <unit>
+#   info|status|anything else   ->  the real script, unchanged
+#
+# The units' Exec lines call /etc/init.d/<name>.script directly, so this is never in the way of
+# systemd itself. The INVOCATION_ID check below is the belt to that suspenders: if we are running
+# from inside the very unit that owns this script (someone added an Exec line pointing at the
+# wrapper), run the script instead of asking systemd to restart the unit we are in. Being inside
+# *another* unit - an addon's unit, occulited's helper, rc.local - is exactly the case that has
+# to go through systemctl.
+#
+# --no-block when called from inside a unit: a blocking "systemctl restart" from a script that
+# systemd is itself waiting for can deadlock the transaction. From a login shell the call blocks
+# as an init script always did.
+set -u
+
+name=${0##*/}
+real="${0}.script"
+table=/usr/lib/systemd/openccu-lite-initscripts
+action=${1-}
+
+unit=$(awk -v n="${name}" '$1 == n { print $2; exit }' "${table}" 2>/dev/null || :)
+
+# No unit for this script on the systemd product, and no script either (task 115: the image
+# does not carry it): the four actions are ignored, everything else has nothing to run.
+if [ "${unit}" = "-" ]; then
+  case "${action}" in
+    start|stop|restart|reload)
+      echo "${name}: ${action} ignored - no unit for this script on the systemd product" >&2
+      exit 0 ;;
+    *)
+      echo "${name}: no unit and no script for this name on the systemd product" >&2
+      exit 1 ;;
+  esac
+fi
+
+if [ ! -x "${real}" ]; then
+  echo "${name}: ${real} is missing (init-script wrapper without its script)" >&2
+  exit 1
+fi
+
+# Not in the table, or systemctl unusable: the script is all there is.
+if [ -z "${unit}" ] || [ ! -x /usr/bin/systemctl ]; then
+  exec "${real}" "$@"
+fi
+
+# Called from the unit that owns this script -> run the script.
+if [ -n "${INVOCATION_ID-}" ]; then
+  own=$(/usr/bin/systemctl show -p InvocationID --value "${unit}" 2>/dev/null || :)
+  if [ -n "${own}" ] && [ "${own}" = "${INVOCATION_ID}" ]; then
+    exec "${real}" "$@"
+  fi
+fi
+
+case "${action}" in
+  start|stop|restart|reload) ;;
+  *) exec "${real}" "$@" ;;
+esac
+
+# openccu-lite: "start" on a oneshot unit that is already active
+# (RemainAfterExit=yes) is a no-op for systemd, while the caller wants the script to run again -
+# S48UpdateRFHardware's REINIT path calls "/etc/init.d/S47InitRFHardware start" after flashing a
+# blank RFUSB so the module is detected afresh, and under the wrapper that became "systemctl
+# start occu-init-rf-hardware.service" against an active unit: nothing happened and /var/hm_mode
+# stayed empty. For such a unit "start" means "restart"; a forking or simple service is not
+# affected (its start is a start).
+if [ "${action}" = start ]; then
+  props=$(/usr/bin/systemctl show -p Type,RemainAfterExit,ActiveState --value "${unit}" 2>/dev/null | tr '\n' ' ')
+  case "${props}" in
+    "oneshot yes active "*) action=restart ;;
+  esac
+fi
+
+set -- "${action}" "${unit}"
+[ "${1}" = "reload" ] && set -- reload-or-restart "${unit}"
+if [ -n "${INVOCATION_ID-}" ]; then
+  set -- "${1}" --no-block "${2}"
+fi
+
+echo "${name}: ${action} -> systemctl $*" >&2
+exec /usr/bin/systemctl "$@"

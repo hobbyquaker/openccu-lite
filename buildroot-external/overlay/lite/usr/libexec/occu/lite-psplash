@@ -1,0 +1,127 @@
+#!/bin/sh
+# openccu-lite: the psplash half of what /etc/init.d/rcS did under busybox init.
+#
+# rcS wrote "MSG Starting <name>..." and "PROGRESS <S-number+1>" to psplash's FIFO before every
+# init script; under systemd nothing did, so the boot screen showed a moving bar and no text.
+# Every unit that replaces an init script calls "lite-psplash boot <SXXname>" as its first
+# ExecStartPre and gets the same two lines.
+#
+# Units start side by side, so the last "boot" is not what is still starting: rfd is up after
+# seconds while the HmIP server's JVM takes a minute. "boot" notes the unit's message under
+# /run/lite-psplash (the unit from its cgroup), and "lite-psplash done <SXXname>", the unit's last
+# ExecStartPost, shows the message of a unit still starting - the HmIP server first, otherwise the
+# one that began last - or "Starting services..." when none is left. One systemctl call per
+# "done", and only while the splash is up.
+#
+# "finish" is the end of the boot (lite-boot-message): it empties the bar, draws the message, and
+# from then on nothing is written to the splash, which stays on the screen - a service that
+# restarts at 3 a.m. (Restart=always) must not draw on it.
+#
+# This never (re)starts psplash: psplash-start.service owns it. Nothing is written once psplash is
+# gone (the pidof check), and a stale FIFO with no reader cannot block us either: psplash-write
+# opens the FIFO with O_NONBLOCK and gives up when nothing reads it. So the write runs without a
+# timeout - busybox's timeout forks a watcher that polls once a second, and that watcher, still
+# alive when a unit's ExecStartPre had ended, was systemd's "Found left-over process (timeout)"
+# in the next step of the unit at every boot.
+#
+# The paths and systemctl can be pointed elsewhere for scripts/testcases/lite-boot-screen-test.sh.
+set -u
+
+FIFO=${OCCU_PSPLASH_FIFO:-/run/psplash_fifo}
+WRITE=${OCCU_PSPLASH_WRITE:-/usr/bin/psplash-write}
+STATE=${OCCU_PSPLASH_STATE:-/run/lite-psplash}
+CGROUP=${OCCU_PSPLASH_CGROUP:-/proc/self/cgroup}
+SYSTEMCTL=${OCCU_SYSTEMCTL:-systemctl}
+FINISHED="${STATE}/boot-finished"
+
+splash_up() {
+  [ -p "${FIFO}" ] && pidof psplash >/dev/null 2>&1
+}
+
+psplash_write() {
+  splash_up || return 0
+  "${WRITE}" "$1" >/dev/null 2>&1 || :
+}
+
+# the unit this runs in: "0::/system.slice/rfd.service" -> rfd.service
+own_unit() {
+  sed -n 's|^[0-9]*:[^:]*:.*/\([^/]*\.service\)$|\1|p' "${CGROUP}" 2>/dev/null | head -n 1
+}
+
+# message <SXXname>: S61rfd -> "Starting rfd...", S62HMServer -> "Starting HmIP server..."
+message() {
+  m=${1#?}
+  m=${m#??}
+  [ "${m}" = HMServer ] && m="HmIP server"
+  echo "Starting ${m}..."
+}
+
+case "${1-}" in
+  boot)
+    [ -e "${FINISHED}" ] && exit 0
+    # $2 is the init script name, e.g. S50lighttpd -> "Starting lighttpd...", PROGRESS 51
+    n=${2-}
+    n=${n#?}
+    num=${n%"${n#??}"}
+    msg=$(message "${2-}")
+    if splash_up; then
+      unit=$(own_unit)
+      # a unit that runs as a user (rfd, hmipserver) cannot write the note; the group keeps the shell quiet
+      [ -n "${unit}" ] && mkdir -p "${STATE}" 2>/dev/null && { printf '%s\n' "${msg}" >"${STATE}/${unit}"; } 2>/dev/null
+    fi
+    psplash_write "MSG ${msg}"
+    case "${num}" in
+      [0-9][0-9]) psplash_write "PROGRESS $((${num#0} + 1))" ;;
+    esac
+    ;;
+  done)
+    [ -e "${FINISHED}" ] && exit 0
+    splash_up || exit 0
+    unit=$(own_unit)
+    [ -n "${unit}" ] && rm -f "${STATE}/${unit}"
+    # the unit calling this is itself still activating while its ExecStartPost runs
+    starting=" $("${SYSTEMCTL}" list-units --state=activating --type=service --plain --no-legend --no-pager 2>/dev/null | awk '{ printf "%s ", $1 }')"
+    msg=""
+    case "${starting}" in
+      *" hmipserver.service "*) [ "${unit}" != hmipserver.service ] && msg=$(message S62HMServer) ;;
+    esac
+    if [ -z "${msg}" ]; then
+      # the newest note of a unit still starting
+      for u in $(ls -t "${STATE}" 2>/dev/null); do
+        [ "${u}" = "${unit}" ] && continue
+        case "${starting}" in
+          *" ${u} "*) ;;
+          *) continue ;;
+        esac
+        msg=$(cat "${STATE}/${u}" 2>/dev/null)
+        [ -n "${msg}" ] && break
+      done
+    fi
+    psplash_write "MSG ${msg:-Starting services...}"
+    ;;
+  finish)
+    shift
+    mkdir -p "${STATE}" 2>/dev/null
+    : >"${FINISHED}" 2>/dev/null
+    rm -f "${STATE}"/*.service 2>/dev/null
+    psplash_write "PROGRESS 0"
+    psplash_write "MSG $*"
+    ;;
+  msg)
+    shift
+    [ -e "${FINISHED}" ] && exit 0
+    psplash_write "MSG $*"
+    ;;
+  progress)
+    [ -e "${FINISHED}" ] && exit 0
+    psplash_write "PROGRESS ${2-0}"
+    ;;
+  quit)
+    psplash_write "QUIT"
+    ;;
+  *)
+    echo "usage: ${0##*/} {boot <SXXname>|done <SXXname>|finish <text>|msg <text>|progress <n>|quit}" >&2
+    exit 1
+    ;;
+esac
+exit 0

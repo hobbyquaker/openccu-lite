@@ -1,0 +1,20 @@
+# openccu-lite: replaces /etc/init.d/S04CheckFactoryReset. The script runs unchanged; the
+# cgroup keeps whatever it starts (KillMode=control-group), so stop and status are systemd's.
+[Unit]
+Description=Factory reset at boot
+After=occu-userfs-resize.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S04CheckFactoryReset
+ExecStart=/etc/init.d/S04CheckFactoryReset.script start
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S04CheckFactoryReset
+ExecStop=/etc/init.d/S04CheckFactoryReset.script stop
+KillMode=control-group
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

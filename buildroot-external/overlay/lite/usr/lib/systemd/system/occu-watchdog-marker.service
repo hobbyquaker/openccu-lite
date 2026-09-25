@@ -1,0 +1,38 @@
+# openccu-lite: the marker half of /etc/init.d/S00watchdog - the first unit
+# of the chain, where S00watchdog was the first script.
+#
+# start writes /usr/local/tmp/.watchdog, or - if the last shutdown did not remove it -
+# /var/status/uncleanShutdown; stop removes it again, so a clean shutdown is recognisable as one.
+#
+# The daemon half of S00watchdog is gone - PID 1 feeds /dev/watchdog now
+# (/etc/systemd/system.conf.d/lite-watchdog.conf) - and this half stays, on every product,
+# because it works on boxes without a watchdog device too. It is to get back the consumer it
+# lost with monit: occulited is to read /var/status/uncleanShutdown and show it on the
+# Status page - that half is not written yet. The marker's semantics are
+# in docs/systemd-scope.md, "The unclean-shutdown marker".
+[Unit]
+Description=Unclean-shutdown marker
+After=local-fs.target usr-local.mount
+# Shutdown order: usr-local.mount has to outlive this unit, or the ExecStop below removes a marker that is
+# no longer reachable. Measured on the lab box: systemd stopped usr-local.mount 7.7 s *before*
+# this unit, so "rm -f /usr/local/tmp/.watchdog" ran against the empty mount point on the read-only
+# rootfs, returned 0, and the marker survived every clean shutdown - so every boot reported an
+# unclean one. Ordering only, deliberately not RequiresMountsFor=: the userfs is unmounted and
+# remounted by occu-userfs-resize/occu-factory-reset, and a Requires= on it would tear this unit
+# down in the middle of a first boot. Because every other occu-* unit is ordered after this one,
+# keeping the mount until *this* one has stopped keeps it for the whole chain - which is what the
+# stop actions of occu-seedrng and occu-init-rf-hardware need too.
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=-/usr/libexec/occu/lite-psplash boot S00watchdog
+ExecStart=/usr/libexec/occu/lite-watchdog-marker set
+ExecStartPost=-/usr/libexec/occu/lite-psplash done S00watchdog
+ExecStop=/usr/libexec/occu/lite-watchdog-marker clear
+UMask=0002
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

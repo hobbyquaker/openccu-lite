@@ -1,0 +1,261 @@
+#!/bin/sh
+# openccu-lite: writable extension directories on the read-only system partition.
+#
+# An addon that brings device descriptions for devices the image does not know links them into
+# /firmware/rftypes, and rfd reads that directory at its start. On a CCU the addon's script wrote
+# there by remounting / read-write around the write. No addon unit here has CAP_SYS_ADMIN any more
+# (the remount answers "permission denied" and the script goes on), so each directory in DIRS is
+# made writable at boot instead - before rfd reads it and before the addons write to it:
+#
+#   overlay   where the kernel has overlayfs: lower = the image's directory, upper and work on the
+#             userfs under STATE/<name>/. A firmware update brings new image files in the lower
+#             layer by itself; what addons added stays in the upper layer across updates.
+#   copy      where it has not (a kernel without overlayfs, a container that may not mount one):
+#             STATE/<name>/copy holds a copy of the image's files, refreshed from the image at
+#             every boot so an update's new files arrive, bind-mounted over the directory. What
+#             addons added there is kept.
+#
+# The image's names are written to STATE/<name>/image-names before the mount hides the lower
+# directory, so occulited can tell an addon's addition from a replaced or removed image file.
+#
+# Repair: whatever removed an image file in the writable layer (a stray `rm -f /firmware/rftypes/*`
+# once did) is undone at the next boot - a whiteout in the upper layer for an image name is deleted,
+# a missing file in the copy is copied again. A replaced image file (a regular file or a link with
+# an image name in the upper layer, a link in the copy) is left: an addon may mean it. `reset`
+# removes those too - after unmounting - and mounts again; rfd is restarted by whoever called it.
+#
+# Actions:
+#   start                 mount every directory in DIRS (what the unit runs)
+#   status <dir>          key=value lines: mode, entries, image, added, replaced, removed, state
+#   reset <dir>           the image's files win again: umount, clean the writable layer, mount
+#
+# Test hooks: OCCU_EXT_ROOT prefixes every path, OCCU_EXT_DIRS replaces the list, OCCU_EXT_STATE
+# the state directory, OCCU_EXT_MODE forces overlay or copy, OCCU_EXT_MOUNTINFO and
+# OCCU_EXT_FILESYSTEMS point at other copies of the two /proc files.
+set -u
+# the layers and the names file are read by occulited (user occulite): world-readable whatever the
+# caller's umask (a hand run from an ssh shell has 077)
+umask 022
+
+ROOT=${OCCU_EXT_ROOT:-}
+DIRS=${OCCU_EXT_DIRS:-/firmware/rftypes}
+STATE=${OCCU_EXT_STATE:-/usr/local/etc/config/extensions}
+FORCE_MODE=${OCCU_EXT_MODE:-}
+MOUNTINFO=${OCCU_EXT_MOUNTINFO:-/proc/self/mountinfo}
+FILESYSTEMS=${OCCU_EXT_FILESYSTEMS:-/proc/filesystems}
+
+say() { echo "lite-extension-dirs: $*"; }
+
+# the file system type mounted on a directory (the topmost mount), or nothing
+mounted_type() {
+  awk -v d="$1" '$5 == d { for (i = 7; i <= NF; i++) if ($i == "-") { t = $(i + 1) } } END { if (t != "") print t }' "${MOUNTINFO}" 2>/dev/null
+}
+
+# the mode this directory gets: overlay when the kernel offers it, copy otherwise
+choose_mode() {
+  case "${FORCE_MODE}" in
+    overlay|copy) echo "${FORCE_MODE}"; return ;;
+  esac
+  if ! grep -qw overlay "${FILESYSTEMS}" 2>/dev/null; then
+    modprobe overlay >/dev/null 2>&1 || :
+  fi
+  if grep -qw overlay "${FILESYSTEMS}" 2>/dev/null; then echo overlay; else echo copy; fi
+}
+
+# the writable layer for a directory: overlay's upper or the copy, whichever exists (the mode
+# that mounted it), else the one the current decision would use
+layer_of() {
+  lo_st=$1
+  if [ -d "${lo_st}/upper" ] && [ ! -d "${lo_st}/copy" ]; then echo "${lo_st}/upper"
+  elif [ -d "${lo_st}/copy" ] && [ ! -d "${lo_st}/upper" ]; then echo "${lo_st}/copy"
+  else
+    case "$(mounted_type "$2")" in
+      overlay) echo "${lo_st}/upper" ;;
+      '') if [ "$(choose_mode)" = overlay ]; then echo "${lo_st}/upper"; else echo "${lo_st}/copy"; fi ;;
+      *) echo "${lo_st}/copy" ;;
+    esac
+  fi
+}
+
+in_image() { grep -qxF -- "$2" "$1" 2>/dev/null; }
+
+# the image's top-level names, written before the mount hides them; kept when the directory is
+# already mounted (the lower layer cannot be read then)
+write_image_names() {
+  win_dir=$1 win_rdir=$2 win_rst=$3
+  [ -n "$(mounted_type "${win_dir}")" ] && [ -s "${win_rst}/image-names" ] && return 0
+  ls -A -- "${win_rdir}" 2>/dev/null | LC_ALL=C sort > "${win_rst}/image-names.tmp" && mv -f "${win_rst}/image-names.tmp" "${win_rst}/image-names"
+}
+
+# overlay: a whiteout (a character device) in the upper layer that hides an image file goes; a
+# regular file or link with an image name stays unless $3 is "all"
+clean_upper() {
+  cu_up=$1 cu_names=$2 cu_what=${3:-whiteouts}
+  cu_removed=0
+  for cu_f in "${cu_up}"/* "${cu_up}"/.[!.]*; do
+    [ -e "${cu_f}" ] || [ -L "${cu_f}" ] || continue
+    in_image "${cu_names}" "${cu_f##*/}" || continue
+    if [ -c "${cu_f}" ]; then
+      rm -f -- "${cu_f}" && cu_removed=$((cu_removed + 1))
+    elif [ "${cu_what}" = all ]; then
+      # a directory with an image name (replaceMap/ copied up for one changed file) stays
+      if [ -L "${cu_f}" ] || [ ! -d "${cu_f}" ]; then
+        rm -f -- "${cu_f}" && cu_removed=$((cu_removed + 1))
+      fi
+    fi
+  done
+  [ "${cu_removed}" -gt 0 ] && say "$(basename "$(dirname "${cu_up}")"): ${cu_removed} image file(s) restored in the writable layer"
+  return 0
+}
+
+# copy: every image entry into the copy - a missing one (a stray delete, an update's new file),
+# a regular file again (the update's version), a directory merged; a link with an image name is
+# an addon's replacement and stays unless $3 is "all"
+sync_copy() {
+  sc_src=$1 sc_copy=$2 sc_what=${3:-keep}
+  for sc_f in "${sc_src}"/* "${sc_src}"/.[!.]*; do
+    [ -e "${sc_f}" ] || [ -L "${sc_f}" ] || continue
+    sc_t="${sc_copy}/${sc_f##*/}"
+    if [ -L "${sc_t}" ]; then
+      [ "${sc_what}" = all ] || continue
+      rm -f -- "${sc_t}"
+    fi
+    if [ -d "${sc_f}" ] && [ ! -L "${sc_f}" ]; then
+      cp -a -- "${sc_f}" "${sc_copy}/" 2>/dev/null || say "warning: could not copy ${sc_f}"
+    else
+      cp -a -f -- "${sc_f}" "${sc_t}" 2>/dev/null || say "warning: could not copy ${sc_f}"
+    fi
+  done
+  return 0
+}
+
+mount_dir() {
+  dir=$1
+  name=${dir##*/}
+  st="${STATE}/${name}"
+  rdir="${ROOT}${dir}"
+  rst="${ROOT}${st}"
+  if [ ! -d "${rdir}" ]; then
+    say "${dir} does not exist; nothing to make writable"
+    return 0
+  fi
+  if [ -n "$(mounted_type "${dir}")" ]; then
+    say "${dir} is already writable ($(mounted_type "${dir}"))"
+    return 0
+  fi
+  mkdir -p "${rst}" || return 1
+  write_image_names "${dir}" "${rdir}" "${rst}" || return 1
+  mode=$(choose_mode)
+  case "${mode}" in
+    overlay)
+      mkdir -p "${rst}/upper" "${rst}/work" || return 1
+      # the work directory is overlayfs's scratch space, not configuration: out of the backup
+      touch "${rst}/work/.nobackup" 2>/dev/null || :
+      clean_upper "${rst}/upper" "${rst}/image-names"
+      if mount -t overlay overlay -o "lowerdir=${rdir},upperdir=${rst}/upper,workdir=${rst}/work" "${rdir}"; then
+        say "${dir}: overlay, additions in ${st}/upper"
+        return 0
+      fi
+      say "${dir}: the overlay mount failed; falling back to a copy"
+      mode=copy
+      ;;
+  esac
+  mkdir -p "${rst}/copy" || return 1
+  sync_copy "${rdir}" "${rst}/copy"
+  if mount -o bind "${rst}/copy" "${rdir}"; then
+    say "${dir}: a copy on the userfs, ${st}/copy"
+    return 0
+  fi
+  say "${dir}: the bind mount failed; the directory stays read-only"
+  return 1
+}
+
+status_dir() {
+  dir=$1
+  name=${dir##*/}
+  st="${STATE}/${name}"
+  rdir="${ROOT}${dir}"
+  rst="${ROOT}${st}"
+  type=$(mounted_type "${dir}")
+  case "${type}" in
+    overlay) mode=overlay ;;
+    '') mode=none ;;
+    *) mode=copy ;;
+  esac
+  names="${rst}/image-names"
+  image=0; [ -f "${names}" ] && image=$(grep -c . "${names}")
+  entries=$(ls -A -- "${rdir}" 2>/dev/null | wc -l | tr -d ' ')
+  added=0 replaced=0 removed=0
+  layer=$(layer_of "${rst}" "${dir}")
+  if [ -d "${layer}" ] && [ -f "${names}" ]; then
+    for sd_f in "${layer}"/* "${layer}"/.[!.]*; do
+      [ -e "${sd_f}" ] || [ -L "${sd_f}" ] || continue
+      if in_image "${names}" "${sd_f##*/}"; then
+        case "${layer}" in
+          */upper)
+            if [ -c "${sd_f}" ]; then removed=$((removed + 1)); else replaced=$((replaced + 1)); fi ;;
+          *)
+            [ -L "${sd_f}" ] && replaced=$((replaced + 1)) ;;
+        esac
+      else
+        added=$((added + 1))
+      fi
+    done
+    case "${layer}" in
+      */copy)
+        while IFS= read -r n; do
+          [ -n "$n" ] || continue
+          [ -e "${layer}/$n" ] || [ -L "${layer}/$n" ] || removed=$((removed + 1))
+        done < "${names}" ;;
+    esac
+  fi
+  echo "mode=${mode}"
+  echo "entries=${entries}"
+  echo "image=${image}"
+  echo "added=${added}"
+  echo "replaced=${replaced}"
+  echo "removed=${removed}"
+  echo "state=${st}"
+}
+
+reset_dir() {
+  dir=$1
+  name=${dir##*/}
+  st="${STATE}/${name}"
+  rdir="${ROOT}${dir}"
+  rst="${ROOT}${st}"
+  names="${rst}/image-names"
+  [ -f "${names}" ] || { say "${dir}: no image list in ${st}; nothing to reset"; return 1; }
+  if [ -n "$(mounted_type "${dir}")" ]; then
+    umount "${rdir}" || { say "${dir}: cannot unmount (busy?); not reset"; return 1; }
+  fi
+  [ -d "${rst}/upper" ] && clean_upper "${rst}/upper" "${names}" all
+  [ -d "${rst}/copy" ] && sync_copy "${rdir}" "${rst}/copy" all
+  mount_dir "${dir}"
+}
+
+case "${1:-}" in
+  start)
+    rc=0
+    for d in ${DIRS}; do
+      mount_dir "$d" || rc=1
+    done
+    exit "${rc}"
+    ;;
+  status)
+    [ -n "${2:-}" ] || { echo "usage: $0 status <dir>" >&2; exit 2; }
+    status_dir "$2"
+    ;;
+  reset)
+    [ -n "${2:-}" ] || { echo "usage: $0 reset <dir>" >&2; exit 2; }
+    case " ${DIRS} " in
+      *" $2 "*) ;;
+      *) say "$2 is not an extension directory"; exit 2 ;;
+    esac
+    reset_dir "$2"
+    ;;
+  *)
+    echo "usage: $0 start | status <dir> | reset <dir>" >&2
+    exit 2
+    ;;
+esac

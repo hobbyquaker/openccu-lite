@@ -1,0 +1,20 @@
+# openccu-lite: replaces the rc.local call of /etc/init.d/S98StartAddons, after
+# the addons, with the same profile.d environment, the same 120 s timeout and the same OOM score;
+# whatever rc.local leaves running stays in this cgroup. rc.postlocal is still run by
+# S99SetupLEDs (occu-leds.service), rc.init/rc.postinit by S06InitSystem.
+[Unit]
+Description=Local startup script (rc.local)
+After=addons.target
+ConditionFileIsExecutable=/usr/local/etc/rc.local
+ConditionPathExists=!/etc/config/safemode
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c '. /etc/profile; exec /usr/bin/timeout 120 /usr/local/etc/rc.local'
+KillMode=control-group
+OOMScoreAdjust=100
+UMask=0002
+
+[Install]
+WantedBy=multi-user.target

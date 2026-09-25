@@ -1,0 +1,26 @@
+# openccu-lite: the end-of-boot screen, the last unit of the chain.
+#
+# What /etc/init.d/rcS did after the last init script and nothing did under systemd: put the
+# version and the box's URL on the splash, quit psplash, and leave the hint on the console. It
+# also writes /run/issue, which /etc/issue is a symlink to (board/lite/post-build-systemd.sh),
+# so a getty on that tty shows the same three lines above its login prompt.
+#
+# After occu-leds.service ("booted, OK") and the network, and inside the multi-user job, so
+# the "QUIT" reaches psplash while it is still up - systemd's own StartupFinished, which
+# psplash-systemd waits for, only fires once that job is done.
+[Unit]
+Description=Boot message on the console and the splash
+After=occu-leds.service occu-rc-local.service addons.target network.target
+After=psplash-start.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-boot-message
+TimeoutStartSec=60
+UMask=0002
+StandardOutput=journal
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target

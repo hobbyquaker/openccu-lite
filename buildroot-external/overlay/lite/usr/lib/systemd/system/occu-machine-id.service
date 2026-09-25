@@ -1,0 +1,37 @@
+# openccu-lite: a stable machine ID, part one.
+#
+# The rootfs is read-only, so systemd boots with a random transient ID every time unless one is
+# committed; journald names its directory after the ID, so a new one per boot would leave
+# orphaned journal directories that no size cap ever vacuums. The ID lives in
+# /usr/local/etc/machine-id on the userfs; occu-machine-id-store.service puts it there, derived
+# from the board serial.
+#
+# This unit installs it, and it has to do so before journald starts - journald reads the ID once
+# and keeps it. Hence DefaultDependencies=no, Before=systemd-journald.service, and
+# RequiresMountsFor=/usr/local: the userfs must be mounted, which is the price of the ID living
+# there. The mount is "nofail" in fstab and on the same disk as the rootfs; if it does not come
+# up, this unit is skipped and journald starts on the transient ID as before (Before= orders,
+# it does not require).
+#
+# What replaced what: the previous version remounted the whole rootfs read-write to write
+# /etc/machine-id and then restarted journald. There is no rootfs write left - /etc/machine-id
+# is already PID 1's bind mount of /run/machine-id, and the helper writes that file. A .mount
+# unit binding /usr/local/etc/machine-id over /etc/machine-id would be the more declarative
+# form, but it would pin the userfs, and S03CheckUserFSResize and S04CheckFactoryReset unmount
+# /usr/local. Replaces nothing in /etc/init.d.
+[Unit]
+Description=Machine ID
+DefaultDependencies=no
+RequiresMountsFor=/usr/local
+Before=systemd-journald.service sysinit.target
+Conflicts=shutdown.target
+Before=shutdown.target
+ConditionPathExists=/usr/local/etc/machine-id
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-machine-id install
+
+[Install]
+WantedBy=sysinit.target

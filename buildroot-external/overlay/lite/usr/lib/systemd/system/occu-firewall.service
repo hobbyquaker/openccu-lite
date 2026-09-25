@@ -1,0 +1,29 @@
+# openccu-lite: occulited's firewall rules, loaded at boot before the network - so
+# the box is never reachable before its rules are in place, and nothing waits for /var/hm_mode.
+# `occulited firewall load` reads /etc/config/firewall-rules.json (converting firewall.conf once,
+# or a fresh box's defaults: the web server's rules, policy DROP) and loads both families with
+# iptables-restore. It runs as root, before occulited; occulited takes over the rules once it runs
+# (the owners, the local networks, the page's changes).
+# After occu-backup-restore.service: the userfs is final by then - resized, reset
+# and restored - so a restoring boot loads the restored rules, not the old userfs's, and the rule
+# file is written onto the userfs that stays. Still before any interface comes up: occu-network
+# orders after occu-init-system, which is after the restore as well. On a fresh userfs (only
+# .doFactoryReset on it) /etc/config -> ../usr/local/etc/config does not exist yet; occulited
+# creates it through the link, and the rules are loaded even when the file cannot be written.
+[Unit]
+Description=Firewall rules
+DefaultDependencies=no
+After=local-fs.target occu-backup-restore.service
+RequiresMountsFor=/usr/local
+Wants=network-pre.target
+Before=network-pre.target occu-network.service occulited.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/occulited firewall load
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=multi-user.target
