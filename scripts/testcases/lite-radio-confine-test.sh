@@ -10,7 +10,8 @@
 #   - every daemon unit: its user, no capabilities, ProtectSystem=strict, the root steps marked
 #     "+", the daemon started directly (no init script behind ExecStart), canonical userfs paths,
 #     the device drop-in with DevicePolicy=closed; multimacd's real time without a capability;
-#     hmipserver without MemoryDenyWriteExecute; hs485d's private /var and its pid file;
+#     hmipserver without MemoryDenyWriteExecute and with its own journal rate limit (task 234);
+#     hs485d's private /var and its pid file;
 #   - every daemon unit conditions on the plan's marker (/run/occulite/radio/<daemon>.enabled)
 #     and runs occulited's root steps; the three scripts carry no lite init) case any more;
 #   - the container post-build removes the device drop-ins and nothing else of the units;
@@ -123,6 +124,8 @@ unit_lacks multimacd.service "RestrictRealtime=yes"; unit_has multimacd.service 
 unit_nomatch multimacd.service '^AmbientCapabilities' "no capability for the real time"
 unit_lacks hmipserver.service "MemoryDenyWriteExecute=yes"
 unit_has hmipserver.service "SuccessExitStatus=143"
+# task 234: a listener that does not answer makes hmipserver log a stack trace a second
+unit_has hmipserver.service "LogRateLimitIntervalSec=30s"; unit_has hmipserver.service "LogRateLimitBurst=100"
 # a userfs directory may be missing (a restored OpenCCU backup, a factory reset): the prep step makes
 # it, and a path that is not optional fails the namespace setup of that very step
 for d in rfd multimacd hmipserver hs485d hmlangw; do unit_nomatch "$d.service" '^ReadWritePaths=\(.* \)\{0,1\}/usr/local' "$d: its userfs paths are optional"; done
