@@ -1,0 +1,63 @@
+#!/bin/sh
+# openccu-lite: occu-network.service's reload - a new DHCP lease under the current host name.
+#
+# The DHCP client (busybox udhcpc) sends the host name it was started with, so a renamed system
+# keeps announcing the old name to the DHCP server - and to the router's DNS behind it - until the
+# next boot. occulited calls this reload after a rename: the running client is stopped without
+# releasing the lease (no -R, so the address stays reserved for it) and started again with the
+# name from /etc/config/netconfig and the same arguments eQ3StartNetwork uses, inside this unit's
+# cgroup, where systemctl status keeps showing it. The new client asks for the lease it had (the
+# same interface and client identity), so the address normally stays; the DHCP server learns the
+# new name with that request.
+#
+# A static setup has no client and nothing to tell: the reload does nothing and exits 0. Every
+# interface with a client of its own (/var/run/udhcpc_<iface>.pid) is renewed.
+#
+# Usage: lite-network-reload
+set -u
+NETCONFIG=${OCCU_NETCONFIG:-/etc/config/netconfig}
+RUNDIR=${OCCU_RUNDIR:-/var/run}
+UDHCPC=${OCCU_UDHCPC:-/sbin/udhcpc}
+DHCP_SCRIPT=${OCCU_DHCP_SCRIPT:-/bin/dhcp.script}
+
+HOSTNAME=
+MODE=
+# shellcheck disable=SC1090
+[ -r "$NETCONFIG" ] && . "$NETCONFIG"
+if [ -z "$HOSTNAME" ]; then
+  echo "<4>no HOSTNAME in $NETCONFIG: the lease stays as it is"
+  exit 0
+fi
+if [ "$MODE" != "DHCP" ]; then
+  echo "static setup ($MODE): no DHCP server to tell about $HOSTNAME"
+  exit 0
+fi
+
+renewed=0
+for pidfile in "$RUNDIR"/udhcpc_*.pid; do
+  [ -f "$pidfile" ] || continue
+  iface=${pidfile##*/udhcpc_}
+  iface=${iface%.pid}
+  pid=$(cat "$pidfile" 2>/dev/null)
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    # SIGTERM: udhcpc exits and keeps the lease (only -R would release it)
+    kill "$pid" 2>/dev/null
+    n=0
+    while kill -0 "$pid" 2>/dev/null && [ "$n" -lt 20 ]; do
+      sleep 0.1
+      n=$((n + 1))
+    done
+  fi
+  rm -f "$pidfile"
+  if "$UDHCPC" -b -t 20 -T 3 -S -x "hostname:$HOSTNAME" -i "$iface" -F "$HOSTNAME" -V eQ3-CCU3 -s "$DHCP_SCRIPT" -p "$pidfile" >/dev/null 2>&1; then
+    echo "$iface: DHCP client restarted as $HOSTNAME"
+    renewed=$((renewed + 1))
+  else
+    echo "<3>$iface: the DHCP client could not be started as $HOSTNAME"
+    exit 1
+  fi
+done
+if [ "$renewed" = 0 ]; then
+  echo "<4>no DHCP client running: nothing renewed for $HOSTNAME"
+fi
+exit 0
