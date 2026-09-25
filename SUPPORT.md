@@ -1,9 +1,23 @@
-# Support/Hilfe
+# Support / Hilfe
 
-## Looking for help with OpenCCU?
+## Looking for help with openccu-lite?
 
-If you are seeking for help in using OpenCCU we ask you to use the OpenCCU fora (<https://homematic-forum.de/forum/viewforum.php?f=65>) instead. We are using GitHub as a pure development platform and not as a platform to provide end users with support/help in any way. Nevertheless we would be happy if you submit your qualified bug- or feature requests using GitHub. However, please discuss your requests first in the fora before you submit them via the GitHub issue tracker which will help us to keep us on track in actually developing OpenCCU rather than purely providing support only.
+openccu-lite is an alpha firmware for experienced users (see the [README](README.en.md)). Bugs and
+feature requests go to this repository's [issue tracker](https://github.com/hobbyquaker/openccu-lite/issues),
+for the firmware and for its system service [occulited](https://github.com/hobbyquaker/occulited)
+alike. Please name the release you run (the Updates page shows it) and the hardware, and attach the
+relevant part of the Log page. Security problems: see [SECURITY.md](SECURITY.md).
 
-## Du benötigst Hilfe mit OpenCCU?
+openccu-lite is not OpenCCU: please do not report its problems on OpenCCU's issue tracker or in
+OpenCCU's forum section.
 
-Für jegliche Hilfe bei der Verwendung von OpenCCU bitten wir darum, das OpenCCU‑Forum (<https://homematic-forum.de/forum/viewforum.php?f=65>) zu verwenden. Wir nutzen GitHub als reine Entwicklungsplattform und nicht als Plattform, um Endnutzern Hilfestellungen zu geben. Nichtsdestotrotz freuen wir uns natürlich über qualifizierte Fehlermeldungen bzw. Featurewünsche, die auch hier über den „Issue‑Tracker“ gemeldet werden können. Aber auch hier bitten wir darum, dass die Fehler‑ bzw. Featurewünsche zuerst im OpenCCU‑Forum diskutiert und ausgearbeitet werden und erst im darauffolgenden Schritt (wenn sicher ist, dass es sich um einen Fehler in OpenCCU selbst handelt) via GitHub gemeldet werden.
+## Du brauchst Hilfe mit openccu-lite?
+
+openccu-lite ist eine Alpha-Firmware für erfahrene Anwender (siehe [README](README.md)). Fehler und
+Wünsche gehören in den [Issue-Tracker](https://github.com/hobbyquaker/openccu-lite/issues) dieses
+Repositorys, für die Firmware wie für ihren Systemdienst [occulited](https://github.com/hobbyquaker/occulited).
+Bitte die laufende Version (die Seite Updates zeigt sie) und die Hardware nennen und den passenden
+Ausschnitt der Log-Seite anhängen. Sicherheitsprobleme: siehe [SECURITY.md](SECURITY.md).
+
+openccu-lite ist nicht OpenCCU: Probleme von openccu-lite bitte nicht im Issue-Tracker oder im
+Forumsbereich von OpenCCU melden.

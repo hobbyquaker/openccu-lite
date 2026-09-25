@@ -1,3 +1,4 @@
+<#-- openccu-lite: replaces eQ-3's original; the original and this modification are under the Homematic Software License (HMSL) 2.0, see NOTICE.md. -->
 <#-- openccu-lite: the group editor's model as JSON - the group, its members, what it
      could take, what fits no group any more, the types. The names are the WebUI's GroupEditPage.ftl's. -->
 <#compress>
