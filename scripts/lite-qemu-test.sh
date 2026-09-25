@@ -179,6 +179,19 @@ guest_open() {
   guest 'for i in $(seq 1 90); do s=$(systemctl is-system-running 2>/dev/null); case "$s" in starting|initializing) sleep 2;; *) break;; esac; done; echo "system: $s after ${i}x2s"'
 }
 
+# boot_checks: the boot settled (running or degraded - psplash-start fails here, see above), and no
+# unit failed but the two allowed. A boot that is still "starting" after guest_open's 180 s wait,
+# or a failed unit, fails the test - both were printed and passed over before (the second boot of
+# 1.0.0-dev.24 and dev.25 sat in "starting" for the whole wait with a failed
+# occu-lgw-firmware-update, and the run said OK). What the failed units said is printed: without
+# it a failed unit in a VM that is gone a minute later is a name and nothing else.
+boot_checks() {
+  R=$(guest 'systemctl is-system-running'); case "$R" in *'| running'*|*'| degraded'*) ;; *) fail "$1 did not settle: $R"
+    guest 'systemctl list-units --state=activating,deactivating,failed --no-legend --plain --no-pager; systemctl list-jobs --no-legend --no-pager | head -20';; esac
+  R=$(guest 'systemctl --failed --no-legend --plain --no-pager | grep -v "^psplash-start.service \|^occu-interface-clock.service " | wc -l'); case "$R" in *'| 0'*) ;; *) fail "$1: failed units (see above)"
+    guest 'for u in $(systemctl --failed --no-legend --plain --no-pager | cut -d" " -f1); do echo "== $u"; systemctl show -p Result,ExecMainCode,ExecMainStatus "$u"; journalctl -b -u "$u" --no-pager -n 15 -o cat; systemctl status "$u" --no-pager -n 15 | tail -n 15; done';; esac
+}
+
 guest_close() {
   [ -n "${GUEST_PID:-}" ] || return 0
   printf '__QUIT__\n' >&8 2>/dev/null
@@ -254,9 +267,7 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # skipped without rfd since task 129 (B-142); its old failure stays tolerated for older images.
   # --no-pager: systemctl pages on the debug shell's tty and the listing came out as escape codes.
   say "guest: system state"; guest 'systemctl is-system-running; systemctl --failed --no-legend --plain --no-pager'
-  R=$(guest 'systemctl --failed --no-legend --plain --no-pager | grep -v "^psplash-start.service \|^occu-interface-clock.service " | wc -l'); case "$R" in *'| 0'*) ;; *) fail "failed units (see above)"
-    # what they said: without it a failed unit in a VM that is gone a minute later is a name and nothing else
-    guest 'for u in $(systemctl --failed --no-legend --plain --no-pager | cut -d" " -f1); do echo "== $u"; systemctl show -p Result,ExecMainCode,ExecMainStatus "$u"; journalctl -b -u "$u" --no-pager -n 15 -o cat; systemctl status "$u" --no-pager -n 15 | tail -n 15; done';; esac
+  boot_checks "boot 1"
   say "guest: boot time"; guest 'journalctl -b --no-pager -o short-monotonic | grep -m1 "Startup finished"; journalctl -b -u occu-leds.service --no-pager -o short-monotonic | grep -m1 "booted, OK"'
   say "guest: the lite units"; guest 'systemctl list-units --all --no-legend --plain "occu-*" "addon*" addons.target occulited.service lighttpd.service chrony.service sshd.service hs485d.service multimacd.service rfd.service hmipserver.service crond.service ca-certificates.service qemu-guest-agent.service'
   say "guest: timers"; guest 'systemctl list-timers --all --no-legend --plain "occu-*"'
@@ -312,6 +323,10 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   guest_open # again in this shell, not in the first $( ) that follows
   say "guest (boot 2): the addon unit came back from the generator at boot, the journal remembers boot 1"
   guest 'systemctl is-system-running; systemctl --failed --no-legend --plain --no-pager; systemctl status addon-litetest.service --no-pager -n0 | sed -n 1,8p; journalctl --list-boots --no-pager; cat /etc/machine-id; cat /usr/local/etc/machine-id; journalctl -b --no-pager -o short-monotonic | grep -m1 "Startup finished"'
+  boot_checks "boot 2"
+  # the seeded gateway is a documentation address nobody answers: the firmware update skips it with
+  # a line, a success - it used to run eq3configcmd into three timeouts and fail the unit
+  R=$(guest 'systemctl show -p Result --value occu-lgw-firmware-update.service; journalctl -b -u occu-lgw-firmware-update.service --no-pager -o cat | grep -c "no RF LAN gateway answers (192.0.2.1)"'); case "$R" in *'| success'*'| 1'*) ;; *) fail "occu-lgw-firmware-update did not skip the silent gateway as a success: $R";; esac
   R=$(guest 'systemctl is-active addon-litetest.service'); case "$R" in *'| active'*) ;; *) fail "addon-litetest.service not active after the reboot";; esac
   # counted by their rows: systemd 257 prints a header line above them
   R=$(guest 'journalctl --list-boots --no-pager | grep -cE "^ *-?[0-9]+ [0-9a-f]{32} "'); case "$R" in *'| 2'*) ;; *) fail "expected two boots in the persistent journal";; esac
