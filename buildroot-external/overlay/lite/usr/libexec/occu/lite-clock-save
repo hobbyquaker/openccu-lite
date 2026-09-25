@@ -1,0 +1,52 @@
+#!/bin/sh
+# openccu-lite: occu-clock-save.service - the clock saved at shutdown and restored early at boot,
+# as fake-hwclock does it (openccu-lite B-192).
+#
+# A board without a real-time clock (the Raspberry Pi 4) starts at systemd's built-in epoch, months
+# behind, and keeps that until NTP answers. lighttpd starts before that and sees the clock jump by
+# months; any jump above half an hour (its server.clock-jump-restart) makes it restart gracefully,
+# cutting the connections it holds - a browser on the starting page included. With the time saved at
+# shutdown and put back before lighttpd starts, NTP's correction after a reboot is the reboot's
+# duration, far below the threshold. A power loss still jumps by the time the box was off (accepted).
+#
+#   restore  sets the clock to the saved time when the clock is behind it; never moves it back, so a
+#            real-time clock that is ahead, or a restored backup's older file, changes nothing
+#   save     writes the current time (seconds since the epoch) atomically
+#
+# The clock is still not trusted after a restore: occu-clock-valid waits for NTP (or the real-time
+# clock) as before, the restored time only keeps the jump small.
+set -u
+FILE=${CLOCK_SAVE_FILE:-/usr/local/var/lib/lite-clock/saved}
+DATE=${CLOCK_DATE:-date}
+
+now() { "$DATE" +%s; }
+
+case "${1:-}" in
+  restore)
+    [ -r "$FILE" ] || { echo "no saved time yet ($FILE)"; exit 0; }
+    saved=$(tr -dc 0-9 < "$FILE")
+    case "$saved" in
+      ''|0*) echo "<4>the saved time in $FILE is not usable; the clock is left as it is"; exit 0 ;;
+    esac
+    cur=$(now)
+    if [ "$cur" -ge "$saved" ]; then
+      echo "the clock ($cur) is not behind the saved time ($saved); left as it is"
+      exit 0
+    fi
+    if "$DATE" -s "@$saved" >/dev/null; then
+      echo "the clock set forward by $((saved - cur)) s to the time saved at the last shutdown"
+    else
+      echo "<4>the clock could not be set to the saved time ($saved)"
+    fi
+    ;;
+  save)
+    dir=${FILE%/*}
+    mkdir -p "$dir" || exit 1
+    now > "$FILE.tmp" && mv -f "$FILE.tmp" "$FILE" || { echo "<4>the time could not be saved to $FILE"; exit 1; }
+    ;;
+  *)
+    echo "Usage: $0 {restore|save}" >&2
+    exit 2
+    ;;
+esac
+exit 0

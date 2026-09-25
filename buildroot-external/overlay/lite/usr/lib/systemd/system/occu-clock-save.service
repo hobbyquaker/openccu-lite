@@ -1,0 +1,31 @@
+# openccu-lite: the clock saved at shutdown and restored early at boot (fake-hwclock's idea):
+# /usr/libexec/occu/lite-clock-save. On a board without a real-time clock NTP's correction after a
+# reboot then stays below lighttpd's clock-jump threshold (half an hour), and lighttpd keeps its
+# early start without the graceful restart that cut its connections.
+#
+# The start runs right after the userfs is mounted and before everything that reads the wall clock
+# early: occu-clock-valid, chrony, lighttpd, the interface daemons, occulited. After the real-time
+# clock (occu-init-rtc): the restore only ever moves the clock forward, so a real-time clock that is
+# ahead wins. The stop saves: DefaultDependencies=no with Conflicts=/Before=shutdown.target and
+# RequiresMountsFor=/usr/local, so it runs before the userfs is unmounted - and since it is ordered
+# before the units above, after they have stopped, so the saved time is the latest possible.
+# A container's clock is its host's.
+[Unit]
+Description=Saved system clock
+DefaultDependencies=no
+RequiresMountsFor=/usr/local
+After=local-fs.target occu-init-rtc.service
+Before=shutdown.target occu-clock-valid.service chrony.service lighttpd.service occulited.service rfd.service hmipserver.service multimacd.service hs485d.service crond.service
+Conflicts=shutdown.target
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-clock-save restore
+ExecStop=/usr/libexec/occu/lite-clock-save save
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

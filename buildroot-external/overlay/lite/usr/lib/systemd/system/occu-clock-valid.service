@@ -1,0 +1,27 @@
+# openccu-lite: done as soon as the system clock can be trusted - set from a real-time clock, or
+# synchronised by NTP, or after a timeout with a warning (/usr/libexec/occu/lite-clock-valid, which
+# also writes /run/occulite/clock-state). The interface daemons that hand the time on (rfd to the
+# radio module, hmipserver and hs485d to devices) and crond order after it instead of after chrony's
+# first sync: on a box with a real-time clock this passes at once, on a board without one it takes
+# the few seconds until NTP answers, and on a box without network and without a real-time clock it
+# gives up a minute after chronyd first answered, so the radio still starts.
+#
+# Not after chrony.service: that is after the network, and a box with a real-time clock would wait
+# for the network for nothing. Without a real-time clock the script polls chronyd, which may not run
+# yet; the minute counts from chronyd's first answer (which it waits for at most 90 s), hence the
+# start timeout above the two together.
+#
+# A container's clock is its host's, so there is nothing to wait for.
+[Unit]
+Description=Trusted system clock
+After=occu-init-rtc.service occu-init-system.service
+ConditionVirtualization=!container
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-clock-valid 60
+TimeoutStartSec=210
+StandardOutput=journal
+StandardError=journal
+[Install]
+WantedBy=multi-user.target

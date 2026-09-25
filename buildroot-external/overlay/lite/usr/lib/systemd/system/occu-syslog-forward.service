@@ -1,0 +1,44 @@
+# openccu-lite: the journal to the remote syslog host from /etc/config/syslog (LOGHOST).
+#
+# ExecCondition rather than ExecStartPre: a box with no LOGHOST set - which is nearly all of them -
+# should leave this unit inactive rather than failed. occu-cron-backup.service used the same
+# construct for the same reason. A LOGHOST changed on the Log page restarts this unit.
+#
+# `occulited syslog-forward` reads the journal with journalctl -f and sends every entry -
+# syslog, stdout, native and kernel alike - as RFC 5424 over UDP, port 514 unless LOGHOST names one.
+# It binds no socket of journald's; busybox syslogd, which did, took /dev/log away from journald.
+#
+# It needs the journal (the systemd-journal group) and the network, and nothing else: its own
+# dynamic user, a read-only system. The journal cursor it keeps in its RuntimeDirectory lasts
+# until the reboot (Preserve=yes), so a restart continues after the last entry sent instead of
+# sending the last minutes again.
+[Unit]
+Description=Forward the journal to a remote syslog host
+After=network-online.target local-fs.target systemd-journald.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+ExecCondition=/bin/sh -c '[ -r /etc/config/syslog ] && . /etc/config/syslog && [ -n "$${LOGHOST:-}" ]'
+ExecStart=/usr/libexec/occu/lite-syslog-forward
+# journalctl ending or an unusable LOGHOST is a failure and comes back; a clean stop is not
+Restart=on-failure
+RestartSec=5
+DynamicUser=yes
+SupplementaryGroups=systemd-journal
+RuntimeDirectory=occu-syslog-forward
+RuntimeDirectoryMode=0700
+RuntimeDirectoryPreserve=yes
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=occu-syslog-forward
+
+[Install]
+WantedBy=multi-user.target

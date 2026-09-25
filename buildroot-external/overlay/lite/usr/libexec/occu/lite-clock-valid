@@ -1,0 +1,68 @@
+#!/bin/sh
+# openccu-lite: occu-clock-valid.service - done as soon as the system clock can be trusted.
+#
+# The interface daemons hand the system time on: rfd to the radio module (multimacd only passes on
+# the time frames rfd sends and reads no wall clock itself), hmipserver to every device that asks for
+# it. crond runs jobs by it and certificate checks depend on it. A box with a real-time clock has the
+# right time from occu-init-rtc on; a board without one (the Raspberry Pi 4) starts at systemd's
+# built-in epoch and keeps that until NTP answers. So this finishes when
+#   1. the clock was set from a real-time clock and is not older than this image, or
+#   2. chronyd reports a synchronised clock, or
+#   3. the timeout passes - a box without network and without a real-time clock still has to start
+#      its radio - with a warning in the journal.
+# /run/occulite/clock-state says which of the three: rtc, ntp or timeout.
+#
+# The unit is not ordered after chrony (which comes after the network), so on a board without a
+# real-time clock chronyd may not run yet when this starts. The timeout counts from chronyd's first
+# answer, so the network's own start does not eat into NTP's time; if chronyd does not answer at all,
+# the timeout counts from the start plus the given wait for chronyd.
+#
+# Usage: lite-clock-valid [timeout in seconds, default 60] [wait for chronyd in seconds, default 90]
+set -u
+TIMEOUT=${1:-60}
+CHRONYD_WAIT=${2:-90}
+STATE_DIR=${CLOCK_STATE_DIR:-/run/occulite}
+HM_MODE_FILE=${CLOCK_HM_MODE:-/var/hm_mode}
+VERSION_FILE=${CLOCK_VERSION_FILE:-/VERSION}
+CHRONYC=${CLOCK_CHRONYC:-/usr/bin/chronyc}
+UPTIME_FILE=${CLOCK_UPTIME:-/proc/uptime}
+
+state() {
+  mkdir -p "$STATE_DIR" && echo "$1" > "$STATE_DIR/clock-state.tmp" && mv -f "$STATE_DIR/clock-state.tmp" "$STATE_DIR/clock-state"
+}
+uptime_s() { cut -d. -f1 "$UPTIME_FILE"; }
+
+rtc=
+[ -r "$HM_MODE_FILE" ] && rtc=$(sed -n "s/^HM_RTC='\(.*\)'\$/\1/p" "$HM_MODE_FILE")
+built=$(stat -c %Y "$VERSION_FILE" 2>/dev/null || echo 0)
+if [ -n "$rtc" ] && [ "$(date +%s)" -ge "$built" ]; then
+  state rtc
+  echo "the clock comes from the real-time clock ($rtc)"
+  exit 0
+fi
+
+start=$(uptime_s)
+answered=
+while :; do
+  if tracking=$("$CHRONYC" -n tracking 2>/dev/null); then
+    if printf '%s\n' "$tracking" | grep -q '^Leap status *: Normal'; then
+      state ntp
+      echo "the clock is synchronised by NTP ($(( $(uptime_s) - start )) s)"
+      exit 0
+    fi
+    [ -n "$answered" ] || answered=$(uptime_s)
+  fi
+  now=$(uptime_s)
+  if [ -n "$answered" ]; then
+    waited=$(( now - answered )); limit=$TIMEOUT; what="$TIMEOUT s after chronyd started"
+  else
+    waited=$(( now - start )); limit=$(( TIMEOUT + CHRONYD_WAIT )); what="$limit s, and chronyd does not answer"
+  fi
+  if [ "$waited" -ge "$limit" ]; then
+    state timeout
+    # <4>: journald stores the line as a warning
+    echo "<4>the clock is not synchronised $what, and there is no real-time clock; starting without a trusted time"
+    exit 0
+  fi
+  sleep 0.5
+done

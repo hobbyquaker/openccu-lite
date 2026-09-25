@@ -1,0 +1,43 @@
+# openccu-lite: the journal's ram-sync mode - journald writes RAM only, and this copies the closed
+# journal files to the userfs every SYNC_INTERVAL (6h by default), early when the RAM journal is at
+# 80 % of its limit (at most every 15 minutes), and when it stops: at shutdown, at a reboot (the one
+# into the recovery system included), and at the "Copy now" of occulited's Journal panel, which
+# restarts it - "copy stop" tells the two apart for the copy's reason. lite-journal-sync explains the
+# copy; lite-journal-persist starts and stops this unit when the mode is switched at runtime.
+#
+# The copies go to the userfs, or to a USB stick named by its label (TARGET=usb:<label>/<dir>) while
+# it is plugged in; occu-usb-mount@'s stop waits for this unit's last copy at shutdown, so the stick
+# is still mounted for it. Or to a network share (TARGET=share:<name>/<dir>): After=
+# remote-fs.target, so the shares' mount units (Before=remote-fs.target) are stopped after this
+# unit's last copy; at boot remote-fs.target is reached within the first second.
+#
+# The condition keeps it inactive (not failed) in the other two modes, which is nearly every box.
+#
+# The ordering is for the stop. A unit is stopped after the units ordered after it, so Before= the
+# radio daemons, lighttpd, occulited and the addons means their last lines are in the last copy.
+# DefaultDependencies=no with Conflicts=/Before=shutdown.target and RequiresMountsFor=/usr/local:
+# it stops before the userfs is unmounted, and after=journald, so journalctl --rotate still works.
+# At boot the same edges only mean it starts right after the local filesystems, which costs nothing.
+# After occu-clock-save: the loop's first stamp of the next copy comes after the saved clock
+# is back, and only once occu-clock-valid's gate has passed (lite-journal-sync waits for that itself -
+# an ordering after the gate would hold the radio daemons above behind NTP). At shutdown the edge
+# means the clock is saved after the last copy.
+[Unit]
+Description=Copy the journal from RAM to the userfs, a USB stick or a network share at intervals and at shutdown
+DefaultDependencies=no
+RequiresMountsFor=/usr/local
+After=local-fs.target remote-fs.target systemd-journald.service occu-clock-save.service
+Before=shutdown.target rfd.service hmipserver.service multimacd.service hs485d.service lighttpd.service occulited.service occu-addons.service addons.target crond.service
+Conflicts=shutdown.target
+
+[Service]
+Type=exec
+ExecCondition=/usr/libexec/occu/lite-journal-sync active
+ExecStart=/usr/libexec/occu/lite-journal-sync run
+ExecStop=/usr/libexec/occu/lite-journal-sync copy stop
+TimeoutStopSec=120
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,20 @@
+# openccu-lite: the clock is saved once an hour as well (the maintainer, 2026-09-24), so after
+# a power cut - which skips the save at the stop - the restored time is at most an hour behind and
+# NTP's step stays small. fake-hwclock does the same. One tiny write to the userfs an hour.
+# Timers here carry no default dependencies (occu-interface-clock.timer says why); the first save
+# comes an hour after the boot, the restore of occu-clock-save.service having run long before.
+[Unit]
+Description=Saved system clock (hourly)
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+After=occu-clock-save.service
+ConditionVirtualization=!container
+
+[Timer]
+OnBootSec=1h
+OnUnitActiveSec=1h
+AccuracySec=5min
+
+[Install]
+WantedBy=multi-user.target

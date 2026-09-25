@@ -1,0 +1,36 @@
+# openccu-lite: persistent state on the userfs. /var is a tmpfs here (fstab),
+# so the journal and the timer stamps would not survive a reboot. The timer stamps always go to
+# the userfs - a timer that forgets when it last ran runs again at every boot, which is
+# correctness rather than wear. The journal is a decision (maintainer, 2026-09-07): RAM
+# only by default, persistent on the userfs for the VM product, overridable per box in
+# /etc/config/journal. The logic moved into /usr/libexec/occu/lite-journal-persist, because it
+# stopped being a one-liner the moment it had to decide something. It runs after the userfs is final (resize, factory
+# reset, backup restore) and before anything that writes there. The flush is SIGUSR1 to journald
+# rather than "journalctl --flush", which returns early once systemd-journal-flush.service has set
+# its flag (it ran before the directory existed and flushed nothing). The whole of /usr/local/var
+# is marked .nobackup: logs are not configuration. Replaces nothing in /etc/init.d.
+#
+# The directory is created here, not by journald, so journald never applies its own permissions to
+# it: it would be root:root 0755 and every flushed journal file root:root 0640 - unreadable for the
+# systemd-journal group and therefore for occulited, whose Log page then answers "journalctl: exit
+# status 1". The bind mount is given group systemd-journal and the setgid bit before the
+# flush, and what is already there is fixed afterwards, so a box updated from an older lite image
+# gets its old journal files readable too. This is what systemd's own tmpfiles rule
+# "z /var/log/journal 2755 root systemd-journal" does; it cannot run here because the directory
+# only exists after this unit mounted it.
+[Unit]
+Description=Journal and timer state on the userfs
+# After the userfs is final: the resize, the factory reset and the restore at boot (which orders
+# after the other two). The bind mount keeps the userfs mounted at /var/log/journal, and with it
+# mounted the resize's parted and the reset's mkfs.ext4 refuse the partition - on a fresh
+# x86_64-ova, which ships .doFactoryReset and a persistent journal, the first boot then kept a
+# 2 MB userfs and a factory reset that never happened.
+After=occu-machine-id.service occu-backup-restore.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-journal-persist
+
+[Install]
+WantedBy=multi-user.target

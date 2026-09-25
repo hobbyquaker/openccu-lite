@@ -1,0 +1,18 @@
+# openccu-lite: the job behind occu-clock-save-hourly.timer: lite-clock-save save, the same
+# atomic write as at the stop. Only while occu-clock-save.service is active - the restore ran and the
+# userfs is there; a save before the restore could write the board's stale start time.
+[Unit]
+Description=Save the system clock
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+Requisite=occu-clock-save.service
+After=occu-clock-save.service
+RequiresMountsFor=/usr/local
+ConditionVirtualization=!container
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/occu/lite-clock-save save
+StandardOutput=journal
+StandardError=journal

@@ -1,0 +1,26 @@
+#!/bin/sh
+# openccu-lite: send the journal to the remote syslog host the box was already configured with.
+#
+# OpenCCU's /etc/init.d/S07logging.script reads /etc/config/syslog and, when it sets LOGHOST,
+# starts busybox syslogd with "-R $LOGHOST -L". The file is on the userfs and survives the switch
+# to openccu-lite, so it stays the source of truth: a box configured on OpenCCU needs no action.
+#
+# This used to exec busybox syslogd -n -R here too, and that broke the local log: syslogd binds
+# /dev/log, which on a systemd box is journald's own syslog socket, so while it ran every syslog()
+# message (rfd, lighttpd, sshd) was lost from the journal - and stayed lost after it stopped - and
+# it only ever saw syslog() messages, so no unit's stdout (hmipserver, the addons, occulited)
+# reached the remote host. `occulited syslog-forward` follows the journal instead (journalctl -f)
+# and sends every entry as RFC 5424 over UDP; journald's sockets stay journald's.
+#
+# An image built with an occulited that does not have the subcommand yet would take the word for
+# no subcommand and start a second daemon; the marker string tells the two apart.
+set -u
+
+OCCULITED=${OCCU_OCCULITED:-/usr/bin/occulited}
+MARKER=occulited-syslog-forward-v1
+
+if ! grep -qF "${MARKER}" "${OCCULITED}" 2>/dev/null; then
+  echo "syslog: this occulited cannot forward the journal (no syslog-forward); nothing is sent to the remote host"
+  exit 0
+fi
+exec "${OCCULITED}" syslog-forward "$@"

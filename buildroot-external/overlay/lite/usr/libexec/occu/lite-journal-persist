@@ -1,0 +1,368 @@
+#!/bin/sh
+# openccu-lite: persistent state on the userfs, and where the journal lives.
+#
+# /var is a tmpfs here, so the journal and the timer stamps would not survive a reboot.
+#
+#   Timer stamps ALWAYS go to the userfs. A timer that forgets when it last ran is a timer that
+#   runs again at every boot; that is not a wear question, it is correctness.
+#
+#   The journal's storage is a setting with a product default (maintainer, 2026-09-07 and
+#   2026-09-12). The SD card is the CCU3's failure point and journald is the dominant writer by an
+#   order of magnitude, so the SD-card products keep the journal in RAM. The products that live on
+#   a host's disk - the VM (ova) and the Proxmox container (lxc) - write it
+#   straight to the userfs.
+#
+# The three modes:
+#
+#   ram         /run/log/journal only, bounded by RuntimeMaxUse, gone at a reboot.
+#   ram-sync    journald writes /run only, and occu-journal-sync.service copies the closed journal
+#               files to the userfs at an interval and at shutdown (lite-journal-sync). The card
+#               sees one batch per interval instead of a stream; a power loss loses the time since
+#               the last copy, an ordinary reboot nothing. The userfs directory is bind-mounted over
+#               /var/log/journal as in persistent, so journalctl - and the Log page - reads the
+#               copies and RAM together, earlier boots included; journald is told Storage=volatile
+#               so that it never writes there itself.
+#   persistent  the userfs directory bind-mounted over /var/log/journal, journald flushed onto it
+#               and writing it from then on. journald's Storage=auto does that: it is persistent
+#               exactly when /var/log/journal exists.
+#
+# Overridden per box by /etc/config/journal on the userfs, which survives a firmware update:
+#
+#   STORAGE=ram|ram-sync|persistent   empty = the product's default
+#   TARGET=userfs           where ram-sync and persistent write: /usr/local/var/log/journal (empty
+#                           means the same)
+#   TARGET=usb:<label>/<dir>  ram-sync only: the copies go to <dir> on the USB stick with that
+#                           filesystem label, wherever it is mounted (lite-journal-sync); nothing
+#                           is mounted over /var/log/journal. Persistent on a stick is refused -
+#                           journald would write the removable stick itself and keep its files
+#                           open when it is pulled - and the journal stays in RAM.
+#   TARGET=share:<name>/<dir>  ram-sync only (task 228): the copies go to <dir> on occulited's
+#                           network share <name> (/media/net/<name>), which a copy mounts through its
+#                           automount; nothing is mounted over /var/log/journal. Persistent on a
+#                           share is refused - journald would write the network and hang with it.
+#   PERSIST=1|0             the older setting: read as persistent / ram when STORAGE is empty
+#   SYNC_INTERVAL=6h        ram-sync: how often the copy runs (lite-journal-sync)
+#   TARGET_MAX_USE=64M      ram-sync: the most the copies on the userfs may take
+#   TARGET_MAX_AGE=         ram-sync: copies older than this are removed (30d); empty = no limit
+#   RUNTIME_MAX_USE=16M     journald RuntimeMaxUse - the RAM the journal may take
+#   SYSTEM_MAX_USE=32M      journald SystemMaxUse
+#   SYSTEM_MAX_FILE=8M      journald SystemMaxFileSize
+#   RATE_LIMIT_BURST=       journald RateLimitBurst
+#
+# When a switch applies:
+#   into persistent        at once: bind mount and flush.
+#   into ram-sync          at once: bind mount, journald restarted into RAM, the copies start.
+#   into ram               at the next boot: a mounted journal is not unmounted. From ram-sync the
+#                          copies stop at once (with a last one) and journald stays in RAM.
+#
+# When ram-sync or persistent cannot be set up (the userfs directory cannot be created or mounted,
+# the stick is not plugged in), the journal stays in RAM and the reason is in
+# /run/occu-journal/fallback for occulited's warning. For a stick that comes later,
+# occu-usb-mount@.service's start clears it and copies at once (lite-journal-sync attach).
+#
+# "lite-journal-persist decide" only prints the decision (for the tests and for
+# lite-journal-sync; OCCU_JOURNAL_CONFIG and OCCU_VERSION_FILE point it at other files).
+# "lite-journal-persist wait-flushed" only waits for the runtime journal to be gone (for the tests;
+# OCCU_JOURNAL_RUNTIME and OCCU_JOURNAL_FLUSH_STEPS point it at another directory and limit).
+# "lite-journal-persist archive-split <dir>" only archives the per-user files below <dir> (for the
+# tests; OCCU_JOURNALCTL and OCCU_JOURNALD_FDS point it at a stand-in journalctl and fd directory).
+#
+# The per-user files: the image's journald runs with SplitMode=none (one system.journal), but a box
+# that ran an earlier image has a user-<uid>.journal per addon and occulited user under its userfs
+# journal, 4M each. journald no longer opens them, and its vacuum never removes a file by an active
+# name, so they would hold most of SystemMaxUse for good. archive_split gives each the name
+# journald gives an archived file - user-<uid>@<seqnum id>-<head seqnum>-<head realtime>.journal,
+# from its own header - so the vacuum takes them oldest first like any archive; a file whose header
+# cannot be read gets the name of a disposed one (…@<mtime>-0….journal~), which the vacuum and
+# journalctl read the same way. A file journald has open is left alone.
+set -u
+
+CONFIG=${OCCU_JOURNAL_CONFIG:-/etc/config/journal}
+VERSION_FILE=${OCCU_VERSION_FILE:-/VERSION}
+STATE_DIR=${OCCU_JOURNAL_STATE:-/run/occu-journal}
+SYNC=${OCCU_JOURNAL_SYNC:-/usr/libexec/occu/lite-journal-sync}
+SYNC_UNIT=occu-journal-sync.service
+RUNTIME_DIR=${OCCU_JOURNAL_RUNTIME:-/run/log/journal}
+FLUSH_STEPS=${OCCU_JOURNAL_FLUSH_STEPS:-50}   # of 0.2 s: 10 s
+
+# The flush is done when no journal file is left in RAM. journald removes the runtime journal
+# (the machine-id directory with its files) once it has written it to /var/log/journal, but not
+# /run/log/journal itself: waiting for the directory to go ran into the limit on every boot.
+runtime_journal_left() {
+  for f in "${RUNTIME_DIR}"/*/*.journal "${RUNTIME_DIR}"/*.journal; do
+    [ -e "$f" ] && return 0
+  done
+  return 1
+}
+wait_flushed() {
+  i=0
+  while runtime_journal_left; do
+    [ "$i" -ge "${FLUSH_STEPS}" ] && return 1
+    sleep 0.2
+    i=$((i+1))
+  done
+  return 0
+}
+if [ "${1:-}" = wait-flushed ]; then
+  wait_flushed
+  exit $?
+fi
+
+JOURNALCTL=${OCCU_JOURNALCTL:-journalctl}
+# journald's open files: the fd directory of its process
+journald_fds() {
+  if [ -n "${OCCU_JOURNALD_FDS:-}" ]; then echo "${OCCU_JOURNALD_FDS}"; return; fi
+  pid=$(pidof systemd-journald 2>/dev/null | cut -d' ' -f1)
+  [ -n "${pid}" ] && echo "/proc/${pid}/fd"
+}
+open_by_journald() {  # <file>
+  fds=$(journald_fds)
+  [ -n "${fds}" ] || return 1
+  for fd in "${fds}"/*; do
+    [ "$(readlink "${fd}" 2>/dev/null)" = "$1" ] && return 0
+  done
+  return 1
+}
+archive_split() {  # <journal directory>
+  n=0
+  for f in "$1"/*/user-*.journal; do
+    [ -f "$f" ] || continue
+    name=${f##*/}
+    case "${name}" in *@*) continue ;; esac
+    if open_by_journald "$f"; then
+      echo "journal: ${f} is open in journald, left as it is"
+      continue
+    fi
+    base=${name%.journal}
+    hdr=$("${JOURNALCTL}" --header --file "$f" 2>/dev/null)
+    seqid=$(printf '%s\n' "${hdr}" | sed -n 's/^Sequential number ID: *\([0-9a-f]\{32\}\)$/\1/p')
+    seq=$(printf '%s\n' "${hdr}" | sed -n 's/^Head sequential number: *[0-9]* (\([0-9a-f]\{1,16\}\))$/\1/p')
+    rt=$(printf '%s\n' "${hdr}" | sed -n 's/^Head realtime timestamp: .*(\([0-9a-f]\{1,16\}\))$/\1/p')
+    if [ -n "${seqid}" ] && [ -n "${seq}" ] && [ -n "${rt}" ]; then
+      to="${f%/*}/${base}@${seqid}-$(printf '%16s' "${seq}" | tr ' ' 0)-$(printf '%16s' "${rt}" | tr ' ' 0).journal"
+    else
+      mt=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+      to="${f%/*}/${base}@$(printf '%016x' "$((mt * 1000000))")-0000000000000000.journal~"
+    fi
+    [ -e "${to}" ] && continue
+    mv "$f" "${to}" && n=$((n + 1))
+  done
+  [ "${n}" -gt 0 ] && echo "journal: ${n} per-user journal file(s) of an earlier image archived, so the size limit can take them"
+  return 0
+}
+if [ "${1:-}" = archive-split ]; then
+  archive_split "${2:?directory}"
+  exit $?
+fi
+STORAGE="" TARGET="" PERSIST="" RUNTIME_MAX_USE="" SYSTEM_MAX_USE="" SYSTEM_MAX_FILE="" RATE_LIMIT_BURST=""
+[ -r "${CONFIG}" ] && . "${CONFIG}"
+
+PLATFORM=""
+[ -r "${VERSION_FILE}" ] && PLATFORM=$(sed -n 's/^PLATFORM=//p' "${VERSION_FILE}" | head -1)
+case "${PLATFORM}" in
+  ova|lxc) default_storage=persistent ;;
+  *)       default_storage=ram ;;
+esac
+
+note=""
+case "${STORAGE}" in
+  ram|ram-sync|persistent) storage=${STORAGE}; source="STORAGE=${STORAGE}" ;;
+  "")
+    case "${PERSIST}" in
+      1) storage=persistent; source="PERSIST=1" ;;
+      0) storage=ram;        source="PERSIST=0" ;;
+      *) storage=${default_storage}; source="the product default" ;;
+    esac ;;
+  *)
+    storage=${default_storage}; source="the product default"; note="STORAGE=${STORAGE} is not a storage mode" ;;
+esac
+refused=""
+stick=""
+share=""
+case "${TARGET}" in
+  ""|userfs) target=userfs ;;
+  share:?*/?*)
+    target=${TARGET}
+    share=${TARGET#share:}
+    share=${share%%/*}
+    case "/${TARGET#share:*/}/" in
+      */../*|*/./*|*//*)
+        if [ "${storage}" != ram ]; then
+          storage=ram; refused="the target ${TARGET} is not a directory on a network share, the journal stays in RAM"
+        fi ;;
+    esac
+    if [ "${storage}" = persistent ]; then
+      storage=ram
+      refused="persistent on the network share ${share} is not possible - journald would write the network and hang with it when the server does not answer; choose RAM with copies to the share. The journal stays in RAM"
+    fi ;;
+  usb:?*/?*)
+    target=${TARGET}
+    stick=${TARGET#usb:}
+    stick=${stick%%/*}
+    case "/${TARGET#usb:*/}/" in
+      */../*|*/./*|*//*)
+        if [ "${storage}" != ram ]; then
+          storage=ram; refused="the target ${TARGET} is not a directory on a USB stick, the journal stays in RAM"
+        fi ;;
+    esac
+    if [ "${storage}" = persistent ]; then
+      storage=ram
+      refused="persistent on the USB stick ${stick} is not possible - journald would write the stick itself and hold its files open when it is pulled; choose RAM with copies to the stick. The journal stays in RAM"
+    fi ;;
+  *)
+    target=${TARGET}
+    if [ "${storage}" != ram ]; then
+      storage=ram; refused="the target ${TARGET} is neither the userfs, a USB stick (usb:<label>/<directory>) nor a network share (share:<name>/<directory>), the journal stays in RAM"
+    fi ;;
+esac
+[ -n "${refused}" ] && note=${refused}
+
+if [ "${1:-}" = decide ]; then
+  echo "storage=${storage} target=${target} platform=${PLATFORM:-unknown} default=${default_storage} source=${source}${note:+ note=${note}}"
+  exit 0
+fi
+
+# ---- timer stamps: always, and regardless of the journal decision -----------------------------
+mkdir -p /usr/local/var/lib/systemd/timers /var/lib/systemd || exit 0
+touch /usr/local/var/.nobackup 2>/dev/null   # logs are not configuration
+rm -rf /var/lib/systemd/timers
+ln -s /usr/local/var/lib/systemd/timers /var/lib/systemd/timers
+
+mkdir -p "${STATE_DIR}"
+rm -f "${STATE_DIR}/fallback"
+fallback() {
+  echo "$1" > "${STATE_DIR}/fallback"
+  echo "journal: $1"
+}
+
+# where journald is now: the userfs mounted, and whether it still (or again) writes RAM
+mounted=0
+mountpoint -q /var/log/journal 2>/dev/null && mounted=1
+in_ram=0
+[ -d /run/log/journal ] && in_ram=1
+
+# ---- journald's drop-in: the size limits, and Storage=volatile while it must stay off the mount --
+# ram-sync keeps journald in RAM with the userfs mounted; so does a switch from ram-sync to ram
+# until the reboot takes the mount away. Without volatile a restart of journald (a size change
+# below) would find /var/log/journal and the flushed flag, and write the userfs continuously.
+volatile=""
+if [ "${storage}" = ram-sync ] || { [ "${storage}" = ram ] && [ "${mounted}" = 1 ] && [ "${in_ram}" = 1 ]; }; then
+  volatile=1
+fi
+DROPIN=/run/systemd/journald.conf.d/50-openccu-lite-box.conf
+if [ -n "${RUNTIME_MAX_USE}${SYSTEM_MAX_USE}${SYSTEM_MAX_FILE}${RATE_LIMIT_BURST}${volatile}" ]; then
+  mkdir -p /run/systemd/journald.conf.d
+  {
+    echo "# written by lite-journal-persist from ${CONFIG}; do not edit here, it is tmpfs"
+    echo "[Journal]"
+    [ -n "${volatile}" ]         && echo "Storage=volatile"
+    [ -n "${RUNTIME_MAX_USE}" ]  && echo "RuntimeMaxUse=${RUNTIME_MAX_USE}"
+    [ -n "${SYSTEM_MAX_USE}" ]   && echo "SystemMaxUse=${SYSTEM_MAX_USE}"
+    [ -n "${SYSTEM_MAX_FILE}" ]  && echo "SystemMaxFileSize=${SYSTEM_MAX_FILE}"
+    [ -n "${RATE_LIMIT_BURST}" ] && echo "RateLimitBurst=${RATE_LIMIT_BURST}"
+  } > "${DROPIN}.new"
+  # only disturb journald when something actually changed
+  if ! cmp -s "${DROPIN}.new" "${DROPIN}" 2>/dev/null; then
+    mv "${DROPIN}.new" "${DROPIN}"
+    systemctl restart systemd-journald.service 2>/dev/null || true
+  else
+    rm -f "${DROPIN}.new"
+  fi
+elif [ -e "${DROPIN}" ]; then
+  # every limit cleared: back to the image's defaults
+  rm -f "${DROPIN}"
+  systemctl restart systemd-journald.service 2>/dev/null || true
+fi
+
+[ -n "${note}" ] && echo "journal: ${note}"
+
+# the copy unit runs exactly in ram-sync; --no-block, since this runs as a job itself at boot
+sync_unit() {
+  case "$1" in
+    start) systemctl -q is-active "${SYNC_UNIT}" 2>/dev/null || systemctl start --no-block "${SYNC_UNIT}" 2>/dev/null ;;
+    stop)  systemctl -q is-active "${SYNC_UNIT}" 2>/dev/null && systemctl stop --no-block "${SYNC_UNIT}" 2>/dev/null ;;
+  esac
+  return 0
+}
+
+if [ -n "${refused}" ]; then
+  fallback "${refused}"
+fi
+
+if [ "${storage}" = ram ]; then
+  sync_unit stop
+  if [ "${mounted}" = 1 ] && [ "${in_ram}" = 1 ]; then
+    echo "journal: RAM only (${source}); the copies to the userfs stopped, and they stay readable until the next boot"
+  elif [ "${mounted}" = 1 ]; then
+    echo "journal: RAM only from the next boot (${source}); it stays on the userfs until then"
+  else
+    echo "journal: RAM only (${source}, PLATFORM=${PLATFORM:-unknown}); set STORAGE=persistent or ram-sync in ${CONFIG} to keep it on the userfs"
+  fi
+  exit 0
+fi
+
+# ---- a USB stick, for ram-sync only -----------------------------------------------------------
+# Nothing is mounted: the copies go to the stick while it is plugged in (lite-journal-sync), and
+# journald stays in RAM (Storage=volatile above). A userfs journal mounted by an earlier setting
+# stays mounted and readable until the next boot.
+if [ -n "${share}" ]; then
+  # a network share: not reached for here (at boot its automount comes with occulited); the copies
+  # reach for it, and one that cannot says so (lite-journal-sync)
+  sync_unit start
+  echo "journal: in RAM, copied to the network share ${share} at intervals and at shutdown (${source})"
+  exit 0
+fi
+if [ "${target}" != userfs ]; then
+  sync_unit start
+  if where=$("${SYNC}" target 2>/dev/null); then
+    echo "journal: in RAM, copied to the USB stick ${stick} (${where}) at intervals, at shutdown and before it is unmounted (${source})"
+  else
+    fallback "the USB stick ${stick} is not plugged in, the journal stays in RAM until it is"
+  fi
+  exit 0
+fi
+
+# ---- the userfs target, for ram-sync and persistent --------------------------------------------
+# The directory is created here rather than by journald, so journald never applies its own
+# permissions to it: it would be root:root 0755 and every flushed file root:root 0640 - unreadable
+# for the systemd-journal group and therefore for occulited, whose Log page then answers
+# "journalctl: exit status 1". This is what systemd's own tmpfiles rule
+# "z /var/log/journal 2755 root systemd-journal" does; it cannot run here because the directory
+# only exists once this has mounted it.
+if ! mkdir -p /usr/local/var/log/journal /var/log/journal; then
+  sync_unit stop
+  fallback "the userfs target cannot be created, the journal stays in RAM (${source})"
+  exit 0
+fi
+# Re-run at runtime (occulited's Journal panel restarts this unit): do not stack a second bind
+# mount over the one from boot - the flush below is harmless twice, the mount is not.
+if [ "${mounted}" = 0 ] && ! mount --bind /usr/local/var/log/journal /var/log/journal; then
+  sync_unit stop
+  fallback "the userfs target cannot be mounted, the journal stays in RAM (${source})"
+  exit 0
+fi
+chgrp systemd-journal /var/log/journal && chmod 2755 /var/log/journal
+archive_split /var/log/journal
+
+if [ "${storage}" = ram-sync ]; then
+  # journald stays in RAM (Storage=volatile above); the copies are lite-journal-sync's
+  for d in /var/log/journal/*/; do [ -d "$d" ] && chgrp systemd-journal "$d" && chmod 2755 "$d"; done
+  sync_unit start
+  echo "journal: in RAM, copied to the userfs at intervals and at shutdown (${source})"
+  exit 0
+fi
+
+sync_unit stop
+# SIGUSR1 rather than "journalctl --flush": that returns early once systemd-journal-flush.service
+# has set its flag, and it ran before this directory existed and flushed nothing.
+systemctl kill -s SIGUSR1 systemd-journald.service
+if ! wait_flushed; then
+  echo "journal: the journal in RAM was not moved to the userfs within 10 s; journald may still be writing to RAM"
+fi
+
+# what is already there too, so a box updated from an older lite image gets its old files readable
+chgrp -R systemd-journal /var/log/journal
+chmod 2755 /var/log/journal
+for d in /var/log/journal/*/; do [ -d "$d" ] && chmod 2755 "$d"; done
+echo "journal: persistent on the userfs (${source})"
+exit 0

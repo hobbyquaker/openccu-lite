@@ -1,0 +1,570 @@
+#!/bin/sh
+# openccu-lite: the journal's ram-sync mode - journald writes RAM only, and this copies the closed
+# journal files to the target at an interval, early when RAM fills up, and at shutdown
+# (occu-journal-sync.service). The target is the userfs, a directory on a USB stick named by its
+# filesystem label (TARGET=usb:<label>/<directory>, below), or a directory on a network share of
+# occulited's System → Storage (TARGET=share:<name>/<directory>, below; task 228).
+#
+#   lite-journal-sync active       exit 0 when /etc/config/journal (or the product default) says
+#                                  ram-sync - the unit's condition
+#   lite-journal-sync run          the loop: a copy every SYNC_INTERVAL, counted from the start, and
+#                                  an early one when the RAM journal is at 80 % of its limit
+#   lite-journal-sync copy [why]   one copy now; why is interval, early, manual, or stop (the unit's
+#                                  stop: shutdown while the system goes down, manual otherwise - the
+#                                  Journal panel's Copy now is a restart of the unit)
+#   lite-journal-sync interval     the interval in seconds, as the loop uses it
+#   lite-journal-sync early-due <now> <last>
+#                                  exit 0 when the loop would copy early at uptime <now> after a copy
+#                                  at <last>; prints the RAM journal's share of its limit in percent
+#   lite-journal-sync target       prints the directory the copies go to now; exit 1 when the target
+#                                  is a USB stick that is not plugged in (lite-journal-persist)
+#   lite-journal-sync attach <dev> occu-usb-mount@<dev>.service has mounted a stick: when it is the
+#                                  journal's stick, the copies go to it again, and one runs at once
+#   lite-journal-sync detach <dev> occu-usb-mount@<dev>.service is about to unmount it: when it is
+#                                  the journal's stick, a last copy while it can still be written,
+#                                  then the journal carries on in RAM (and says so) until it is back
+#
+# One copy:
+#   1. journalctl --rotate closes the current RAM journal file;
+#   2. every closed file (name@….journal) under /run/log/journal not yet on the target is copied
+#      to <target>/<machine id>/, under a temporary name and then renamed;
+#   3. the target is synced, and only then are the copied files removed from RAM - RAM holds only
+#      what is newer than the last copy;
+#   4. the copies are trimmed to TARGET_MAX_USE (64M) and TARGET_MAX_AGE (journalctl --vacuum-*).
+#
+# The USB stick (TARGET=usb:<label>/<directory>, e.g. usb:LOGSTICK/journal). The stick is named by
+# its filesystem label - udev's ID_FS_LABEL, the label with spaces and odd characters made "_" -
+# never by /media/usbN, whose number follows the order the sticks were plugged in (and on the VM
+# /media/usb0 is the userfs). Every copy looks the stick up again among the mounts at /media/usb1…8;
+# a stick with another label is never written, and without the stick a copy is skipped and the
+# journal stays in RAM. Nothing of the stick is mounted over /var/log/journal: journald never has a
+# file open on it, so pulling it loses at most the copy that is running; occulited reads the copies
+# from there (journalctl --file, --directory by hand). occu-usb-mount@.service calls "attach" when
+# a stick is mounted and "detach" before it is unmounted; which stick the copies went to last is in
+# /run/occu-journal/stick, since a pulled stick can no longer be asked for its label. FAT, exFAT and
+# NTFS take no owner or mode of their own (the mount gives them), so chmod and chgrp there are
+# tried and their failure ignored.
+# The network share (TARGET=share:<name>/<directory>, task 228): occulited mounts its shares on demand
+# at /media/net/<name> (an automount it renders at its start). A copy's first access mounts the share
+# (the mount unit's own bound, 30 s); only when the mount table then shows a network mount there is
+# anything written - never the tmpfs under an automount that is not set up. A share that cannot be
+# reached skips the copy with nothing removed from RAM, a failed result and the fallback file (the
+# journal-target warning); the next copy that reaches it clears it. The unit is ordered after
+# remote-fs.target, so at shutdown its last copy runs before the share is unmounted.
+#
+# The result is in /run/occu-journal/sync.state (LAST_SYNC, LAST_RESULT ok|failed, LAST_COPIED,
+# LAST_ERROR, LAST_REASON interval|early|shutdown|manual|plug|unplug) and the next copy's time in
+# /run/occu-journal/sync.next (and sync.due) while the loop runs; occulited's Journal panel shows both and warns
+# about a failed copy. The state is also written beside the copies (.occu-sync.state), so the copy
+# at shutdown - the last of a boot - is still known after the reboot has emptied /run.
+#
+# The early copy (task 85, decided in D-67): between two copies journald drops what does not fit in
+# RuntimeMaxUse, so the loop also copies once the RAM journal takes 80 % of that limit - at most
+# every 15 minutes (EARLY_GAP after the last copy of any kind), so a burst of lines cannot turn the
+# copy into a stream of card writes. The usage is what the files under /run/log/journal take on
+# disk (du), the way journald counts its limit: journalctl --disk-usage cannot be used here, because
+# in ram-sync it also counts the copies on the userfs, which are mounted over /var/log/journal. The
+# limit is RUNTIME_MAX_USE, or journald's own default when it is empty: 10 % of the filesystem /run
+# is on, at most 4G. A usage or a limit that cannot be read starts no early copy.
+#
+# The loop re-reads the file every minute, so a new interval applies at once; it counts on the
+# boot's clock (/proc/uptime), so chrony setting the time does not start a copy.
+#
+# The next copy's time: sync.next holds it on the wall clock, sync.due on the boot's clock
+# (the uptime in seconds), from which occulited computes the date afresh at every read, so a clock
+# that steps between two passes of the loop is followed at once. The first stamp waits for a clock
+# that can be trusted: a board without a real-time clock starts months behind, and a stamp taken
+# then showed a date from before NTP for up to a minute. The unit is ordered after
+# occu-clock-save.service (the saved clock); the image has no time-sync.target provider, so
+# the trusted clock is occu-clock-valid's gate - /run/occulite/clock-state, written when it passes
+# (a real-time clock, NTP, or its timeout). In a container, whose clock is its host's, the gate does
+# not run and the clock is trusted from the start; should the gate never answer, the stamp comes
+# after CLOCK_WAIT seconds of uptime (its own start timeout is below that). Until then the loop
+# checks every few seconds instead of every minute.
+#
+# One copy at a time (B-124): a copy holds /run/occu-journal/lock for its own duration only, in a
+# subshell, so the loop keeps no descriptor of it while it sleeps. Until B-124 the loop's first copy
+# kept the lock for the rest of its life, and the unit's stop then waited 120 s for it, was killed and
+# copied nothing. A copy waits at most LOCK_WAIT (30 s) for a copy that runs; after that a copy of
+# the loop is left out, and any other copy - the one at a stop above all - goes ahead without the
+# lock. The stop leaves /run/occu-journal/stopping first: from then on the loop starts no copy of its
+# own (it checks under the lock), so the stop's copy is the boot's last and its reason stands; the
+# next run of the loop removes the file.
+set -u
+
+CONFIG=${OCCU_JOURNAL_CONFIG:-/etc/config/journal}
+# not PERSIST: that is a key of /etc/config/journal, which read_config sources
+PERSIST_TOOL=${OCCU_JOURNAL_PERSIST:-/usr/libexec/occu/lite-journal-persist}
+SRC=${OCCU_JOURNAL_RUNTIME:-/run/log/journal}
+USERFS_DST=${OCCU_JOURNAL_TARGET:-/usr/local/var/log/journal}
+NET_BASE=/media/net
+SHARE_WAIT=${OCCU_JOURNAL_SHARE_WAIT:-45}
+DST=${USERFS_DST}
+DST_NAME="the userfs"
+STATE_DIR=${OCCU_JOURNAL_STATE:-/run/occu-journal}
+MOUNTS=${OCCU_MOUNTS:-/proc/mounts}
+MEDIA_ROOT=${OCCU_MEDIA_ROOT:-}
+UDEVADM=${OCCU_UDEVADM:-udevadm}
+SYNC_UNIT=occu-journal-sync.service
+STICK_WAIT=${OCCU_JOURNAL_STICK_WAIT:-60}
+DEV_DIR=${OCCU_DEV_DIR:-/dev}
+JOURNALCTL=${OCCU_JOURNALCTL:-journalctl}
+SYSTEMCTL=${OCCU_SYSTEMCTL:-systemctl}
+UPTIME=${OCCU_UPTIME:-/proc/uptime}
+DU=${OCCU_DU:-du}
+DF=${OCCU_DF:-df}
+EARLY_PERCENT=80
+EARLY_GAP=900
+LOCK_WAIT=${OCCU_JOURNAL_LOCK_WAIT:-30}
+STOPPING="${STATE_DIR}/stopping"
+CLOCK_STATE=${OCCU_CLOCK_STATE:-/run/occulite/clock-state}
+CONTAINER_FILE=${OCCU_CONTAINER_FILE:-/run/systemd/container}
+CLOCK_WAIT=${OCCU_JOURNAL_CLOCK_WAIT:-240}
+CLOCK_POLL=5
+
+read_config() {
+  SYNC_INTERVAL="" TARGET_MAX_USE="" TARGET_MAX_AGE="" RUNTIME_MAX_USE="" TARGET=""
+  [ -r "${CONFIG}" ] && . "${CONFIG}"
+  parse_target
+}
+
+# TARGET: empty or userfs is the userfs; usb:<label>/<directory> a directory on the USB stick with
+# that label; share:<name>/<directory> a directory on the network share with that name (task 228).
+# STICK_LABEL and SHARE_NAME are empty for the userfs; TARGET_BAD is set for a value that is none of
+# them (the copies then go nowhere - lite-journal-persist keeps such a box in RAM and says why).
+parse_target() {
+  STICK_LABEL="" STICK_DIR="" SHARE_NAME="" SHARE_DIR="" TARGET_BAD=""
+  case "${TARGET}" in
+    ""|userfs) return 0 ;;
+    share:?*/?*)
+      rest=${TARGET#share:}
+      SHARE_NAME=${rest%%/*}
+      SHARE_DIR=${rest#*/}
+      # a share's name is occulited's: a lower-case letter, then letters and digits, 16 at most
+      case "${SHARE_NAME}" in
+        [a-z]*) ;;
+        *) TARGET_BAD=1 ;;
+      esac
+      case "${SHARE_NAME}" in *[!a-z0-9]*) TARGET_BAD=1 ;; esac
+      [ "${#SHARE_NAME}" -le 16 ] || TARGET_BAD=1
+      case "/${SHARE_DIR}/" in
+        */../*|*/./*|*//*|*/.*) TARGET_BAD=1 ;;
+      esac
+      [ -n "${TARGET_BAD}" ] && SHARE_NAME="" SHARE_DIR="" ;;
+    usb:?*/?*)
+      rest=${TARGET#usb:}
+      STICK_LABEL=${rest%%/*}
+      STICK_DIR=${rest#*/}
+      case "/${STICK_DIR}/" in
+        */../*|*/./*|*//*) STICK_LABEL="" STICK_DIR="" TARGET_BAD=1 ;;
+      esac ;;
+    *) TARGET_BAD=1 ;;
+  esac
+  [ -z "${TARGET_BAD}" ]
+}
+
+# device_label <device>: its filesystem label as udev has it (ID_FS_LABEL); empty when udev does
+# not know the device (a stick that is gone) or it has none
+device_label() {
+  "${UDEVADM}" info --query=property --name="$1" 2>/dev/null | sed -n 's/^ID_FS_LABEL=//p' | head -1
+}
+
+# stick_mount <label>: "<device> <mount point>" of the first stick mounted at /media/usb1…8 whose
+# label is <label>; exit 1 when none is
+stick_mount() {
+  [ -r "${MOUNTS}" ] || return 1
+  while read -r dev mp rest; do
+    case "${mp}" in /media/usb[1-8]) ;; *) continue ;; esac
+    [ "$(device_label "${dev}")" = "$1" ] || continue
+    echo "${dev} ${mp}"
+    return 0
+  done < "${MOUNTS}"
+  return 1
+}
+
+# mounted_ro <mount point>: exit 0 when it is mounted read-only
+mounted_ro() {
+  awk -v m="$1" '$2 == m { print $4; exit }' "${MOUNTS}" 2>/dev/null | grep -Eq '(^|,)ro(,|$)'
+}
+
+# share_mounted <mount point>: exit 0 when a network filesystem is mounted there
+share_mounted() {
+  awk -v m="$1" '$2 == m && ($3 == "nfs" || $3 == "nfs4" || $3 == "cifs" || $3 == "smb3") { f = 1 } END { exit !f }' "${MOUNTS}" 2>/dev/null
+}
+
+# share_armed <mount point>: exit 0 when occulited's automount - or a network mount - is there
+share_armed() {
+  awk -v m="$1" '$2 == m && ($3 == "autofs" || $3 == "nfs" || $3 == "nfs4" || $3 == "cifs" || $3 == "smb3") { f = 1 } END { exit !f }' "${MOUNTS}" 2>/dev/null
+}
+
+# share_reach: the first access mounts the share through its automount (bounded), then the mount
+# table must show it - a mount point that is not set up, or a mount that failed, is the tmpfs under
+# it, and nothing is written there. SHARE_ERR says why not.
+# Whether the share is set up at all is the mount table's answer (its automount at the mount point),
+# never a test of the directory: a stat through the automount of an SMB share whose server is gone
+# fails (EHOSTDOWN once the mount was tried), and such a share is unreachable, not missing.
+share_reach() {
+  SHARE_ERR=""
+  if ! share_armed "${SHARE_MP}"; then
+    SHARE_ERR="the network share ${SHARE_NAME} is not set up on this system (no automount at ${SHARE_MP})"
+    return 1
+  fi
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${SHARE_WAIT}" ls "${MEDIA_ROOT}${SHARE_MP}" >/dev/null 2>&1
+  else
+    ls "${MEDIA_ROOT}${SHARE_MP}" >/dev/null 2>&1
+  fi
+  if ! share_mounted "${SHARE_MP}"; then
+    SHARE_ERR="the network share ${SHARE_NAME} cannot be reached"
+    return 1
+  fi
+  return 0
+}
+
+# resolve_dst: DST and DST_NAME for the target as the file says it now; for a stick, exit 1 when it
+# is not plugged in, and /run/occu-journal/stick records the device and mount point otherwise; a
+# share resolves without being touched (the copy reaches for it)
+resolve_dst() {
+  if [ -n "${SHARE_NAME}" ]; then
+    DST_NAME="the network share ${SHARE_NAME}"
+    SHARE_MP="${NET_BASE}/${SHARE_NAME}"
+    DST="${MEDIA_ROOT}${SHARE_MP}/${SHARE_DIR}"
+    return 0
+  fi
+  if [ -z "${STICK_LABEL}" ]; then
+    DST=${USERFS_DST}
+    DST_NAME="the userfs"
+    [ -z "${TARGET_BAD}" ]
+    return
+  fi
+  DST_NAME="the USB stick ${STICK_LABEL}"
+  found=$(stick_mount "${STICK_LABEL}") || return 1
+  STICK_DEV=${found%% *}
+  STICK_MP=${found#* }
+  DST="${MEDIA_ROOT}${STICK_MP}/${STICK_DIR}"
+  mkdir -p "${STATE_DIR}" 2>/dev/null && echo "${found}" > "${STATE_DIR}/stick"
+  return 0
+}
+
+# SYNC_INTERVAL is <n>min, <n>h or <n>d; empty or not understood is 6h. At least 15 minutes, at
+# most 7 days.
+interval_seconds() {
+  v=${SYNC_INTERVAL:-6h}
+  case "$v" in
+    *min) n=${v%min}; m=60 ;;
+    *h)   n=${v%h};   m=3600 ;;
+    *d)   n=${v%d};   m=86400 ;;
+    *)    n="";       m=1 ;;
+  esac
+  n=$(echo "$n" | sed 's/^0*//')
+  case "$n" in ''|*[!0-9]*) echo 21600; return ;; esac
+  [ "${#n}" -gt 6 ] && { echo 604800; return; }
+  s=$((n * m))
+  [ "$s" -lt 900 ] && s=900
+  [ "$s" -gt 604800 ] && s=604800
+  echo "$s"
+}
+
+uptime_s() { cut -d. -f1 "${UPTIME}"; }
+
+# clock_trusted <uptime>: exit 0 once the wall clock can be shown: occu-clock-valid's gate
+# has passed, the system is a container, or the gate has had CLOCK_WAIT seconds of uptime
+clock_trusted() {
+  [ -s "${CLOCK_STATE}" ] || [ -e "${CONTAINER_FILE}" ] || [ "$1" -ge "${CLOCK_WAIT}" ]
+}
+
+# a journald size (a number with K, M, G or T, base 1024; a plain number is bytes) in KiB; empty
+# when it is not one
+size_kib() {
+  v=$(echo "${1:-}" | tr 'kmgt' 'KMGT')
+  case "$v" in
+    *K) n=${v%K}; m=1 ;;
+    *M) n=${v%M}; m=1024 ;;
+    *G) n=${v%G}; m=1048576 ;;
+    *T) n=${v%T}; m=1073741824 ;;
+    *)  n=$v;     m=0 ;;
+  esac
+  case "$n" in ''|*[!0-9]*) return ;; esac
+  [ "${#n}" -gt 9 ] && return
+  if [ "$m" -eq 0 ]; then echo $((n / 1024)); else echo $((n * m)); fi
+}
+
+# the RAM journal's limit in KiB: RUNTIME_MAX_USE, else journald's default (10 % of /run's
+# filesystem, at most 4G); empty when neither can be read
+runtime_limit_kib() {
+  if [ -n "${RUNTIME_MAX_USE}" ]; then
+    size_kib "${RUNTIME_MAX_USE}"
+    return
+  fi
+  total=$("${DF}" -kP "${SRC}" 2>/dev/null | awk 'NR == 2 { print $2 }')
+  case "$total" in ''|*[!0-9]*) return ;; esac
+  l=$((total / 10))
+  [ "$l" -gt 4194304 ] && l=4194304
+  echo "$l"
+}
+
+# what the files under /run/log/journal take on disk, in KiB; empty when it cannot be read
+ram_usage_kib() {
+  u=$("${DU}" -sk "${SRC}" 2>/dev/null | awk 'NR == 1 { print $1 }')
+  case "$u" in ''|*[!0-9]*) return ;; esac
+  echo "$u"
+}
+
+# early_due <now> <last>: 0 when an early copy is due; EARLY_SHARE is the percent then
+early_due() {
+  EARLY_SHARE=""
+  [ $(( $1 - $2 )) -ge "${EARLY_GAP}" ] || return 1
+  limit=$(runtime_limit_kib)
+  used=$(ram_usage_kib)
+  [ -n "${limit}" ] && [ -n "${used}" ] && [ "${limit}" -gt 0 ] || return 1
+  EARLY_SHARE=$((used * 100 / limit))
+  [ $((used * 100)) -ge $((limit * EARLY_PERCENT)) ]
+}
+
+write_state() {  # <result> <copied> <error> <reason>
+  {
+    echo "LAST_SYNC=$(date +%s)"
+    echo "LAST_RESULT=$1"
+    echo "LAST_COPIED=$2"
+    echo "LAST_ERROR=$3"
+    echo "LAST_REASON=$4"
+  } > "${STATE_DIR}/sync.state.new" && mv -f "${STATE_DIR}/sync.state.new" "${STATE_DIR}/sync.state"
+  # beside the copies, for the next boot: best effort, the copy's own result does not depend on it
+  if [ -d "${DST}" ] && cp "${STATE_DIR}/sync.state" "${DST}/.occu-sync.state.new" 2>/dev/null; then
+    mv -f "${DST}/.occu-sync.state.new" "${DST}/.occu-sync.state" 2>/dev/null
+  fi
+}
+
+# lock_copy: takes the lock on descriptor 9, waiting at most LOCK_WAIT seconds for a copy that runs;
+# exit 1 when it did not get it. flock -n in a loop works with busybox's flock as with util-linux's.
+lock_copy() {
+  command -v flock >/dev/null 2>&1 || return 0
+  waited=0
+  until flock -n 9; do
+    [ "${waited}" -ge "${LOCK_WAIT}" ] && return 1
+    sleep 1
+    waited=$((waited + 1))
+  done
+  return 0
+}
+
+copy() {  # [interval|early|manual|stop|plug|unplug]
+  reason=${1:-manual}
+  mkdir -p "${STATE_DIR}" || return 1
+  own=""
+  case "${reason}" in
+    interval|early) own=1 ;;
+    stop)
+      reason=manual
+      [ "$("${SYSTEMCTL}" is-system-running 2>/dev/null)" = stopping ] && reason=shutdown
+      # the loop starts no copy of its own from here on: this one is the unit's last
+      : > "${STOPPING}"
+      ;;
+    unplug)
+      # a stick's unit also stops at shutdown
+      [ "$("${SYSTEMCTL}" is-system-running 2>/dev/null)" = stopping ] && reason=shutdown
+      ;;
+  esac
+  read_config
+  # one copy at a time, and the lock only for as long as the copy runs (B-124)
+  (
+    if ! lock_copy; then
+      if [ -n "${own}" ]; then
+        echo "journal: another copy has held the lock for ${LOCK_WAIT} s: no ${reason} copy now"
+        exit 0
+      fi
+      echo "journal: another copy has held the lock for ${LOCK_WAIT} s: copying (${reason}) without it"
+    fi
+    if [ -n "${own}" ] && [ -e "${STOPPING}" ]; then
+      echo "journal: the unit is stopping, and its stop copies: no ${reason} copy"
+      exit 0
+    fi
+    copy_locked
+  ) 9>"${STATE_DIR}/lock"
+}
+
+copy_locked() {  # the copy itself, with ${reason}
+  if ! resolve_dst; then
+    if [ -n "${TARGET_BAD}" ]; then
+      echo "journal: the target ${TARGET} is not understood: no copy (${reason})"
+    else
+      echo "journal: ${DST_NAME} is not plugged in: no copy (${reason}), the journal stays in RAM"
+    fi
+    return 0
+  fi
+  if [ -n "${SHARE_NAME}" ] && ! share_reach; then
+    # nothing leaves RAM; the warning says so until a copy reaches the share again
+    write_state failed 0 "${SHARE_ERR}" "${reason}"
+    echo "${SHARE_ERR}, the journal stays in RAM until a copy reaches it" > "${STATE_DIR}/fallback"
+    echo "journal: ${SHARE_ERR}: no copy (${reason}), the journal stays in RAM"
+    return 1
+  fi
+  err=""
+  copied=0
+  list="${STATE_DIR}/copied.$$"
+  : > "${list}"
+  if [ -n "${STICK_LABEL}" ] && mounted_ro "${STICK_MP}"; then
+    err="${DST_NAME} is mounted read-only"
+  elif [ -n "${SHARE_NAME}" ] && mounted_ro "${SHARE_MP}"; then
+    err="${DST_NAME} is mounted read-only"
+  elif ! mkdir -p "${DST}" 2>/dev/null; then
+    err="the target ${DST} cannot be created"
+  else
+    "${JOURNALCTL}" --rotate >/dev/null 2>&1 || err="journalctl --rotate failed"
+    for f in "${SRC}"/*/*@*.journal; do
+      [ -f "$f" ] || continue
+      d=${f%/*}
+      to="${DST}/${d##*/}"
+      name=${f##*/}
+      if ! mkdir -p "${to}" 2>/dev/null; then
+        err="${to} cannot be created"
+        break
+      fi
+      chgrp systemd-journal "${to}" 2>/dev/null
+      chmod 2755 "${to}" 2>/dev/null
+      if [ -f "${to}/${name}" ] && [ "$(wc -c < "$f")" = "$(wc -c < "${to}/${name}")" ]; then
+        # copied before, and left in RAM by a copy that stopped before its end
+        echo "$f" >> "${list}"
+        continue
+      fi
+      tmp="${to}/.${name}.part"
+      # chmod and chgrp fail on FAT, exFAT and NTFS, whose mount gives every file its owner and mode
+      if cp "$f" "${tmp}" 2>/dev/null && { chmod 0640 "${tmp}" 2>/dev/null; mv -f "${tmp}" "${to}/${name}"; }; then
+        chgrp systemd-journal "${to}/${name}" 2>/dev/null
+        echo "$f" >> "${list}"
+        copied=$((copied + 1))
+      else
+        rm -f "${tmp}"
+        err="copying ${name} to ${to} failed (${DST_NAME} full or read-only?)"
+        break
+      fi
+    done
+    # on the card or the stick before it leaves RAM
+    sync
+    while IFS= read -r f; do rm -f "$f"; done < "${list}"
+    set -- "--vacuum-size=${TARGET_MAX_USE:-64M}"
+    [ -n "${TARGET_MAX_AGE}" ] && set -- "$@" "--vacuum-time=${TARGET_MAX_AGE}"
+    if ! "${JOURNALCTL}" -q -D "${DST}" "$@" >/dev/null 2>&1; then
+      [ -n "${err}" ] || err="trimming the copies on ${DST_NAME} failed"
+    fi
+  fi
+  rm -f "${list}"
+  if [ -n "${err}" ]; then
+    write_state failed "${copied}" "${err}" "${reason}"
+    echo "journal: the copy to ${DST_NAME} (${reason}) failed after ${copied} file(s): ${err}"
+    return 1
+  fi
+  write_state ok "${copied}" "" "${reason}"
+  # a share reached again: its warning goes
+  [ -n "${SHARE_NAME}" ] && rm -f "${STATE_DIR}/fallback"
+  echo "journal: ${copied} journal file(s) copied from RAM to ${DST_NAME} (${reason})"
+  return 0
+}
+
+run() {
+  mkdir -p "${STATE_DIR}" || exit 1
+  # a stop's mark is for the loop that was stopped, not for this one
+  rm -f "${STOPPING}"
+  trap 'rm -f "${STATE_DIR}/sync.next" "${STATE_DIR}/sync.due"; exit 0' TERM INT
+  rm -f "${STATE_DIR}/sync.next" "${STATE_DIR}/sync.due"
+  last=$(uptime_s)
+  while :; do
+    read_config
+    iv=$(interval_seconds)
+    now=$(uptime_s)
+    due=$((last + iv))
+    trusted=""
+    if clock_trusted "${now}"; then
+      trusted=1
+      echo "${due}" > "${STATE_DIR}/sync.due"
+      echo "$(( $(date +%s) + due - now ))" > "${STATE_DIR}/sync.next"
+    fi
+    if [ "${now}" -ge "${due}" ]; then
+      copy interval
+      last=$(uptime_s)
+      continue
+    fi
+    if early_due "${now}" "${last}"; then
+      echo "journal: the RAM journal is at ${EARLY_SHARE} % of its limit: an early copy"
+      copy early
+      last=$(uptime_s)
+      continue
+    fi
+    left=$((due - now))
+    [ "${left}" -gt 60 ] && left=60
+    # before the clock is trusted, look again soon: the stamp follows the gate within seconds
+    [ -z "${trusted}" ] && [ "${left}" -gt "${CLOCK_POLL}" ] && left=${CLOCK_POLL}
+    sleep "${left}" &
+    wait $!
+  done
+}
+
+active() { "${PERSIST_TOOL}" decide | grep -q '^storage=ram-sync '; }
+
+# the journal's stick, as far as occu-usb-mount@<dev> is concerned: ram-sync with a stick target
+stick_target() {
+  read_config
+  [ -n "${STICK_LABEL}" ] && active
+}
+
+attach() {  # <kernel name>
+  dev=/dev/$1
+  stick_target || return 0
+  label=$(device_label "${dev}")
+  if [ "${label}" != "${STICK_LABEL}" ]; then
+    echo "journal: ${dev} (label ${label:-none}) is not the journal's USB stick ${STICK_LABEL}: left alone"
+    return 0
+  fi
+  mkdir -p "${STATE_DIR}"
+  rm -f "${STATE_DIR}/fallback"
+  echo "journal: the USB stick ${STICK_LABEL} is plugged in (${dev}): the copies go to it again"
+  "${SYSTEMCTL}" -q is-active "${SYNC_UNIT}" 2>/dev/null || "${SYSTEMCTL}" start --no-block "${SYNC_UNIT}" 2>/dev/null
+  copy plug
+  return 0
+}
+
+detach() {  # <kernel name>
+  dev=/dev/$1
+  stick_target || return 0
+  # the stick the copies went to: a pulled stick has left udev, and its label with it
+  last=$(cat "${STATE_DIR}/stick" 2>/dev/null)
+  [ "${last%% *}" = "${dev}" ] || return 0
+  stopping=""
+  [ "$("${SYSTEMCTL}" is-system-running 2>/dev/null)" = stopping ] && stopping=1
+  if [ -n "${stopping}" ]; then
+    # at shutdown the copy unit's own last copy comes after the radio daemons and the addons have
+    # stopped; the stick stays mounted until it is done, and this copy takes what came after
+    i=0
+    while [ "${i}" -lt "${STICK_WAIT}" ]; do
+      case "$("${SYSTEMCTL}" is-active "${SYNC_UNIT}" 2>/dev/null)" in
+        active|deactivating|activating|reloading) sleep 1; i=$((i + 1)) ;;
+        *) break ;;
+      esac
+    done
+  fi
+  if [ -e "${DEV_DIR}/$1" ]; then
+    copy unplug
+  else
+    echo "journal: the USB stick ${STICK_LABEL} was pulled out: no last copy"
+  fi
+  rm -f "${STATE_DIR}/stick"
+  [ -n "${stopping}" ] && return 0
+  echo "the USB stick ${STICK_LABEL} is not plugged in, the journal stays in RAM until it is" > "${STATE_DIR}/fallback"
+  echo "journal: the USB stick ${STICK_LABEL} is gone: the journal carries on in RAM until it is back"
+  return 0
+}
+
+case "${1:-}" in
+  active)    active ;;
+  target)    read_config; resolve_dst && echo "${DST}" ;;
+  attach|detach)
+    case "${2:-}" in
+      ''|*[!A-Za-z0-9]*) echo "not a block device name: '${2:-}'" >&2; exit 2 ;;
+    esac
+    "$1" "$2" ;;
+  run)       run ;;
+  copy)      copy "${2:-manual}" ;;
+  interval)  read_config; interval_seconds ;;
+  early-due) read_config; early_due "${2:?now}" "${3:?last}"; rc=$?; echo "${EARLY_SHARE}"; exit $rc ;;
+  *)         echo "usage: lite-journal-sync active|run|copy [interval|early|manual|stop]|interval|early-due <now> <last>|target|attach <dev>|detach <dev>" >&2; exit 2 ;;
+esac
