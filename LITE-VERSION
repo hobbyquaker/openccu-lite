@@ -1,0 +1,9 @@
+# openccu-lite release identity (ROADMAP D-44, replacing D-37). Read by lite-version.mk.
+# VERSION is openccu-lite's own semantic version - the release identity, the /VERSION LITE= line,
+# the artefact names (openccu-lite-<product>-<version>.<ext>) and the tag (v<version>).
+# D-88: while it is 1.0.0-dev, every build is 1.0.0-dev.<N>, N one up with every build round -
+# passed as LITE_VERSION=1.0.0-dev.<N>, N from the build ledger of the agents repository.
+# BASE is the OpenCCU tag this branch is rebased on: what /VERSION's VERSION= line carries, what
+# the recovery compares, and the first thing a bug report names.
+VERSION=1.0.0-dev
+BASE=3.89.9.20260914

@@ -8,6 +8,7 @@ OPENCCU_BASE_ROOTFS_PATCH_DIR=$(BUILDROOT_EXTERNAL)/package/openccu-base/rootfs-
 DATE=$(shell date +%Y%m%d)
 PRODUCT=
 PRODUCT_VERSION:=$(OPENCCU_BASE_VERSION).$(DATE)
+-include lite-version.mk
 PRODUCTS:=$(sort $(notdir $(patsubst %.config,%,$(wildcard $(DEFCONFIG_DIR)/*.config))))
 BR2_DL_DIR=$(shell pwd)/download
 BR2_CCACHE_DIR=${HOME}/.buildroot-ccache
@@ -62,7 +63,14 @@ $(PRODUCTS): %:
 	@echo "[build1: $@]"
 	@$(MAKE) PRODUCT=$@ PRODUCT_VERSION=$(PRODUCT_VERSION) PRODUCT_PLATFORM=$(PLATFORM) build
 
-build: | buildroot-$(BUILDROOT_VERSION) build-$(PRODUCT)/.config $(if $(filter true,$(FAKE_BUILD)),,build-$(PRODUCT)/legal-info)
+# openccu-lite (task 179): the packages as buildroot sees them, for the SBOM the post-build step writes
+# (board/lite/post-build-sbom.sh, scripts/lite-sbom.py) - written anew before every build
+.PHONY: build-$(PRODUCT)/show-info.json
+build-$(PRODUCT)/show-info.json: build-$(PRODUCT)/.config | buildroot-$(BUILDROOT_VERSION)
+	@echo "[show-info $@]"
+	cd $(shell pwd)/build-$(PRODUCT) && $(MAKE) -s --no-print-directory O=$(shell pwd)/build-$(PRODUCT) -C ../buildroot-$(BUILDROOT_VERSION) BR2_EXTERNAL=../$(BUILDROOT_EXTERNAL) BR2_DL_DIR=$(BR2_DL_DIR) PRODUCT=$(PRODUCT) PRODUCT_VERSION=$(PRODUCT_VERSION) PRODUCT_PLATFORM=$(PLATFORM) show-info > show-info.json.tmp && mv show-info.json.tmp show-info.json
+
+build: | buildroot-$(BUILDROOT_VERSION) build-$(PRODUCT)/.config $(if $(filter true,$(FAKE_BUILD)),,build-$(PRODUCT)/legal-info build-$(PRODUCT)/show-info.json)
 	@echo "[build: $(PRODUCT)]"
 ifneq ($(FAKE_BUILD),true)
 	cd $(shell pwd)/build-$(PRODUCT) && $(MAKE) O=$(shell pwd)/build-$(PRODUCT) -C ../buildroot-$(BUILDROOT_VERSION) BR2_EXTERNAL=../$(BUILDROOT_EXTERNAL) BR2_DL_DIR=$(BR2_DL_DIR) BR2_CCACHE_DIR=$(BR2_CCACHE_DIR) BR2_JLEVEL=$(BR2_JLEVEL) PRODUCT=$(PRODUCT) PRODUCT_VERSION=$(PRODUCT_VERSION) PRODUCT_PLATFORM=$(PLATFORM)

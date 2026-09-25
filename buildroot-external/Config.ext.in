@@ -1,0 +1,3 @@
+source "$BR2_EXTERNAL_EQ3_PATH/package/occulited/Config.in"
+source "$BR2_EXTERNAL_EQ3_PATH/package/hmcfgusb/Config.in"
+source "$BR2_EXTERNAL_EQ3_PATH/package/lite-bindlo/Config.in"
