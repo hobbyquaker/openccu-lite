@@ -188,10 +188,10 @@ LXC (`lxc-lite_amd64`, `lxc-lite_arm64`) is the container product. Task 142 remo
 `configs/oci-lite_amd64.config`, `board/oci-lite/`, `overlay/lite_oci/`,
 `release/updatepkg/oci-lite_amd64/`, `scripts/lite-boot-test.sh` and the CI steps that used them,
 and restored upstream's `board/oci/post-image.sh` (the lite image name it had been given for this
-product). Upstream's own OCI files — `configs/oci_*.config`, `board/oci/`,
-`overlay/base-openccu_oci/`, `release/updatepkg/oci_*` and the upstream workflows — stay as
-upstream has them (D-22); `eQ3StartNetwork` in `base-openccu_oci` keeps the upstreamable edits of
-items 32 and 35. Whoever wants a CCU in Docker runs OpenCCU's own OCI image.
+product). Upstream's own OCI product went on 2026-09-26 as well (item 50): `configs/oci_*.config`,
+`board/oci/`, `overlay/base-openccu_oci/` (with its copy of `eQ3StartNetwork` and the edits of
+items 32 and 35 in it), `release/updatepkg/oci_*`, `helm/` and `scripts/install-docker.sh`. Whoever
+wants a CCU in Docker runs OpenCCU's own OCI image.
 
 ## 5. CI workflow for the openccu-lite runner
 

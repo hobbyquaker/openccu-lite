@@ -29,7 +29,7 @@ if [[ -z "${ARCHIVE_HASH}" ]]; then
 fi
 
 EXPECTED_HASH_LINE="sha256  ${ARCHIVE_HASH}  ${PACKAGE_NAME}-${ID}.tar.xz"
-CURRENT_VERSION_LIST=$(grep -oE 'BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="[^"]+"' buildroot-external/configs/{oci_*,odroid-*,ova,generic-*,tinkerboard2}.config | sed -E 's/.*"([^"]+)"/\1/' | sort -u)
+CURRENT_VERSION_LIST=$(grep -oE 'BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="[^"]+"' buildroot-external/configs/{odroid-*,ova,generic-*,tinkerboard2}.config | sed -E 's/.*"([^"]+)"/\1/' | sort -u)
 if [[ $(echo "${CURRENT_VERSION_LIST}" | wc -l) -ne 1 ]]; then
   echo "${PACKAGE_NAME}: inconsistent kernel versions found across target configs, refusing to auto-update" >&2
   exit 1
@@ -47,7 +47,7 @@ if [[ "${CURRENT_VERSION}" == "${ID}" ]] \
 fi
 
 # update kconfig file
-sed -i "s/BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE=\".*\"/BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE=\"${ID}\"/g" buildroot-external/configs/{oci_*,odroid-*,ova,generic-*,tinkerboard2}.config
+sed -i "s/BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE=\".*\"/BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE=\"${ID}\"/g" buildroot-external/configs/{odroid-*,ova,generic-*,tinkerboard2}.config
 
 # update hash files
 sed -i "/${PACKAGE_NAME}-${CURRENT_VERSION}\.tar\.xz/d" "buildroot-external/patches/${PACKAGE_NAME}/${PACKAGE_NAME}.hash"

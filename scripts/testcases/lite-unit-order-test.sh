@@ -131,7 +131,7 @@ if grep -v '^[[:space:]]*#' "$HERE/buildroot-external/board/lite/post-build.sh" 
 else
   bad "board/lite/post-build.sh must remove /bin/checkInternet"
 fi
-for f in overlay/base/etc/network/if-up.d/eQ3StartNetwork overlay/base-openccu_oci/etc/network/if-up.d/eQ3StartNetwork overlay/base/bin/dhcp.script; do
+for f in overlay/base/etc/network/if-up.d/eQ3StartNetwork overlay/base/bin/dhcp.script; do
   unguarded=$(grep -v '^[[:space:]]*#' "$HERE/buildroot-external/$f" | grep '/bin/checkInternet' | grep -v -- '-x /bin/checkInternet' | grep -v '^[[:space:]]*/bin/checkInternet' || true)
   guards=$(grep -c -- '-x /bin/checkInternet' "$HERE/buildroot-external/$f")
   guards=${guards:-0}
@@ -144,7 +144,7 @@ for f in overlay/base/etc/network/if-up.d/eQ3StartNetwork overlay/base-openccu_o
 done
 
 # the link wait polls every 0.2 s for the same 12 s, with a dot every 2 s
-for f in overlay/base/etc/network/if-up.d/eQ3StartNetwork overlay/base-openccu_oci/etc/network/if-up.d/eQ3StartNetwork; do
+for f in overlay/base/etc/network/if-up.d/eQ3StartNetwork; do
   if grep -q '^ *sleep 0\.2$' "$HERE/buildroot-external/$f" && grep -q 'if \[\[ \$i -ge 60 \]\]' "$HERE/buildroot-external/$f" &&
      grep -q '\[\[* \$((i % 10)) -eq 0 \]\]*' "$HERE/buildroot-external/$f"; then
     ok "$f: the link wait polls every 0.2 s up to 12 s"

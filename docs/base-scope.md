@@ -12,6 +12,8 @@ on every upstream rebase that moves them.
 Both products built on the same host on the same day from the same upstream snapshot
 (OpenCCU `3.89.8.20260906`, buildroot 2026.05.2), same architecture, same toolchain.
 `oci_amd64` is upstream's OCI product unchanged; `oci-lite_amd64` is ours.
+Neither product is in this repository any more (the lite one went on 2026-09-16, upstream's on
+2026-09-26); the numbers stand as measured.
 
 | | `oci_amd64` (upstream) | `oci-lite_amd64` | Δ |
 | --- | ---: | ---: | ---: |
