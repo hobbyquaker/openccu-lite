@@ -30,14 +30,14 @@ sub-option written out as `is not set`; `configs/aarch64-rpi3.config` and
 > decision: journald is persistent exactly when that directory exists, so
 > `/usr/libexec/occu/lite-journal-persist` decides by creating it or not. **Timer stamps still
 > always go to the userfs** — a timer that forgets when it last ran runs again at every boot, which
-> is correctness rather than wear. `/etc/config/journal` overrides it per box (`PERSIST`,
+> is correctness rather than wear. `/etc/config/journal` overrides it per system (`PERSIST`,
 > `SYSTEM_MAX_USE`, `SYSTEM_MAX_FILE`, `RATE_LIMIT_BURST`) and lives on the userfs, so it survives a
 > firmware update.
 > `occu-syslog-forward.service` restores the remote syslog host: OpenCCU's `S07logging.script` used
 > `LOGHOST` from `/etc/config/syslog` and lite ran no syslogd at all, so central logging quietly
 > stopped for everything except hmipserver (B-46). journald now forwards to `/dev/log` and busybox
 > syslogd sends it on — remote only, no `-L`, because journald is the local log and a local file
-> would write to the card on every message. The unit uses `ExecCondition`, so a box with no
+> would write to the card on every message. The unit uses `ExecCondition`, so a system with no
 > `LOGHOST` leaves it inactive rather than failed.
 
 > **`occu-etc-writable.service` was added on 2026-09-07 (B-28).** `/etc/passwd` and `/etc/group` are
@@ -131,7 +131,7 @@ Two differences the aarch64 products make to the package set, both because of sy
   **The Bluetooth stack is gone** (D-54, 2026-09-12): `BR2_PACKAGE_BLUEZ5_UTILS` and
   `BR2_PACKAGE_BRCMFMAC_SDIO_FIRMWARE_RPI_BT` are off in the three `aarch64-rpi*` configs, so
   `bluetooth.service` and `bluetoothd` are not in the images. The radio module takes the UART
-  Bluetooth would use, and nothing on the box speaks Bluetooth. Upstream's `config.txt` lines about
+  Bluetooth would use, and nothing on the system speaks Bluetooth. Upstream's `config.txt` lines about
   the Bluetooth UART stay untouched.
 
 `qemu-guest-agent.service` is in the shared overlay and therefore in the aarch64 images too, but
@@ -142,7 +142,7 @@ units and are not in the Pi configs at all.
 ## The unit set
 
 All in `overlay/lite/usr/lib/systemd/system/`. Four shapes — the first three for the
-setup scripts, the fourth for every daemon the box needs (B-3,
+setup scripts, the fourth for every daemon the system needs (B-3,
 [Essential daemons](#essential-daemons-tracked-and-restarted)):
 
 - **compat oneshot** — `Type=oneshot`, `RemainAfterExit=yes`,
@@ -167,7 +167,7 @@ setup scripts, the fourth for every daemon the box needs (B-3,
 | Unit | Replaces | Shape | Notes |
 | --- | --- | --- | --- |
 | `occu-ldconfig.service` | `rcS` (`ldconfig -C /var/cache/ld.so.cache`) | oneshot, before `sysinit.target` | `/etc/ld.so.cache` is a symlink into the tmpfs `/var`; `/usr/local/lib` and lib32 are in `ld.so.conf` |
-| `occu-watchdog-marker.service` | `S00watchdog` (marker half) | oneshot | `/usr/local/tmp/.watchdog` in, `/var/status/uncleanShutdown` out; runs on boxes without a watchdog device too. See [The unclean-shutdown marker](#the-unclean-shutdown-marker) |
+| `occu-watchdog-marker.service` | `S00watchdog` (marker half) | oneshot | `/usr/local/tmp/.watchdog` in, `/var/status/uncleanShutdown` out; runs on systems without a watchdog device too. See [The unclean-shutdown marker](#the-unclean-shutdown-marker) |
 | — | `S00watchdog` (daemon half) | dropped (D-41) | PID 1 feeds `/dev/watchdog` itself: `etc/systemd/system.conf.d/lite-watchdog.conf`, see [The hardware watchdog](#the-hardware-watchdog) |
 | `occu-init-host.service` | `S01InitHost` | compat | `/var/hm_mode`, `sysctl -p` (`systemd-sysctl` does not read `/etc/sysctl.conf`), LED triggers |
 | `occu-zram-swap.service` | `S01InitZRAMSwap` | compat | |
@@ -183,26 +183,26 @@ setup scripts, the fourth for every daemon the box needs (B-3,
 | `occu-extension-dirs.service` | — (new, task 97, D-66) | oneshot, `After=occu-init-system.service`, `RequiresMountsFor=/usr/local`, `Before=rfd.service occu-addons.service`, `ConditionPathExists=/firmware/rftypes` | `lite-extension-dirs start`: `/firmware/rftypes` writable before rfd reads it and the addons write to it — an overlay (lower the image's directory, upper and work `/usr/local/etc/config/extensions/rftypes/{upper,work}`; `CONFIG_OVERLAY_FS=y` in `kernel/6.18/lite.config` for every lite kernel) or, without overlayfs, a copy of the image's files on the userfs (`…/copy`, refreshed from the image at every boot) bound over the directory. The image's names go to `…/image-names` before the mount. At every boot a whiteout for an image name is removed (a copy's missing file copied again), so a stray `rm -f /firmware/rftypes/*` costs one boot; `lite-extension-dirs status\|reset /firmware/rftypes` are occulited's (`GET`/`POST /radio/device-descriptions`), the reset also removing an addon's replacements of image files, then rfd restarted. Root addon units run without `CAP_SYS_ADMIN` (occulited's policy drop-in, `CapabilityBoundingSet=~CAP_SYS_ADMIN`), so an addon script's `mount -o remount,rw /` answers *permission denied* and its writes land in the writable layer |
 | `occu-init-system.service` | `S06InitSystem` | compat | `/var/*`, config templates, timezone, `rc.init`/`rc.postinit`; `hss_led` only where the binary is, which the lite images no longer ship (task 95, D-63) |
 | — | `S07logging` | dropped | journald. `/var/log/messages` does not exist; `logger` and syslog(3) land in the journal. Remote syslog (`LOGHOST` in `/etc/config/syslog`) is not forwarded — a maintainer decision (journal-upload is a sub-option, off) |
-| `ca-certificates.service` | `S07ca-certificates` (buildroot package + fork patch 0014, sysv only) | real | `/etc/ssl/certs` is a symlink into `/var`. `lite-ca-certificates` copies the bundle the image ships prebuilt (`board/lite/ca-prebuilt.sh`, `/usr/share/ca-certificates-prebuilt`) when the user has no certificates in `/usr/local/share/ca-certificates`; with some, a copy cached on the userfs (`/usr/local/etc/ca-certificates-cache`, `.nobackup`), rebuilt by `update-ca-certificates --default` only when those certificates or the image changed (task 135, D-89). Ordered before `network-online.target`, occulited, chrony, the syslog forwarder and `occu-addons`; the network does not wait for it |
-| — | `S11InitLEDs` | dropped (D-41) | its three sysfs writes are `S02InitRTC`'s, one unit earlier, and once the box is up occulited's status LED controller owns the RPI-RF-MOD's LED (task 95) |
-| `irqbalance.service` | `S13irqbalance` | buildroot's own unit | the script skipped single-core boxes; the daemon idles there |
+| `ca-certificates.service` | `S07ca-certificates` (buildroot package + fork patch 0014, sysv only) | real | `/etc/ssl/certs` is a symlink into `/var`. `lite-ca-certificates` copies the bundle the image ships prebuilt (`board/lite/ca-prebuilt.sh`, `/usr/share/ca-certificates-prebuilt`) when the user has no certificates in `/usr/local/share/ca-certificates`; with some, a copy cached on the userfs (`/usr/local/etc/ca-certificates-cache`, `.nobackup`), rebuilt by `update-ca-certificates --default` only when those certificates or the image changed (task 135, D-89). The userfs file `/usr/local/etc/ca-certificates.conf` deselects image certificates with `!<name>` lines (occulited's Trust stores page writes it and runs the script through its helper after a change): the bundle is then built from a generated configuration instead of `--default`. Ordered before `network-online.target`, occulited, chrony, the syslog forwarder and `occu-addons`; the network does not wait for it |
+| — | `S11InitLEDs` | dropped (D-41) | its three sysfs writes are `S02InitRTC`'s, one unit earlier, and once the system is up occulited's status LED controller owns the RPI-RF-MOD's LED (task 95) |
+| `irqbalance.service` | `S13irqbalance` | buildroot's own unit | the script skipped single-core systems; the daemon idles there |
 | `occu-network.service` | `S40network` | compat, `After=occu-firewall.service occu-init-system.service` (task 157: the rules are loaded before an interface comes up; B-148: S06 creates `/var/etc`, where the DHCP hook's resolvconf writes `resolv.conf`), `Before=network.target network-online.target` | `ifup -a` with `eQ3StartNetwork` (the link polled every 0.2 s, task 116; no internet check, the image has no `checkInternet`, D-90); udhcpc stays in the cgroup; no networkd; not after the CA bundle |
 | `occu-firewall.service` | — (new, task 157) | `DefaultDependencies=no`, `After=local-fs.target occu-backup-restore.service` (task 207, B-188: the final userfs - a restoring boot loads the restored rules), `RequiresMountsFor=/usr/local`, `Before=network-pre.target occu-network.service occulited.service` | `occulited firewall load`: `/etc/config/firewall-rules.json` (converted from `firewall.conf` once, or the defaults) into iptables and ip6tables before the network; replaces libfirewall (`setfirewall.tcl` from `eQ3StartNetwork`, only once `HM_MODE` was `NORMAL`). On a fresh userfs `/etc/config` is a dangling link until the init scripts make its target; occulited creates the directory through the link, and loads the rules even when the file cannot be written (B-188: the first boot's unit failed with exit 1 before any iptables call) |
 | `occu-wifi.service` | — (new, task 89) | `After=occu-network.service occulited-helper.service`, `Before=network-online.target` | `occulited wifi up\|reload\|down`: the boot partition's setup file, then - switched on in `/etc/config/wifi` - the onboard driver, rfkill, power save off, `occu-wpa@<if>` and the addressing (`occu-wifi-dhcp@<if>` or static), the route metric by the preferred interface; switched off: rfkill block and the onboard driver unloaded. The lite `interfaces` names `eth0` only, so the hook never starts a supplicant |
 | `occu-wpa@.service`, `occu-wifi-dhcp@.service` | — (new, task 89) | `BindsTo=` the interface's device; started and stopped by `occu-wifi` | wpa_supplicant with `/etc/config/wpa_supplicant.conf` (control socket in `/run/wpa_supplicant` for the group `occulite`); udhcpc with `lite-wifi-dhcp` (address, default route 5 or 600, resolvconf) |
-| `chrony.service` | `S46chronyd`, buildroot's `chrony.service` | forking, `PIDFile=/run/chrony/chronyd.pid` | `/usr/libexec/occu/lite-chrony` (task 94, B-97): S46chronyd's server list (the user's and the DHCP servers preferred, the gateway when empty, the template's as fallback) into `/var/etc/chrony.conf`, chronyd started at once with `iburst`; no blocking `ntpdate` (10 s of every boot, and no chronyd at all when it failed). `makestep` steps the first offsets; `hasNTP` appears once synchronised |
-| `occu-clock-valid.service` | — | oneshot, `ConditionVirtualization=!container` | done when the clock came from an RTC and is not older than the image, when chronyd is synchronised, or after 60 s with a warning; writes `/run/occulite/clock-state` (`rtc`/`ntp`/`timeout`). rfd, hmipserver, hs485d and crond order after it (task 94: they hand the time on to the module and to devices); multimacd does not (task 108: it reads no wall clock). Not after chrony (task 108): on a box with an RTC it passes before the network is up; without one it polls chronyd, and the 60 s count from chronyd's first answer (at most 90 s for that) |
+| `chrony.service` | `S46chronyd`, buildroot's `chrony.service` | forking, `PIDFile=/run/chrony/chronyd.pid` | `/usr/libexec/occu/lite-chrony` (task 94, B-97): S46chronyd's server list (the user's and the DHCP servers, the gateway when empty, the template's only when there is no gateway either, B-242) into `/var/etc/chrony.conf`, chronyd started at once with `iburst`; no blocking `ntpdate` (10 s of every boot, and no chronyd at all when it failed). `makestep` steps the first offsets; `hasNTP` appears once synchronised |
+| `occu-clock-valid.service` | — | oneshot, `ConditionVirtualization=!container` | done when the clock came from an RTC and is not older than the image, when chronyd is synchronised, or after 60 s with a warning; writes `/run/occulite/clock-state` (`rtc`/`ntp`/`timeout`). rfd, hmipserver, hs485d and crond order after it (task 94: they hand the time on to the module and to devices); multimacd does not (task 108: it reads no wall clock). Not after chrony (task 108): on a system with an RTC it passes before the network is up; without one it polls chronyd, and the 60 s count from chronyd's first answer (at most 90 s for that) |
 | `occu-clock-save.service` | — | oneshot, `DefaultDependencies=no`, `ConditionVirtualization=!container` | B-192: `lite-clock-save restore` right after the userfs is mounted and the RTC init, before `occu-clock-valid`, chrony, lighttpd, the interface daemons and occulited — sets the clock forward to the time saved at the last shutdown (never back); `save` at the stop, before the userfs is unmounted, into `/usr/local/var/lib/lite-clock/saved`. On a board without an RTC NTP's step after a reboot then stays below lighttpd's `server.clock-jump-restart` (1800 s), so lighttpd keeps its early start without the graceful restart; after a power loss the jump is the downtime. The clock is not trusted for it: `occu-clock-valid` still waits for NTP |
 | `occu-clock-save-hourly.timer` / `.service` | — | timer `OnBootSec=1h`, `OnUnitActiveSec=1h`; oneshot, `Requisite=`/`After=occu-clock-save.service`, `RequiresMountsFor=/usr/local`, `ConditionVirtualization=!container` | B-192 (the maintainer, 2026-09-24): `lite-clock-save save` once an hour, so after a power cut (no save at the stop) the restored time is at most an hour behind - fake-hwclock's hourly save. One tiny atomic write to the userfs an hour |
-| `occu-init-rf-hardware.service` | `S47InitRFHardware`, `S48UpdateRFHardware`, and the configuration halves of `S49hs485d`, `S60multimacd`, `S61rfd`, `S62HMServer` | real (task 129, D-83): `ExecStart=/usr/bin/occulited radio run` | occulited's own detection (each probe under a limit, the GPIO header's node 6 s first, the second pass of task 138, the HB-RF-ETH connect with a bounded route wait), the plan (upstream's decisions under `auto` from `rfd.conf`, `hs485d.conf`, `hmip_user.conf` and the HMLGW marker) and the render written to the box: `/var/hm_mode` merged atomically with `HM_HOST`/`HM_MODE`/`HM_LED_*`/`HM_RTC` kept, the RF files, `/var/etc/{multimacd,rfd,crRFD,HMServer,hs485d}.conf`, `log4j2.xml`, `/etc/config/rfd.conf` and `InterfacesList.xml` (re-copied from the template, D-97), the environment files and the activation markers `/run/occulite/radio/<daemon>.enabled`. Not after the network (task 108). No firmware flash at boot (D-89): occulited's Interfaces page shows and flashes newer firmware. Refuses to run while an interface daemon holds the module. Stop is `occulited radio stop`: the bootloader handover only with a staged firmware update (D-41), `TimeoutStopSec=300` for that case; an HB-RF-ETH is disconnected either way. The scripts themselves are not in the image (`post-build-systemd.sh` removes them); they stay in the overlays as the oracle of `scripts/testcases/lite-radio-oracle-test.sh` |
+| `occu-init-rf-hardware.service` | `S47InitRFHardware`, `S48UpdateRFHardware`, and the configuration halves of `S49hs485d`, `S60multimacd`, `S61rfd`, `S62HMServer` | real (task 129, D-83): `ExecStart=/usr/bin/occulited radio run` | occulited's own detection (each probe under a limit, the GPIO header's node 6 s first, the second pass of task 138, the HB-RF-ETH connect with a bounded route wait), the plan (upstream's decisions under `auto` from `rfd.conf`, `hs485d.conf`, `hmip_user.conf` and the HMLGW marker) and the render written to the system: `/var/hm_mode` merged atomically with `HM_HOST`/`HM_MODE`/`HM_LED_*`/`HM_RTC` kept, the RF files, `/var/etc/{multimacd,rfd,crRFD,HMServer,hs485d}.conf`, `log4j2.xml`, `/etc/config/rfd.conf` and `InterfacesList.xml` (re-copied from the template, D-97), the environment files and the activation markers `/run/occulite/radio/<daemon>.enabled`. Not after the network (task 108). No firmware flash at boot (D-89): occulited's Interfaces page shows and flashes newer firmware. Refuses to run while an interface daemon holds the module. Stop is `occulited radio stop`: the bootloader handover only with a staged firmware update (D-41), `TimeoutStopSec=300` for that case; an HB-RF-ETH is disconnected either way. The scripts themselves are not in the image (`post-build-systemd.sh` removes them); they stay in the overlays as the oracle of `scripts/testcases/lite-radio-oracle-test.sh` |
 | `occulited.service` | `S48occulited` | real, from `package/occulited` (the occulited repository's `deploy/systemd/`) | after the network, beside lighttpd (task 94); the drop-in that pinned it to S48's slot behind the radio hardware is gone. Since occulited `0a1d8c2` (task 208) the unit sandboxes the daemon itself - no capability, `@system-service` plus `syslog(2)`, native ABI, `AF_UNIX AF_INET AF_INET6 AF_NETLINK`, closed device policy, kernel tunables/modules/cgroups read-only, umask 0077 (`systemd-analyze security` 2.1) - and `occulited-helper.service`, root by design, drops what none of its operations needs (7.4). A `~@privileged` line would kill the setuid busybox's applets, `ProtectKernelLogs=` would kill dmesg: both left out with the reason in the unit |
 | `occu-init-hs485d.service` | `S49hs485d`'s daemon half | real: `hs485dLoader -ds -dd /var/etc/hs485d.conf` (the loader's init pass, as root), `ConditionPathExists=/run/occulite/radio/hs485d.enabled` | only when the plan runs hs485d; the configuration it once rendered is `occu-init-rf-hardware`'s |
-| `occu-radio-shadow-check.service` | — | oneshot, `ConditionPathExists=/usr/local/etc/occulite/radio-shadow` | `occulited radio check` after the interface daemons: the run step's render against the box (`/var/hm_mode`, the RF files, the daemons' files, `InterfacesList.xml`, the units and their command lines); every difference one journal line (`shadow: DIFFERENCE …`), the report `/run/occulite/radio/shadow.json`; the unit fails on a difference. The self-check of the marker boxes (in the shadow phase it compared the plan with upstream's chain; `occu-radio-shadow.service`, the second detection, went with the switch) |
+| `occu-radio-shadow-check.service` | — | oneshot, `ConditionPathExists=/usr/local/etc/occulite/radio-shadow` | `occulited radio check` after the interface daemons: the run step's render against the system (`/var/hm_mode`, the RF files, the daemons' files, `InterfacesList.xml`, the units and their command lines); every difference one journal line (`shadow: DIFFERENCE …`), the report `/run/occulite/radio/shadow.json`; the unit fails on a difference. The self-check of the markers (in the shadow phase it compared the plan with upstream's chain; `occu-radio-shadow.service`, the second detection, went with the switch) |
 | `lighttpd-prepare.service` | the preparation half of `S50lighttpd` (its `reload` action) | oneshot, root, pulled in by `lighttpd.service` (`Wants=`, `After=`) and started again by its `ExecReload` | `S50lighttpd.script reload` (the certificate check, the `/var/etc/lighttpd_*.conf` includes: HTTPS redirect, HSTS, the host-name redirect, the classic RPC sockets through `lite-classic-rpc-conf`), `lite-starting-page`, `lite-cert-perms`, `occulited -lighttpd-dropins` - every step best effort (`-`), as they were as `+-` lines in `lighttpd.service`. Its own unit because a `+` line runs as root *inside* the daemon's mount namespace, where `/etc/config` and `/var/etc` are read-only for it too (the same finding as rfd's `/var/etc` line, taken the other way: the preparation leaves the sandbox instead of the sandbox opening for it). Carries the sandbox lines that cost root nothing (kernel tunables/modules/logs/cgroups/clock, namespaces, realtime, personality, W+X, native ABI, `AF_UNIX AF_INET AF_INET6 AF_NETLINK`, `@system-service`); `systemd-analyze security` 9.4 → 4.7 |
 | `lighttpd.service` | `S50lighttpd`, buildroot's `lighttpd.service` | tracked daemon, **sandboxed** | `ExecStart=/usr/sbin/lighttpd-angel -f /etc/lighttpd/lighttpd.conf -D` — the angel supervises lighttpd and is systemd's main process; `ExecReload` starts `lighttpd-prepare.service` and then `kill -USR1 $MAINPID` (S99SetupLEDs reloads to open the RemoteAPI ports). Skipped in LAN-gateway mode by `ConditionPathExists=!/usr/local/HMLGW`, the script's `HM_MODE` check. The sandbox: `www-data` with `CAP_NET_BIND_SERVICE` alone (ambient, for the angel's re-exec), `ProtectSystem=strict`, `TemporaryFileSystem=/usr/local:ro` with `/usr/local/etc/config` and `/usr/local/addons` bound read-only (the drop-ins, the certificate, the classic RPC pair; the addons' error pages) and `/usr/local/tmp` writable (`server.upload-dirs`), the daemons' and the addons' configuration directories inaccessible, `RuntimeDirectory=lighttpd` for the pid file (`server.pid-file` set by the lite post-build), `NoExecPaths=/` with `ExecPaths=/usr/bin /usr/sbin /usr/lib /usr/libexec`, private `/tmp` and `/dev` (`/dev/shm` stays), `ProtectProc=invisible`/`ProcSubset=pid`, the kernel lines, `AF_UNIX AF_INET AF_INET6`, `SystemCallFilter=@system-service` on the native ABI (no `~@privileged`: the setuid busybox calls `setuid` at every applet's start, and the access log's pipe is `/bin/sh -c systemd-cat`), `MemoryDenyWriteExecute=` (the Lua interpreter, PCRE2 without JIT), `UMask=0077`. `systemd-analyze security` 6.4 → 1.7; no `mod_cgi` (the CGIs run through occulited) |
 | `sshd.service` | `S50sshd`, buildroot's `sshd.service` | `Type=exec`, `ExecCondition=/etc/init.d/S50sshd.script init`, `ExecStart=/usr/sbin/sshd -D`, `ConditionPathExists=/etc/config/sshEnabled` | the script's `init` action (task 115, D-80) does the host keys in `/usr/local/etc`, the userdir, the permissions and the compromised-password wipe, and exits 1 when sshd must not start (SSH off, or the wipe just ran): a skip, not a failure. sshd is the main process; `ExecReload` is `HUP $MAINPID`; sshd still writes `/run/sshd.pid` on its own |
 | `occu-init-addons.service` | `S55InitAddons` | compat | `lite-init-addons`: `rc.prelocal`, then `init` on the rc.d entries as run-parts did, but never on a `<name>.script` (B-119: busybox run-parts took the dot and ran the addons' own scripts as root); a confined addon's wrapper answers `init` with nothing and its unit runs it as the addon's user; the start/stop half is `addons.target` |
-| `occu-lgw-firmware-update.service` | `S58LGWFirmwareUpdate` | real (task 129 phase 4, D-99): `ExecStart=/usr/bin/occulited radio lgw-firmware`, `ExecCondition=` a LAN gateway in `rfd.conf`/`hs485d.conf` | the RF gateways' coprocessor and firmware and the wired gateways' firmware through `eq3configcmd`, once the default gateway answers; a failed update fails the unit (the script exited 0). The script is not in the image. UNVERIFIED without a LAN gateway |
+| `occu-lgw-firmware-update.service` | `S58LGWFirmwareUpdate` | real (task 129 phase 4, D-99): `ExecStart=/usr/bin/occulited radio lgw-firmware`, `ExecCondition=` a LAN gateway in `rfd.conf`/`hs485d.conf` | the RF gateways' coprocessor and firmware and the wired gateways' firmware through `eq3configcmd`, once the default gateway answers; a configured gateway whose address answers no ping is skipped with a journal line (the unit a success, the check at the next start again - B-229: an unplugged gateway held the boot in eq3configcmd's timeouts); a failed update fails the unit (the script exited 0). The script is not in the image. UNVERIFIED without a LAN gateway |
 | `occu-set-lgw-key.service` | `S59SetLGWKey` with `setlgwkey.sh` | real (D-99): `ExecStart=/usr/bin/occulited radio lgw-keys`, the same condition | each `/etc/config/<serial>.keychange` read by its keys (the script's `grep KEY` also took `CURKEY=`), sent with `eq3configcmd setlgwkey`, removed when that worked; a file of an unknown class is left alone and the others still applied. UNVERIFIED without a LAN gateway |
 | `occu-radio-hotplug.service` | — | oneshot, started by `61-openccu-lite-radio-hotplug.rules` (a raw UART node, or the HM-CFG-USB-2, added or removed), `After=occu-init-rf-hardware.service` | `occulited radio hotplug` (task 129 phase 4, D-83): the nodes listed again, only new ones probed, the plan made, and only the interface daemons whose plan changed stopped and started; stands aside while occulited flashes a coprocessor or changes the connections |
 | `hs485d.service` | `S60hs485d` | forking, `PIDFile=/run/hs485d/run/hs485dLoader.pid`, **confined** (task 67, D-55, D-93): `User=hs485d`, no capabilities, `ProtectSystem=strict`, a private `/var` (`TemporaryFileSystem=`) with `/var/etc`, `/var/hm_mode` and `/var/status` bound in and `/var/run`, `/var/log` from `RuntimeDirectory=hs485d` | `ConditionPathExists=/run/occulite/radio/hs485d.enabled` is the plan's decision (no wired interface in `hs485d.conf`: unit skipped), `ExecStartPre=+occulited radio prep hs485d` the ownership repair; the daemon's four files directly under `/var` (the loader's pid file, the daemon's pid file, its unix socket, its log) land in the private `/var`. UNVERIFIED without wired hardware |
@@ -219,7 +219,7 @@ setup scripts, the fourth for every daemon the box needs (B-3,
 | `occu-boot-message.service` | `rcS`'s closing lines | oneshot, last in the chain | the end-of-boot hint on the splash, the console and `/etc/issue`; quits psplash (B-5, B-4) |
 | `qemu-guest-agent.service` | `S11qemu-guest-agent` (`package/qemu-guest-agent`, sysv only) | real, condition on the virtio port | |
 | `xe-daemon.service`, `vmtoolsd.service`, `hv_*_daemon.service`, `acpid.service`, `dbus.service`, `psplash-*.service` | their sysv scripts | the packages' own units | conditions on the hypervisor where the packages have them |
-| `occu-interface-clock.timer` | crontab `1 3,9,15,21 * * * SetInterfaceClock` | timer (`DefaultDependencies=no`: the implicit `Before=timers.target` would cycle with `After=occu-persist.service`) | `RandomizedDelaySec=5min`; not persistent (a missed slot after a reboot is not worth catching up). The service runs only when rfd runs (`ConditionPathExists=/run/occulite/radio/rfd.enabled`, B-142, D-97: `SetInterfaceClock` talks to rfd's 32001 and failed on an HmIP-only box), see [The interface clock](#the-interface-clock) |
+| `occu-interface-clock.timer` | crontab `1 3,9,15,21 * * * SetInterfaceClock` | timer (`DefaultDependencies=no`: the implicit `Before=timers.target` would cycle with `After=occu-persist.service`) | `RandomizedDelaySec=5min`; not persistent (a missed slot after a reboot is not worth catching up). The service runs only when rfd runs (`ConditionPathExists=/run/occulite/radio/rfd.enabled`, B-142, D-97: `SetInterfaceClock` talks to rfd's 32001 and failed on an HmIP-only system), see [The interface clock](#the-interface-clock) |
 | `occu-cron-backup.timer` | crontab `7 0 * * * cronBackup.sh` | timer, `Persistent=true`, 30 min random delay; since task 86 it starts `occu-backup-create@nightly.service` (`occulited -backup create nightly`, root), which wants `occu-backup-deliver@nightly.service` (`occulited -backup deliver nightly`, occulite): the backup made once and copied to every enabled target (USB directory, NFS, SMB, SFTP); `NoCronBackup` is the nightly switch the pipeline reads; `cronBackup.sh` stays in the image unused | a run caught up at boot waits for `multi-user.target` (task 116) and occulited (the shares' mount units) |
 | `occu-fstrim.timer` | crontab `0 4 * * 6 fstrim` | timer, persistent, 1 h random delay | `NoFSTRIM`; util-linux's own `fstrim.timer` is masked in the overlay, see below (B-8); a run caught up at boot waits for `multi-user.target` (task 116) |
 | — | crontab `59 1 * * * checkBadBlocks.sh` | dropped (D-41) | a full-disk read every night writing `/tmp/badblocks.txt`, whose only reader was monit (D-23). `/bin/checkBadBlocks.sh` stays in the image; nothing schedules it |
@@ -272,7 +272,7 @@ restart`) is shadowed by a copy that restarts `chrony.service`.
 ### Roadmap references
 
 The overlay's files carry no task, decision or bug ids (B-70): `systemctl cat` puts a unit and its
-drop-ins into occulited's unit editor, the scripts' output is the Log page, and `/etc` on the box
+drop-ins into occulited's unit editor, the scripts' output is the Log page, and `/etc` on the system
 is there to be read. `scripts/lite-id-guard.sh` checks every file of `overlay/lite*`, and every
 file of the shared overlays that carries an `openccu-lite` edit — whole files, and for scripts the
 lines that are not comments plus every here-document — as a step of the `check` job in
@@ -322,7 +322,7 @@ rebase review. Every unit in the table above is task 20 / D-30; what the comment
 
 ## Essential daemons: tracked and restarted
 
-Bug B-3: after uninstalling addons on the lab VM, lighttpd and sshd were dead while the box kept
+Bug B-3: after uninstalling addons on the test VM, lighttpd and sshd were dead while the system kept
 running, and nothing had noticed. Two causes, both fixed here.
 
 **The unit did not follow the daemon.** Every daemon unit carried `RemainAfterExit=yes` — copied
@@ -341,7 +341,7 @@ foreground and its command line in the unit, everywhere - lighttpd's `lighttpd-a
 in front of it as its `init` action (`ExecStartPre=`, or `ExecCondition=` where the preparation
 also decides whether the daemon runs at all: sshd), or as occulited's `radio prep` for the radio
 daemons (task 129). The one `Type=forking` left is hs485d, whose loader daemonises itself and
-writes a real `PIDFile=`. A daemon a box does not need is a condition skip (`ConditionPathExists=`
+writes a real `PIDFile=`. A daemon a system does not need is a condition skip (`ConditionPathExists=`
 on the plan's marker, `ExecCondition=`), never a unit that is active and empty.
 
 **The restart policy.** `Restart=on-failure` with `StartLimitIntervalSec=300`/`StartLimitBurst=5`
@@ -410,7 +410,7 @@ is not in `/etc/init.d` and about a table entry naming a unit that is not in the
 Bug B-4: on the systemd product the psplash progress bar moved (buildroot's
 `psplash-systemd.service` drives it from systemd's job progress) but the text was gone — "Starting
 service xyz…" and everything the init scripts printed. Bug B-5: nothing was left on the console
-once the box was up.
+once the system was up.
 
 - **the scripts' output.** `rcS` ran the init scripts on the console. Every unit that wraps one now
   has `StandardOutput=journal+console` and `StandardError=journal+console`: the lines are in the
@@ -464,8 +464,8 @@ once the box was up.
   products. The new logo is as tall as the old one, so the message and the bar keep their places, and
   `package/recovery-system` passes the same variable on, so the recovery system's splash shows it
   too. `board/lite/post-build.sh` runs `psplash-logo.sh`, which stops the build when a product with
-  psplash names another image. The file is made by the agents repository's
-  `scripts/make-splash-logo.mjs`, `make-brand.mjs`'s method in its dark variant. psplash plots every
+  psplash names another image. The file is made by the project's logo script
+  (`make-splash-logo.mjs`, `make-brand.mjs`'s method in its dark variant), which is not part of this tree. psplash plots every
   pixel whose alpha is not 0 at full colour and blends nothing, so the logo is plotted onto black the
   same way first, and `lite` is antialiased against that black: the PNG is opaque RGB. A build must
   rebuild psplash to pick up a new image or patch (`make psplash-dirclean`).
@@ -545,7 +545,7 @@ which pulls the freshly generated units into the `addons.target` job that is alr
 part of `multi-user.target`. occulited runs the same reload after installing an addon.
 
 `TimeoutStartSec=300` is new: run-parts had no timeout. A script that blocks longer than five
-minutes on start fails its unit (and the box still finishes booting); `rc.local` had 120 s before.
+minutes on start fails its unit (and the system still finishes booting); `rc.local` had 120 s before.
 
 ### Per-addon users (D-36, task 18) and the privilege boundary (task 17)
 
@@ -574,7 +574,7 @@ the addon's files on the userfs stays valid across firmware updates, which repla
 with the rootfs: `occu-addons.service` runs `/usr/libexec/occu/addon-users` before its
 daemon-reload, and that recreates every user the policy files name (busybox `addgroup`/`adduser`,
 the same calls occulited makes when it confines an addon). The Services page switches an addon
-between root and its user; the box's default for addons without a policy is
+between root and its user; the system's default for addons without a policy is
 `addons.default_mode` in `occulited.json` (root until the maintainer decides, the ⚖ of D-36).
 
 Addon CGIs no longer run under lighttpd: `/addons/<name>/*.cgi` is proxied to occulited, which
@@ -673,9 +673,9 @@ i.e. hours of boot after journald has read the ID:
 
 `/usr/libexec/occu/lite-machine-id` is both actions. The derivation is
 `sha256("openccu-lite-machine-id:<serial>")` truncated to 128 bit with the UUID version (4) and
-variant (8) nibbles systemd's own `sd_id128` helpers set — a valid machine ID, stable for the box,
+variant (8) nibbles systemd's own `sd_id128` helpers set — a valid machine ID, stable for the system,
 and not the serial itself. Without a serial (no radio module attached) it generates a random ID
-once. A userfs wipe therefore does not change the box's identity as long as the module stays.
+once. A userfs wipe therefore does not change the system's identity as long as the module stays.
 
 The cost of `Before=systemd-journald.service` is that journald starts after the userfs is
 mounted. The mount is `nofail` and on the same disk as the rootfs; if it does not come up, the
@@ -703,7 +703,7 @@ D-41 (Q-9) gives it back the consumer it lost when monit went (D-23). For the oc
 | Path | Meaning |
 | --- | --- |
 | `/usr/local/tmp/.watchdog` | on the userfs, written at start and removed at stop. Present at boot ⇒ the previous shutdown did not run the stop action |
-| `/var/status/uncleanShutdown` | on the tmpfs `/var`, `root:status` `2775` directory. Created at boot **only** when the box came up after an unclean shutdown; it is a per-boot flag, empty, and its existence is the whole message |
+| `/var/status/uncleanShutdown` | on the tmpfs `/var`, `root:status` `2775` directory. Created at boot **only** when the system came up after an unclean shutdown; it is a per-boot flag, empty, and its existence is the whole message |
 | `/run/occu-watchdog-marker.done` | the guard that keeps a restart of the unit from re-evaluating the marker within one boot; not for consumers |
 
 So: `stat /var/status/uncleanShutdown` is the check, its mtime is the boot it refers to, and it
@@ -711,7 +711,7 @@ disappears by itself at the next clean boot. **No consumer reads it yet** — D-
 occulited should show it on the Status page and that is still on the open list in openccu-lite's
 `BUGS.md`; the marker itself is written on every boot, so the notice can be added without touching
 anything here. It says nothing about *why* — a power cut, a watchdog
-reset and a kernel panic look the same — and nothing clears it while the box is up, so a UI notice
+reset and a kernel panic look the same — and nothing clears it while the system is up, so a UI notice
 should be dismissible rather than expect the file to go away.
 
 ## The hardware watchdog
@@ -736,7 +736,7 @@ a Proxmox default and `softdog` is not loaded — and the setting then costs one
 
 **To be tested on a Pi before it is trusted (task 14), while it is already the default per the
 maintainer:** `bcm2835_wdt` is a *module*, loaded by `S06InitSystem` well after PID 1 has set its
-watchdog up, so the box has to show (a) that PID 1 picks the device up once it appears — systemd
+watchdog up, so the system has to show (a) that PID 1 picks the device up once it appears — systemd
 re-opens `/dev/watchdog` on a later ping — and (b) that a `nowayout=1` driver behaves across the
 handover. `systemctl show -p RuntimeWatchdogUSec` and a deliberate hang (`echo c >/proc/sysrq-trigger`)
 are the two checks. If PID 1 does not pick the device up, the fix is to load the module earlier
@@ -753,9 +753,9 @@ in the openccu-lite repository). What the answers became, beyond the table above
 - **USB gadget mode is ARM-only.** `dwc2` and `g_ether` are the Pi's OTG controller and its
   USB-Ethernet gadget; on x86 they do not exist. `occu-usb-gadget.service` carries
   `ConditionVirtualization=no` and, as a second condition, the very flag file the script checks
-  (`/etc/config/usbGadgetModeEnabled`), so a box that has not switched gadget mode on does not
+  (`/etc/config/usbGadgetModeEnabled`), so a system that has not switched gadget mode on does not
   spawn a shell for it. Nothing in the UI writes that file yet; it is on the backlog (D-41, Q-2).
-- **HM-LGW mode is ARM-only.** A box running as a HomeMatic LAN gateway instead of a CCU is a Pi
+- **HM-LGW mode is ARM-only.** A system running as a HomeMatic LAN gateway instead of a CCU is a Pi
   with a radio module bolted to it; `x86_64-ova` never runs as one. `hmlangw.service` — the one
   unit that exists solely for that mode — has `ConditionVirtualization=no` next to its
   `/usr/local/HMLGW` condition. The four init scripts that branch on `HM_MODE` (`S06InitSystem`,
@@ -766,14 +766,14 @@ in the openccu-lite repository). What the answers became, beyond the table above
   module, at every shutdown. `ExecStop` is now `/usr/libexec/occu/lite-rf-stop`: with
   `/usr/local/.firmwareUpdate` or `/usr/local/.recoveryMode` staged it execs upstream's `stop()`
   unchanged; without one it leaves the modules running and only disconnects an HB-RF-ETH, which is
-  upstream's own reason for that branch (the module otherwise keeps reconnecting to a box whose
+  upstream's own reason for that branch (the module otherwise keeps reconnecting to a system whose
   stack is down).
 - **Wired stays in scope** (D-26 extended to `hs485d`/HMW-LGW). `hs485d.service` keeps its
   `ExecCondition` on an `[Interface x]` section in `/var/etc/hs485d.conf`, which is the script's
   own "disabled" branch: no wired hardware, no unit, no restart loop.
 - **The nightly backup runs only once a target is set** (history: since task 86 the pipeline of `occu-backup-create@.service` replaces `occu-cron-backup.service`, and a run without an enabled target does nothing). `cronBackup.sh`'s built-in default is
   `/media/usb0/backup`, a symlink a usbmount hook of the WebUI's measurement feature creates, on a
-  tmpfs — so on a box where nobody wrote `/etc/config/CronBackupPath` the script's own guard made
+  tmpfs — so on a system where nobody wrote `/etc/config/CronBackupPath` the script's own guard made
   it exit 0 every night and back up nothing. `occu-cron-backup.service` now needs that file
   (`ConditionPathExists=`) and needs it non-empty (an `ExecCondition=`, which is what
   `ConditionPathExists` cannot express), and occulited shows a "no backup target set" notice until
@@ -809,11 +809,11 @@ in the openccu-lite repository). What the answers became, beyond the table above
 `occu-interface-clock.timer` stays **unconditional on every product** (maintainer, 2026-09-06).
 The review proposed gating it on a configured LAN gateway, like the two `S58`/`S59` units, on the
 reading that `/bin/SetInterfaceClock` only serves gateways. That reading is an inference about a
-closed eQ-3 binary from the RFD package that nobody has watched on a live box: rfd may well pass
+closed eQ-3 binary from the RFD package that nobody has watched on a live system: rfd may well pass
 the time to the built-in radio module as well. One XML-RPC call four times a day costs nothing and
 rfd decides for itself when there is nothing to update, while a wrong condition would produce
 wrong timestamps on gateway-side events days later — the worst class of regression to debug. The
-only condition is upstream's own: the crontab line does not run when the box *is* a LAN gateway
+only condition is upstream's own: the crontab line does not run when the system *is* a LAN gateway
 (`ConditionPathExists=!/usr/local/HMLGW`).
 
 ## First boot (2026-09-06, QEMU without KVM)
@@ -829,7 +829,7 @@ all fixed the same evening:
 - buildroot's own `network.service` (`ifup -a` from the ifupdown-scripts package) ran before
   `/tmp` existed and failed; `occu-network.service` (`S40network`) does the same job three seconds
   later and succeeds. `network.service` is masked in the overlay.
-- `eq3configd.service` restarted in a loop on a box without a radio module: its preparation
+- `eq3configd.service` restarted in a loop on a system without a radio module: its preparation
   step read `/var/rf_address`. Made tolerant (`ExecStartPre=-`) at the time; the unit itself is
   gone since task 163, and what its preparation did is `occulited radio run`'s.
 - journald reported "No space left on device": the image's userfs partition is 3 MB until
@@ -846,7 +846,7 @@ the confined policy drop-in `10-policy.conf` beside it. No directive, value or d
 rejected; the only complaints were about executables that are not on the machine running the
 check, which is every path in the target rootfs.
 
-Two more found on the lab box the night of 2026-09-06/07:
+Two more found on the test system the night of 2026-09-06/07:
 
 - The Log page answered `journalctl: exit status 1` and nothing else (B-7). `occu-persist.service`
   creates `/usr/local/var/log/journal` itself, so journald never applies its own permissions to it:
@@ -857,7 +857,7 @@ Two more found on the lab box the night of 2026-09-06/07:
   systemd's own `z /var/log/journal 2755 root systemd-journal` tmpfiles rule would do if the
   directory existed when tmpfiles ran.
 - util-linux ships `fstrim.timer`, buildroot's preset enables it, and it trims the same
-  filesystems as `occu-fstrim.timer` — ignoring `/etc/config/NoFSTRIM`, so a box that opted out of
+  filesystems as `occu-fstrim.timer` — ignoring `/etc/config/NoFSTRIM`, so a system that opted out of
   trimming was trimmed weekly anyway (B-8). `fstrim.timer` is masked in the overlay next to
   `network.service`.
 - **No Tcl worked at all, and the firewall was therefore never applied** (B-11). `package/openccu-base`'s (`package/occu` until 3.89.8)
@@ -866,7 +866,7 @@ Two more found on the lab box the night of 2026-09-06/07:
   `BR2_ROOTFS_MERGED_USR`, so on every lite systemd product `/bin` *is* `/usr/bin` and that command
   overwrote tcl's link with a link to itself: `/usr/bin/tclsh -> /usr/bin/tclsh`, ELOOP for every
   Tcl script in the image. The visible damage: `/etc/network/if-up.d/eQ3StartNetwork` runs
-  `/bin/setfirewall.tcl` at every boot and does not check its exit code, so the lab box came up
+  `/bin/setfirewall.tcl` at every boot and does not check its exit code, so the test system came up
   with an empty `iptables` ruleset (all policies `ACCEPT`) while the Firewall page showed the
   configuration it thought was applied; `PUT /api/system/v1/ssh` and every other write that runs
   `setfirewall.tcl` answered 500; and lighttpd's `cgi.assign` maps `.cgi` to `/bin/tclsh`, so no
@@ -892,7 +892,7 @@ Two more found on the lab box the night of 2026-09-06/07:
   no-op** (B-25). `usr-local.mount` was stopped 7.7 s *before* the last of the `occu-*` chain, so
   `S00watchdog stop`'s `rm -f /usr/local/tmp/.watchdog` ran against the empty mount point on the
   read-only rootfs, returned 0, and left the marker behind — the next boot then wrote
-  `/var/status/uncleanShutdown`, every time. Measured on the lab box:
+  `/var/status/uncleanShutdown`, every time. Measured on the test system:
 
       [15993.096] usr-local.mount: Deactivated successfully.
       [16000.790] Stopping Hardware watchdog...
@@ -997,9 +997,9 @@ Two things the host taught, both worth keeping:
   `BR2_TARGET_GENERIC_GETTY_PORT` decides. Not needed for the HTTP checks; not set up here. The
   end-of-boot hint is already written to `/etc/issue` (→ `/run/issue`), so a getty would show it.
 - Everything in [The boot screen and the end-of-boot message](#the-boot-screen-and-the-end-of-boot-message)
-  is untested on a screen: it needs a box (or a QEMU run with a framebuffer) to say whether the
+  is untested on a screen: it needs a system (or a QEMU run with a framebuffer) to say whether the
   splash text is legible over the console output that now shares `/dev/console` with it.
-- The D-41 items that only a running box can settle, all of them:
+- The D-41 items that only a running system can settle, all of them:
   [the watchdog on a Pi](#the-hardware-watchdog) (the module is loaded after PID 1 arms itself),
   whether journald starting after the userfs mount costs anything measurable on the first boot
   ([the machine ID](#the-machine-id)), what `S47InitRFHardware`'s `stop()` leaves behind when the
