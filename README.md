@@ -6,7 +6,7 @@
 > openccu-lite ist in Entwicklung. Vieles ist noch ungetestet.
 > **Bitte nur auf Testsystemen einsetzen.**
 >
-> **Es richtet sich an erfahrene Anwender**, die wissen, was sie tun und sich im Fall der Fälle 
+> **Es richtet sich an erfahrene Homematic Anwender**, die wissen, was sie tun und sich im Fall der Fälle 
 > selbst helfen können: Leute, die eine CCU von innen kennen (`rfd`, `hs485d`, der `hmipserver`,
 > Funkmodule und Key-Handling, das RPC-Protokoll, die Paramsets, ...).
 >
