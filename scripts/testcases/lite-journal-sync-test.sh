@@ -90,7 +90,7 @@ out=$(sh "$TOOL" copy); rc=$?
 n=$(ls "$T/userfs/$MID" | wc -l)
 [ "$n" -eq 3 ] && ok "three closed files on the userfs (two and the rotated one)" || bad "userfs has $n files: $(ls "$T/userfs/$MID")"
 [ "$(cat "$T/userfs/$MID/system@a-0000000000000002-0000000000000002.journal")" = bbbbbb ] && ok "a copy has the content" || bad "content"
-ls "$T/userfs/$MID" | grep -q '\.part$' && bad "a temporary file is left" || ok "no temporary file left"
+[ -n "$(find "$T/userfs/$MID" -maxdepth 1 -name '*.part' -print -quit)" ] && bad "a temporary file is left" || ok "no temporary file left"
 [ "$(ls "$T/run/$MID")" = system.journal ] && ok "RAM keeps only the new active file" || bad "RAM has: $(ls "$T/run/$MID")"
 [ ! -e "$T/userfs/$MID/system.journal" ] && ok "the active file is not copied" || bad "the active file was copied"
 grep -qx -- '--rotate' "$T/calls" && ok "rotated first" || bad "no rotate: $(cat "$T/calls")"
@@ -157,7 +157,7 @@ reason - running manual
 setup
 OCCU_TEST_SYSTEM_STATE=stopping sh "$TOOL" copy stop >/dev/null
 cmp -s "$T/state/sync.state" "$T/userfs/.occu-sync.state" && ok "the state is also beside the copies, for the next boot" || bad "no state on the userfs: $(ls -a "$T/userfs")"
-ls -a "$T/userfs" | grep -q '\.new$' && bad "a temporary state file is left" || ok "no temporary state file left"
+[ -n "$(find "$T/userfs" -maxdepth 1 -name '*.new' -print -quit)" ] && bad "a temporary state file is left" || ok "no temporary state file left"
 grep -qx 'ExecStop=/usr/libexec/occu/lite-journal-sync copy stop' "$UNIT" && ok "the unit's stop copies as 'stop'" || bad "the unit's ExecStop"
 
 # ---- a USB stick as the target: TARGET=usb:<label>/<dir>, looked up by its label among the mounts
@@ -192,7 +192,7 @@ export OCCU_UDEVADM="$T/udevadm" OCCU_TEST_LABELS="$T/labels" OCCU_MOUNTS="$T/mo
 export OCCU_TEST_UNIT_POLLS="$T/polls" OCCU_JOURNAL_STICK_WAIT=10
 stick_setup() {  # stick_setup <mount options of the journal's stick>
   setup
-  rm -rf "$T/mr" "$T/dev" "$T/polls"
+  rm -rf "${T:?}/mr" "${T:?}/dev" "$T/polls"
   mkdir -p "$T/mr/media/usb1" "$T/mr/media/usb2" "$T/dev"
   : > "$T/dev/sda1"
   : > "$T/dev/sdb1"

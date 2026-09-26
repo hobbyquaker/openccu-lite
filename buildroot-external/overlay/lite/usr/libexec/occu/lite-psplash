@@ -87,6 +87,7 @@ case "${1-}" in
     esac
     if [ -z "${msg}" ]; then
       # the newest note of a unit still starting
+      # shellcheck disable=SC2045  # the files are unit names without spaces, newest first
       for u in $(ls -t "${STATE}" 2>/dev/null); do
         [ "${u}" = "${unit}" ] && continue
         case "${starting}" in

@@ -124,6 +124,7 @@ CLOCK_POLL=5
 
 read_config() {
   SYNC_INTERVAL="" TARGET_MAX_USE="" TARGET_MAX_AGE="" RUNTIME_MAX_USE="" TARGET=""
+  # shellcheck source=/dev/null
   [ -r "${CONFIG}" ] && . "${CONFIG}"
   parse_target
 }
@@ -239,7 +240,6 @@ resolve_dst() {
   fi
   DST_NAME="the USB stick ${STICK_LABEL}"
   found=$(stick_mount "${STICK_LABEL}") || return 1
-  STICK_DEV=${found%% *}
   STICK_MP=${found#* }
   DST="${MEDIA_ROOT}${STICK_MP}/${STICK_DIR}"
   mkdir -p "${STATE_DIR}" 2>/dev/null && echo "${found}" > "${STATE_DIR}/stick"

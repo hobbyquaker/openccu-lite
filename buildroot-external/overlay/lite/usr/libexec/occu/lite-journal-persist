@@ -155,6 +155,7 @@ if [ "${1:-}" = archive-split ]; then
   exit $?
 fi
 STORAGE="" TARGET="" PERSIST="" RUNTIME_MAX_USE="" SYSTEM_MAX_USE="" SYSTEM_MAX_FILE="" RATE_LIMIT_BURST=""
+# shellcheck source=/dev/null
 [ -r "${CONFIG}" ] && . "${CONFIG}"
 
 PLATFORM=""
