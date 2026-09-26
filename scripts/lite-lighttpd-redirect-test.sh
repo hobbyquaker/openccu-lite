@@ -129,6 +129,9 @@ for k, v in pairs(lighty.r.req_header) do
   if v ~= "" and (k:upper():gsub("[^%w]", "_")) == "X_OCCULITE_SESSION" then seen[#seen + 1] = v end
 end
 lighty.r.resp_header["X-Echo-Session"] = #seen > 0 and table.concat(seen, " | ") or "-"
+-- B-230: the forwarding headers as the backend received them
+local h = lighty.r.req_header
+lighty.r.resp_header["X-Echo-Forwarded"] = "for=" .. (h["X-Forwarded-For"] or "-") .. ";proto=" .. (h["X-Forwarded-Proto"] or "-") .. ";host=" .. (h["X-Forwarded-Host"] or "-") .. ";fwd=" .. (h["Forwarded"] or "-")
 lighty.r.resp_header["Content-Type"] = "text/plain"
 lighty.r.resp_body:set({ "echo\n" })
 return 200
@@ -355,6 +358,8 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         seen = [v for k, v in self.headers.items() if "".join(c if c.isalnum() else "_" for c in k.upper()) == "X_OCCULITE_SESSION" and v != ""]
         seen = " | ".join(seen) or "-"
+        h = self.headers
+        fwd = "for=%s;proto=%s;host=%s;fwd=%s" % (h.get("X-Forwarded-For", "-"), h.get("X-Forwarded-Proto", "-"), h.get("X-Forwarded-Host", "-"), h.get("Forwarded", "-"))
         with open("/tmp/echo.log", "a") as log:
             log.write(self.path + " " + seen + "\n")
         if self.headers.get("Upgrade", "").lower() == "websocket":
@@ -367,6 +372,7 @@ class H(http.server.BaseHTTPRequestHandler):
             return
         self.send_response(200)
         self.send_header("X-Echo-Session", seen)
+        self.send_header("X-Echo-Forwarded", fwd)
         self.send_header("Content-Length", "5")
         self.end_headers()
         self.wfile.write(b"echo\n")
@@ -534,6 +540,39 @@ echoed "an addon's own socket, a WebSocket upgrade with forged headers" 101 - --
 echoed "occulited's API, a live cookie and forged headers: none" 200 - $R -H "$SC" $FORGED $S/api/echo
 echoed "occulited's shell, a live cookie and forged headers: none" 200 - $R -H "$HC" $FORGED http://ccu/echo
 echoed "occulited's shell over HTTP/2, forged headers" 200 - $R --http2 $FORGED $S/echo
+}
+echo "---- the forwarding headers (B-230)"
+# lighttpd's mod_proxy appends the client's address to a client-sent X-Forwarded-For instead of
+# replacing it; the global magnet script (and occulited's gate under /addons/) removes the client's
+# copy, so a backend receives lighttpd's own element alone: the client's address, never a forged
+# loopback or range; Forwarded likewise (lighttpd appends to it too), X-Forwarded-Proto and
+# X-Forwarded-Host lighttpd sets itself.
+# forwarded <label> <for> <proto> curl arguments...: the X-Forwarded-For and -Proto the backend saw,
+# and no forged value anywhere in the four headers
+forwarded() {
+  label=$1 want_for=$2 want_proto=$3
+  shift 3
+  got=$(curl -sk -o /dev/null -D - --max-time 3 "$@" | tr -d '\r' | sed -n 's/^[Xx]-[Ee]cho-[Ff]orwarded: //p')
+  f=$(echo "$got" | sed -n 's/^for=\([^;]*\);.*/\1/p')
+  p=$(echo "$got" | sed -n 's/.*;proto=\([^;]*\);.*/\1/p')
+  case "$got" in
+    *evil*|*10.99.*|*127.0.0.9*) bad "$label: a forged value reached the backend: $got" ;;
+    *) if [ "$f" = "$want_for" ] && [ "$p" = "$want_proto" ]; then ok "$label: $got"; else bad "$label: got '$got', want for=$want_for proto=$want_proto"; fi ;;
+  esac
+}
+XFF="-H X-Forwarded-For:127.0.0.9 -H x-forwarded-for:10.99.1.1 -H X_Forwarded_For:10.99.2.2 -H X-Forwarded-Proto:evil -H X-Forwarded-Host:evil.example -H Forwarded:for=127.0.0.9;host=evil.example"
+# shellcheck disable=SC2086
+{
+forwarded "occulited's API over HTTPS, forged forwarding headers" "$IP" https $R $XFF $S/api/echo
+forwarded "occulited's API over HTTP/2, forged forwarding headers" "$IP" https $R --http2 $XFF $S/api/echo
+forwarded "occulited's shell over HTTP, forged forwarding headers" "$IP" http $R $XFF http://ccu/echo
+forwarded "occulited's API, no forwarding header of the client's" "$IP" https $R $S/api/echo
+if grep -q 'X_FORWARDED_FOR' /etc/lighttpd/occulite-gate.lua; then
+forwarded "a CGI through occulited behind the gate, forged forwarding headers" "$IP" https $R -H "$HC" $XFF $S/addons/cgi/settings.cgi
+forwarded "an addon behind the gate, forged forwarding headers" "$IP" https $R -H "$HC" $XFF $S/addons/echo/
+else
+  echo "skip  the gate half: this occulited's gate does not remove the forwarding headers"
+fi
 }
 kill "$ECHO_PID"
 rm -f /etc/config/lighttpd/echo.conf

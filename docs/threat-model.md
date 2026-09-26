@@ -284,7 +284,8 @@ there, held to its level and to the origin rule of lite-rpc, and to nothing else
 ### B2 · lighttpd ↔ occulited
 
 **Crosses:** the proxied request, and with it the session the gate validated (`X-Occulite-Session`), the client's
-address (`X-Forwarded-For`) and the protocol (`X-Forwarded-Proto`).
+address (`X-Forwarded-For`: lighttpd's element, the last one — a client-sent header is removed before lighttpd adds
+its own, B-230) and the protocol (`X-Forwarded-Proto`).
 
 **Checked by:** occulited listening on `127.0.0.1:2121` only; the gate script, which validates the session
 before an addon page is served and **removes a client-sent session header** before it sets its own; occulited
@@ -403,7 +404,7 @@ and its tooling have to confirm, and is the list that becomes findings.
 
 | | Here that would be | In the way today | To check |
 | --- | --- | --- | --- |
-| **S**poofing | A client sending `X-Occulite-Session` itself, or faking `X-Forwarded-For` to dodge the lockout | The gate removes a client-sent header before setting its own; the global magnet removes it everywhere the gate does not run; only lighttpd reaches 2121 | That both removals are still in place after any lighttpd config change — this is the bug class; that nothing but the loopback can reach 2121 |
+| **S**poofing | A client sending `X-Occulite-Session` itself, or faking `X-Forwarded-For` to dodge the lockout | The gate removes a client-sent header before setting its own; the global magnet removes it everywhere the gate does not run; both remove a client-sent `X-Forwarded-For`, `-Proto`, `-Host` and `Forwarded` too, and occulited takes only the last element of `X-Forwarded-For` (lighttpd's), and only from the loopback (B-230); only lighttpd reaches 2121 | That both removals are still in place after any lighttpd config change — this is the bug class; that nothing but the loopback can reach 2121 |
 | **T**ampering | Changing the proxied body or the path | The loopback; lighttpd is the only writer | The path rewriting rules: what `/addons/<id>/…` can become before occulited sees it |
 | **R**epudiation | — | The request log names the address the gate forwarded | Whether the log's address is the forwarded one and not lighttpd's |
 | **I**nformation disclosure | An answer meant for one session served to another | No shared cache; `Cache-Control: private, no-cache`; the session decides the answer | Any route that answers the same bytes to everyone and is cached by lighttpd |
@@ -556,14 +557,14 @@ The "to check" rows that were checked, and what became of them. One entry per sl
 
 | row | outcome |
 | --- | --- |
-| B1 *Spoofing* — the lockout, the cookie's flags | the flags hold (V7.5); the lockout by address is dodged with a client-sent `X-Forwarded-For` → **B-230** (confirmed on a lab system) |
+| B1 *Spoofing* — the lockout, the cookie's flags | the flags hold (V7.5); the lockout by address is dodged with a client-sent `X-Forwarded-For` → **B-230** (confirmed on a lab system) — **fixed** 2026-09-26: occulited `5b63d52`, the fork's global magnet script |
 | B1 *Tampering* — `SameSite=Lax` alone | not alone any more: the `Origin`/`Sec-Fetch-Site` check of task 213 covers every state-changing call on the cookie; the header credential and the CSP of D-78 remain → **task 259** |
 | B1 *Repudiation* — which changes are logged with who and from where | password logins, refusals and lockouts are at debug → **B-231**; the older system routes log the action without the caller (stays open in B-231's wake) |
-| B1 *Information disclosure* — the list of open routes | `open()` in `internal/httpapi/auth.go` is the one list: health, version, the auth flow, the ACME challenge, the pairing request, `addonctl` (own token), `homematic.cgi` (loopback only — but the loopback is decided on the forged address, **B-230**), the SBOM. Each answers nothing a session would guard, except that one |
+| B1 *Information disclosure* — the list of open routes | `open()` in `internal/httpapi/auth.go` is the one list: health, version, the auth flow, the ACME challenge, the pairing request, `addonctl` (own token), `homematic.cgi` (loopback only — the loopback was decided on the forged address, **B-230**, fixed 2026-09-26), the SBOM. Each answers nothing a session would guard, except that one |
 | B1 *Denial of service* — unauthenticated work | the login's argon2 runs one at a time; eight authenticated JSON routes read bodies without a cap, no idle timeout → **B-232** |
 | B1 *Elevation* — every route's scope, mechanically | `TestRouteTable` walks the mux; the default is deny; pass |
-| B2 *Spoofing* — a faked `X-Forwarded-For` | lighttpd appends the real address to a client-sent header and occulited takes the first element → **B-230** |
-| B2 *Repudiation* — the log's address | the forwarded one, and therefore the client's choice → **B-230** |
+| B2 *Spoofing* — a faked `X-Forwarded-For` | lighttpd appends the real address to a client-sent header and occulited takes the first element → **B-230** — **fixed** 2026-09-26: occulited takes the last element, and only from the loopback; the fork's global magnet and the gate remove the client's header (`lite-lighttpd-redirect-test.sh` checks it on a real lighttpd) |
+| B2 *Repudiation* — the log's address | the forwarded one, and therefore the client's choice → **B-230** — **fixed** 2026-09-26: lighttpd's element |
 | — (V6.3) | the login skips argon2 for an unknown account: a timing oracle for names → **B-233** |
 | B3 *Elevation* — every program and prefix, read as an attacker would | `programAllowed` shapes the arguments of `sh` only; `systemd-run`, `systemctl`, `kill`, `ip`, `install_addon`, `restoreBackup.sh` … run with any arguments — a compromised daemon is root → **B-234** |
 | B4 *Tampering* — every write, for symlink and TOCTOU handling | the `symlink` operation checks the link, not its target, and `WriteFile` resolves links before writing → a root write to any file from an allowed prefix → **B-235**; the writes into addon-controlled trees are listed there |
