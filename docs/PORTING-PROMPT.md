@@ -5,9 +5,9 @@ integration you maintain. Fill in the two placeholders. Metadata API version 1; 
 versioned with it — if `GET /api/meta/v1/version` answers a higher `version`, fetch the prompt
 from the matching openccu-lite release.*
 
-*Since 2026-09-23 an addon declares its `runtime` block in its own manifest, `openccu-lite.json`
-([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)); where this
-prompt says *catalogue entry*, that is the manifest.*
+*An addon declares what it needs in its own manifest, `openccu-lite.json` at the root of its package
+([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)); the catalogue only
+says where it is.*
 
 ---
 
@@ -77,16 +77,16 @@ daemon and `stop` must stop it. When the addon is *confined* (its own user `addo
   addon's own directory.
 - **Writable paths are** the addon's directory, `/usr/local/etc/config/addons/<name>/` (created
   for you), `/usr/local/etc/config/rc.d`, `/run`, `/var/log`, `/tmp`, plus whatever the
-  catalogue entry's `runtime.paths` grants. Everything else is read-only; a daemon that writes
+  manifest's `runtime.paths` grants. Everything else is read-only; a daemon that writes
   elsewhere fails visibly in the journal, and the user can switch the addon back to root on the
   Services page.
 
 **Do not ship a systemd unit file.** Every addon runs in the generated unit, root or confined. A
 unit in your addon's directory (`etc/systemd/<name>.service`, or drop-ins beside it) is ignored,
 with a journal line saying so: the confined addon's user owns that directory, so a unit
-there would let the addon give itself root. Declare what the daemon needs in the catalogue entry's
+there would let the addon give itself root. Declare what the daemon needs in the manifest's
 `runtime` block instead: capabilities, groups, extra writable paths, data directories, ports and
-the interfaces it waits for at start (`needs`). If something is missing there, ask for a catalogue
+the interfaces it waits for at start (`needs`). If something is missing there, ask for a manifest
 field.
 
 Session-less endpoints (a status poll from the page's JavaScript) keep working behind the
@@ -94,7 +94,7 @@ lighttpd gate because the browser sends the session cookie the gate accepts (`oc
 over HTTP, `__Secure-occulite_session` over HTTPS), next to the `?sid=@…@` convention. An addon
 that reads the cookie itself must accept both names. **`?sid=@…@` carries the session's legacy
 alias** (ten characters), not the session: the system hands it to addons that do not declare the
-header (`runtime.session.header_since` in the catalogue entry), on by default and switchable off
+header (`ui.session_header` in the manifest), on by default and switchable off
 by the user, with a warning; the gate takes it from `?sid=` only, never from a cookie, and the
 API never takes it.
 
@@ -104,16 +104,16 @@ the user's session. The cookie's names can change, and have.
   session id (26 characters of `A-Z2-7`) from either cookie or from `?sid=`, or — on a request
   the gate accepted by the ten-character legacy alias in `?sid=` alone, with no live cookie —
   that alias, which only the tclrega shim answers and the API refuses. An addon that validates
-  the header against the API declares `header_since`, is opened without `?sid=`, and so always
-  sees the id.
+  the header against the API declares `ui.session_header`, is opened without `?sid=`, and so
+  always sees the id.
 - **Where it arrives:** on every request the gate passes under `/addons/` to your addon: static
-  files, XHRs, the proxied backend of your lighttpd drop-in, WebSocket upgrades over HTTP/1.1 and
+  files, XHRs, the proxied backend of your lighttpd fragment (`etc/lighttpd.conf`), WebSocket upgrades over HTTP/1.1 and
   over HTTP/2 (extended CONNECT), and your CGIs (as `HTTP_X_OCCULITE_SESSION`).
 - **Guarantee:** lighttpd removes any header of that name a client sent, on every request and every
   socket, before anything else. That covers any case, and any spelling a CGI would read as the same
   variable (`X_Occulite_Session`, `x.occulite.session`). So the header is present only behind a
   session the gate found live, and never client-controlled.
-- **Absent everywhere else:** paths your drop-in proxies outside `/addons/`, a socket of your own,
+- **Absent everywhere else:** paths your fragment proxies outside `/addons/`, a socket of your own,
   `/api/` and the shell never carry it.
 - **What it does not tell you:** who the user is, and whether the session outlives the request. The
   gate checks only that the session exists. For the user and the role ask
@@ -127,18 +127,20 @@ the user's session. The cookie's names can change, and have.
   as above; comms authenticates a WebSocket by that header.
 - **The cookie and `?sid=@…@` stay** as they are, for the pages that pass the session along.
 - **Declare it, and `?sid=` stops**. Once a release of your addon reads the header
-  everywhere the shell opens it (the frontend your drop-in proxies, and the settings page with
-  every CGI it calls), say so in its manifest `openccu-lite.json`:
-  `"runtime": {"session": {"header_since": "<that version>"}}` ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)). The system
-  then opens an installed version at least that one without `?sid=@…@`: embedded, in a new tab and
-  in the settings frame. Older and unknown versions, addons outside the catalogue and a system that
-  has read no index yet keep getting `?sid=`, and a CCU always sends it, so keep accepting it.
-  Declaring `session` alone does not mark your addon's confinement as declared.
+  everywhere the shell opens it (the frontend your fragment proxies, and the settings page with
+  every CGI it calls), say so in that release's manifest `openccu-lite.json`:
+  `"ui": {"session_header": true}` ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)). The manifest is per
+  version, so this is a boolean. The system then opens that installed version without `?sid=@…@`:
+  embedded, in a new tab and in the settings frame. Older releases whose manifest does not say so
+  and addons without a manifest keep getting `?sid=`, and a CCU always sends it, so keep accepting
+  it. Declaring `ui` alone does not mark your addon's confinement as declared; that is the `runtime`
+  block.
 
 **Ship the marker file `openccu-lite.ok`** in your addon's directory (`/usr/local/addons/<name>/`)
 once the port is done. The system scans installed addons for ReGa idioms after an update from
 OpenCCU and disables what it finds; a ported addon keeps its ReGa path (invariant 1), so the
-marker — or a catalogue entry — is what tells the system "this one runs here".
+marker — or a manifest that does not declare `requires.rega` — is what tells the system "this one
+runs here".
 
 ## Architecture: ship a package per architecture, and name it so
 
@@ -230,7 +232,7 @@ user-readable "does this user exist" probe; a session your addon issued is your 
 13. **Writes on the system**: the local token has the scope `meta:read` alone and is shared by
     every addon; an addon that wants to write (its `meta.<id>` namespace, a rename) needs the
     user's session (the `X-Occulite-Session` header) or a token with `meta:write` — one the user
-    created for it on the system's System → Users page, or the addon's own from its catalogue entry's
+    created for it on the system's System → Remote access page, or the addon's own from its manifest's
     `runtime.api_scopes` (`/run/occulite/addon-tokens/<id>.api`, minted by the system at every
     start). Say so in your README.
 14. **Persist the snapshot in the same state directory as your ReGa cache, in its own file** —
@@ -243,9 +245,9 @@ user-readable "does this user exist" probe; a session your addon issued is your 
     start in) may read `/VERSION`: `VARIANT=lite` is the supported signal. The metadata detection
     itself stays the version probe.
 17. **An addon that writes headlessly** (a migration, assigning rooms by itself) needs a token
-    with `meta:write`: its own from `runtime.api_scopes` in its catalogue entry (the system writes it
+    with `meta:write`: its own from `runtime.api_scopes` in its manifest (the system writes it
     to `/run/occulite/addon-tokens/<id>.api`, readable by the addon's user), or one the user
-    created on the system's System → Users page and pasted into its configuration; the local token is not
+    created on the system's System → Remote access page and pasted into its configuration; the local token is not
     enough. Full access is never an addon's.
 18. The SSE stream carries no `id:`/`retry:`; resumption is `?since=` only — a browser
     `EventSource` cannot resume, use it for live updates and re-snapshot on reconnect.

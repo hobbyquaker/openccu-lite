@@ -7,10 +7,10 @@ with the firmware's own `/bin/install_addon`, exactly as OpenCCU's `cp_software.
 `/usr/local` survives a switch in either direction, so an addon installed on a stock CCU3 or
 on OpenCCU simply comes along.
 
-> **Where the declarations live now:** since 2026-09-23 an addon describes itself in its own manifest,
-> `openccu-lite.json` at the root of its archive ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)) — the `runtime` block
-> included. Where this page says *catalogue entry*, read *manifest*; the catalogue only says where
-> an addon's manifest is.
+> **Where the declarations live:** an addon describes itself in its own manifest, `openccu-lite.json`
+> at the root of its archive ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)): its `ui` facts and its `runtime`
+> block. The system reads it at every install and update; the catalogue only says where an addon's
+> manifest is.
 
 What is different from a CCU3 is what is *not* there: no ReGaHSS, no ReGa DOM, no system variables,
 no programs. `tclrega.so` is a shim that answers the session check and nothing else. Anything
@@ -42,8 +42,10 @@ runners) plus a scan of the addon's own code for ReGa idioms — `dom.GetObject`
 inkompatibel" / "disabled, incompatible"** with the reason, and the Status page lists it.
 
 An addon that has been ported keeps its ReGa path beside the openccu-lite one — the porting kit
-requires it — so the scan alone would punish exactly the addons that did the work. Two things
-exempt an addon: being listed in the catalogue, or a file named `openccu-lite.ok` in its directory.
+requires it — so the scan alone would punish exactly the addons that did the work. A manifest
+exempts an addon (it runs without the ReGa unless it declares `requires.rega`), and so do an adapter
+manifest the catalogue in the image carries for it and, for an addon without a manifest, a file named
+`openccu-lite.ok` in its directory.
 
 Enabling such an addon anyway is the user's call and the UI asks first.
 
@@ -108,7 +110,7 @@ Two different things, and only one of them is a menu entry.
 | | what it is | where it is declared | where the shell shows it |
 | --- | --- | --- | --- |
 | **Settings page** | what OpenCCU reaches through *Systemsteuerung → Zusatzsoftware*: the addon's own configuration, usually with a start/stop control for its daemon. Most addons have one. | `Config-Url:` in the addon's rc.d `info` output (and `CONFIG_URL` in `hm_addons.cfg`) | the **Addons page**, as the *Settings* button on the addon's row |
-| **Web frontend** | a full interface of its own, independent of the CCU's | a **lighttpd drop-in the addon installs**, `/usr/local/etc/config/lighttpd/<id>.conf`, mapping a path to the addon's own server | the **addon dropdown** in the header, with the addon's icon |
+| **Web frontend** | a full interface of its own, independent of the CCU's | a **lighttpd fragment the addon ships** as `etc/lighttpd.conf` in its tree, mapping a path to the addon's own server; occulited validates it and writes the copy lighttpd reads, `/usr/local/etc/config/lighttpd/<id>.conf` | the **addon dropdown** in the header, with the addon's icon |
 
 Measured on a test system: `mosquitto` has `Config-Url: /addons/mosquitto/settings.cgi` and no
 lighttpd drop-in, so it is on the Addons page only. `redmatic` has the same kind of `Config-Url`
@@ -122,7 +124,7 @@ regex when that key is the catch-all `""`, and accepts the result only when it i
 under `/addons/`. Anything it cannot read confidently means *no frontend*, because a wrong link in
 the menu is worse than a missing one — RedMatic's second block, which proxies `/description.xml`
 and `/api/*/lights` to its Philips-Hue emulation, falls out by that rule. Only a proxy counts:
-lighttpd already serves `/addons/<id>/` off the filesystem, so an addon whose frontend is static
+`/addons/<id>/` is served off the filesystem anyway (by occulited, behind lighttpd's gate), so an addon whose frontend is static
 needs no drop-in and cannot be told apart from its settings page there.
 
 An addon that proxies in some other way can still declare its frontend explicitly with a `nav.d`
@@ -131,37 +133,36 @@ statement it is and lands in the dropdown with the rest. A `nav.d` drop-in that 
 stays a tab of its own.
 
 **A proxied frontend never gets `?sid=`** (2026-09-15). The legacy `?sid=` alias exists
-for the tclsh CGIs lighttpd serves itself, which ask the `tclrega.so` shim; a server behind
+for the addons' tclsh CGIs, which ask the `tclrega.so` shim; a server behind
 lighttpd's proxy learns the session from the gate's `X-Occulite-Session` header and
 can do nothing with the alias — occulited's API refuses it. Homematic Manager's server
 checks a `?sid=` it is handed against the API before anything else, so with the alias it sent the
 frame to the system's page; without `?sid=` its header path signs the user in. So `GET /nav` never
 marks a frontend proxied to the addon's own server `legacy_session`, whatever the switches say; a
-page named by the addon's own `nav.d` drop-in that lighttpd serves itself (a CGI) keeps the alias,
+page named by the addon's own `nav.d` drop-in that is not proxied (a CGI) keeps the alias,
 and so does every settings page.
 
 **Where the `Config-Url` is not the settings page**: Homematic Manager's `Config-Url` is the
 CCU's *Systemsteuerung* button into its app — `settings.cgi` checks the session and hands the
 browser over to the frontend with its token cookie — and its settings are `settings.cgi?cmd=config`.
 On openccu-lite the frontend has its own menu entry, and the `Config-Url` is what the shell frames
-behind ⚙ and the *Settings* button, so the catalogue entry names the settings page in
-`runtime.settings_url` ([catalog-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/catalog-format.md)); `GET /addons` answers it as
+behind ⚙ and the *Settings* button, so the addon's manifest names the settings page in
+`ui.settings_url` ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)); `GET /addons` answers it as
 `config_url`. An addon on openccu-lite is better off writing the settings page itself as its
-`Config-Url` (its `update_script` knows the firmware from `/VERSION`); the catalogue key covers the
+`Config-Url` (its `update_script` knows the firmware from `/VERSION`); the manifest key covers the
 versions that do not.
 
 ## Settings pages and CGI
 
-An addon's settings page is served under `/addons/<id>/…` through lighttpd and occulited: the
+An addon's settings page is served under `/addons/<id>/…` by occulited behind lighttpd's gate: the
 session gate accepts the CCU's `?sid=@…@`, occulited runs the CGI through the privilege helper as
 root (or as the addon's own user when it is confined), and the addon's `check_session`
 accepts the session through the `tclrega.so` shim. **What `?sid=@…@` carries is the session's legacy
 alias, not the session**: ten characters the system makes for a session when the shell
 opens such an addon, accepted by the gate and the shim for `/addons/` alone and never by
 occulited's API; the session id itself is 26 characters of base32 and never stands in a URL. The
-shell passes the alias only to addons whose catalogue entry does not declare
-`runtime.session.header_since` for the installed version (and to every addon outside the
-catalogue), on by default and switchable off — for all and per addon on the Addons
+shell passes the alias only to addons whose installed version's manifest does not declare
+`ui.session_header` (and to every addon without a manifest), on by default and switchable off — for all and per addon on the Addons
 page (its section Addon sessions and the ⋯ menu of an addon's row), with a Status warning naming them. **The `X-Occulite-Session` header is the way**:
 every request the gate passes carries the credential it validated (`HTTP_X_OCCULITE_SESSION` in a
 CGI) — the session id, or the alias on a request accepted by the alias alone; only the former
@@ -179,18 +180,18 @@ the unprivileged daemon ever being able to open that path itself.
 Gives each addon its own user and a policy. **Confined is the default** (since
 2026-09-07): an addon installed from now on runs as `addon-<id>` with
 `ProtectSystem=strict`, no capabilities and write access to its own directories plus whatever its
-catalogue entry's `runtime` block declares. Root is the opt-out — deliberate, labelled *unsafe*,
-and taken either by the catalogue entry (`runtime.root: true`, for an addon that genuinely needs
+manifest's `runtime` block declares. Root is the opt-out — deliberate, labelled *unsafe*,
+and taken either by the manifest (`runtime.root: true`, for an addon that genuinely needs
 it) or by the user on the Services page, where the confirmation says what it means: an addon
 running as root can change anything on the system, the firmware and openccu-lite itself included.
 `addons.default_mode` in `occulited.json` flips the whole system back to `root` for someone who wants
 the old behaviour.
 
-**Undeclared addons.** An addon whose catalogue entry carries no `runtime` block — or that was
-never in the catalogue, because it was uploaded as an archive — has declared nothing about how it
-can run. It is confined like any other, and both the Addons page and the Services page mark it
+**Undeclared addons.** An addon whose manifest carries no `runtime` block — or that has no
+manifest at all, neither in its package nor as an adapter manifest in the catalogue — has declared
+nothing about how it can run. It is confined like any other, and both the Addons page and the Services page mark it
 **undeclared**, so that a user who sees it misbehave has the reason on the page rather than only
-in the log. The repair is either a `runtime` block in the catalogue entry (the good one) or the
+in the log. The repair is either a `runtime` block in the addon's manifest (the good one) or the
 unsafe switch to root (the one that always works).
 
 **Addons that were already installed** when a system updates into this default keep what they run as:
@@ -228,7 +229,7 @@ whatever the addon defines — except **`start`, `stop` and `restart` from outsi
 (systemd sets `INVOCATION_ID` inside), which become `systemctl <action> addon-<id>.service` as
 root, or, as the addon's own user, a `POST /api/system/v1/addonctl` with the addon's control
 token (`/run/occulite/addon-tokens/<id>`, readable by that user alone) — which may do exactly
-that and nothing else. Beside it, an addon whose catalogue entry declares `runtime.api_scopes`
+that and nothing else. Beside it, an addon whose manifest declares `runtime.api_scopes`
 finds its own API token in `/run/occulite/addon-tokens/<id>.api` (`0600`, its user;
 minted at every start, after an install and after a policy change, gone with the addon), with
 exactly the declared scopes less what an addon never gets (`*`, `auth:admin`, `power`,
@@ -242,7 +243,7 @@ Addon authors need not change anything.
 ## No unit files of its own
 
 **Every addon runs in the generated unit.** It is built from the addon's rc.d script, its stored
-policy (root or its own user, with the grants) and the catalogue entry's `runtime` block. An addon
+policy (root or its own user, with the grants) and the manifest's `runtime` block. An addon
 cannot bring its own unit any more.
 
 - **What is ignored:** a unit file in the addon's directory
@@ -254,10 +255,10 @@ cannot bring its own unit any more.
 - **Why:** a confined addon owns its directory, so it could write that file itself. Until then the
   generator used it as the addon's unit at the next boot, and an `ExecStartPre=+…` or `User=root`
   line in it ran as root.
-- **What an addon needs beyond the generated unit** is declared in its catalogue entry
-  ([catalog-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/catalog-format.md), `runtime`): capabilities, groups, extra paths, data
+- **What an addon needs beyond the generated unit** is declared in its manifest
+  ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md), `runtime`): capabilities, groups, extra paths, data
   directories, ports and the interfaces it waits for. Something the `runtime` block cannot say yet
-  is a catalogue format change, never a unit file.
-- **Addons affected:** none known. No catalogue entry and none of the addons maintained here
+  is a manifest format change, never a unit file.
+- **Addons affected:** none known. No manifest in the catalogue and none of the addons maintained here
   (RedMatic, homematic-manager, hm2mqtt.js, Mosquitto) ships such a file, and none was on the
   test Pi 4 on 2026-09-13.
