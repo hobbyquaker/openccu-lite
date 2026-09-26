@@ -1,7 +1,8 @@
 # openccu-lite
 
-*English — the German version is [README.md](README.md).*
+[:de: Deutsches README](README.md)
 
+> [!CAUTION]
 > openccu-lite is under development. Much of it is still untested.
 > **Please use it on test systems only.**
 >
@@ -21,6 +22,8 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
 - **New install on a Raspberry Pi 3/4:** unpack the release `.zip` and write the `.img` inside it to the SD card.
 - **New install as a VM:** import the `.ova` (Proxmox, VMware, VirtualBox and so on); the LXC container is described
   in [install-lxc.md](docs/install-lxc.md).
+- a new install can (as long as no devices are paired yet) import paired devices, keys, names and rooms from an
+  (Open)CCU backup.
 
 ## Documentation
 
