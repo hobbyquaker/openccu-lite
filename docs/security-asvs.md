@@ -41,7 +41,7 @@ The items named (`B-n`, `task n`) are the project's roadmap items; a finding get
 | V2.2 | certificates and keys are parsed as what they are | pass | `internal/certpem` (PEM or DER, `x509.ParseCertificate`, the key matched to the leaf), `trust.ParseAny` for the stores; the manual upload 4 MiB through `ParseMultipartForm`, each part ≤ 1 MiB (B-237 fixed the DER trim) |
 | V2.2 | SSH public keys are one line and parse | pass | `internal/sshkeys` `Parse`: refuses `\r`/`\n`, decodes the key type and blob |
 | V2.3 business logic | dangerous state changes have their guards (one install at a time, one flash, a staged file checked twice) | pass | `installs.running()`, `ErrFlashRunning`, `checkUpdateSpace` at staging and again at `ArmSystemUpdate` (B-247), the restore's key check before the reboot |
-| V2.3 | a value an addon declares about itself is applied only within limits the system sets | under review | a finding of this slice about the manifest's runtime block is under review (**B-251**); D-119's guard rails (ports closed until opened, `data_dirs` fenced, `CAP_SYS_ADMIN` an opt-in) hold as documented |
+| V2.3 | a value an addon declares about itself is applied only within limits the system sets | pass | a confined addon may not declare a root-equivalent capability or the privilege helper's group (**B-251** fixed): refused at manifest validation and never rendered into the unit; D-119's other guard rails (ports closed until opened, `data_dirs` fenced, `CAP_SYS_ADMIN` an opt-in for root addons) hold as documented |
 
 ## V3 Web Frontend Security
 
