@@ -12,15 +12,22 @@ occulited repository). A change to what leaves the system fails those tests, and
 
 | Connection | Destination | When | What identifies the system | Switch |
 | --- | --- | --- | --- | --- |
-| [System release check](#system-release-check) | GitHub (`api.github.com`) | on *Check now*; daily with *Check daily* (on by default) | nothing but the IP address | Updates page: *Check daily* |
-| [Device firmware check](#device-firmware-check-and-download) | eQ-3 (`ccu3-update.homematic.com`) | on *Check now*; daily with *Check daily* (on by default) | the system's base firmware version; the device **types** that need an update | Updates page: *Check daily* |
-| [Addon catalogue](#addon-catalogue) | GitHub (`raw.githubusercontent.com`, `api.github.com`) | on *Check now*; daily with *Check daily* (on by default); when the Addons page opens and the copy is older than 10 minutes; at an install | nothing but the IP address | Addons page: *Check daily* |
-| [Addon update checks](#addon-update-checks) | each addon's own `Update:` URL | on the addon's check; daily with the Addons page's *Check daily* | the addon's installed version | Addons page: *Check daily* |
+| [System release check](#system-release-check) | GitHub (`api.github.com`) | on *Check now*; daily with *Check daily* (**off by default**) | nothing but the IP address | Updates page: *Check daily*; asked on the welcome page |
+| [Device firmware check](#device-firmware-check-and-download) | eQ-3 (`ccu3-update.homematic.com`) | on *Check now*; daily with *Check daily* (**off by default**) | the system's base firmware version; the device **types** that need an update | Updates page: *Check daily*; asked on the welcome page |
+| [Addon catalogue](#addon-catalogue) | GitHub (`raw.githubusercontent.com`, `api.github.com`) | on *Check now*; daily with *Check daily* (**off by default**); at an install | nothing but the IP address | Addons page: *Check daily*; asked on the welcome page |
+| [Addon update checks](#addon-update-checks) | each addon's own `Update:` URL | on the addon's check; daily with the Addons page's *Check daily* (**off by default**) | the addon's installed version | Addons page: *Check daily*; asked on the welcome page |
 | [ACME certificates](#acme-certificates) | the chosen CA (e.g. Let's Encrypt), a DNS provider | only in ACME mode: at the order, then a renewal when due | the system's names, the contact mail if given | Certificate page (default: self-signed, no calls) |
 | [Login with OpenID Connect](#login-with-openid-connect) | the configured provider | only when configured: at a login and at *Check* | the client id, the redirect URI | Users page (default: off) |
 | [Status LED internet check](#status-led-internet-check) | the hosts of the above | only when the LED is set to show it: every 5 minutes | a TCP connection, nothing sent | Status LED page (default: off) |
 | [Time (NTP)](#time-ntp) | your servers or the DHCP ones; the gateway, or `0-3.de.pool.ntp.org`, only when there are none | always | the NTP protocol only | Network page (your servers replace the pool) |
 | [HmIP key server](#hmip-key-server) | eQ-3 (`secgtw.homematic.com:8443`) | a radio module exchange; pairing a device whose key is not on the system | the radio module's and the device's serial numbers (SGTIN) | Keys page: *Local key mode* |
+
+**A fresh system makes none of the daily checks.** The four switches above are off until you tick them: the
+welcome page asks once, one checkbox per destination - GitHub (the system release check; the addon catalogue with the
+addons' update checks) and eQ-3 (the device firmware check and download) - and each check keeps its *Check daily*
+beside its *Check now*. A system that was set up before the first public release keeps the settings it ran with; the
+update writes them into `occulited.json` explicitly, so nothing changes without you (occulited's `docs/config.md`,
+*The outbound switches*).
 
 Everything else stays on your local network, unless you point it elsewhere yourself: see
 [On the local network](#on-the-local-network).
@@ -42,14 +49,14 @@ Everything else stays on your local network, unless you point it elsewhere yours
 
 - **To:** `GET https://api.github.com/repos/hobbyquaker/openccu-lite/releases?per_page=20` (the feed can be changed
   in `occulited.json`, `system_update.feed`).
-- **When:** *Check now* on the Updates page, always. With *Check daily* on (the default): 2–7 minutes after the
-  start, then every 24–26 hours.
+- **When:** *Check now* on the Updates page, always. With *Check daily* on (off by default; the welcome page's GitHub
+  checkbox): 2–7 minutes after the start, then every 24–26 hours.
 - **Sends:** the request line, `Accept: application/vnd.github+json`, `If-None-Match` with the last answer's ETag, the
   User-Agent. **Not sent:** the system's version, product or platform - the system picks the matching release from
   the list itself.
 - **The download** of an update (the image and its `.sha256` file, from GitHub's release assets) happens only when you
   start it; a plain `GET` of the two files.
-- **Off:** clear *Check daily*. *Check now* still works.
+- **Off:** the default; clear *Check daily* to switch it off again. *Check now* still works.
 
 ### Device firmware check and download
 
@@ -57,9 +64,9 @@ The firmware of paired Homematic and HmIP devices comes from eQ-3's update serve
 
 - **To:** `GET https://ccu3-update.homematic.com/firmware/api/firmware/search/DEVICE?product=HM-CCU3&version=<VERSION>`
   - the list of current device firmware.
-- **When:** *Check now* on the Updates page, always. With *Check daily* on (the default): 5 minutes after the start
-  when the last run is older than a day, then daily; a failed run is tried again after an hour. No request is made
-  while no device is paired.
+- **When:** *Check now* on the Updates page, always. With *Check daily* on (off by default; the welcome page's eQ-3
+  checkbox): 5 minutes after the start when the last run is older than a day, then daily; a failed run is tried again
+  after an hour. No request is made while no device is paired.
 - **Sends:** the product `HM-CCU3` and `<VERSION>`, the base (OpenCCU) firmware version of the system, as in
   `/VERSION`, e.g. `3.89.11.20260919`; the User-Agent.
 - **The download, in the same run:** for every paired device type whose firmware on the server is newer than what
@@ -67,32 +74,34 @@ The firmware of paired Homematic and HmIP devices comes from eQ-3's update serve
   which device types (e.g. `HmIP-BBL`) are paired and not up to date. The serial is always `0`: **no device serial
   number is sent.** Installing a downloaded firmware onto a device stays your action in your frontend.
 - **Not sent:** device serial numbers, the system's serial or SGTIN, the host name, how many devices there are.
-- **Off:** clear *Check daily* (also offered on the welcome page). Firmware files can be uploaded by hand instead.
+- **Off:** the default; clear *Check daily* to switch it off again. Firmware files can be uploaded by hand instead.
 
 ### Addon catalogue
 
 The catalogue is a list of addons with a manifest for each; it lives on GitHub.
 
 - **The catalogue file:** `GET https://raw.githubusercontent.com/hobbyquaker/occulited/master/catalog/catalog.json`
-  (the list of catalogue URLs is in `occulited.json`, `catalog.urls`). A copy of it ships in the image and is used
-  when the network is not there.
+  (the list of catalogue URLs is in `occulited.json`, `catalog.urls`). A copy of it ships in the image; the system
+  keeps the copy its last check fetched.
 - **When the catalogue file is fetched:**
   - *Check now* on the Addons page;
-  - with *Check daily* on (the default): 3–8 minutes after the start, then daily;
-  - **when the Addons page is opened and the copy in memory is older than ten minutes**, and at the start of the
-    service when an installed addon carries no manifest of its own - also with *Check daily* off. This does not
-    follow the rule "nothing goes out unless you ask or tick the box" yet; it is a known bug (B-240) and will change.
+  - with *Check daily* on (off by default; the welcome page's GitHub checkbox): 3–8 minutes after the start, then
+    daily.
+  - **Never otherwise:** opening the Addons page, the start of the service (an installed addon without a manifest of
+    its own takes the catalogue's) and an install's lookup read the copy of the last check and the copy the image
+    ships, and make no request. A system that never ran a check shows its shipped catalogue.
 - **On *Check now*** in addition: each listed addon's manifest from its repository at its latest release
   (`GET https://raw.githubusercontent.com/<owner>/<repo>/<tag>/<path>`), its star count
   (`GET https://api.github.com/repos/<owner>/<repo>`) and its release list
   (`GET https://api.github.com/repos/<owner>/<repo>/releases?per_page=10`).
-- **With *Check daily*:** the release lists of the addons already known, with their ETags.
+- **With *Check daily*:** the catalogue file and the release lists of the addons already known, with their ETags; no
+  manifest, no star count.
 - **At an install:** the package and its `.sha256` file from the addon's GitHub release.
 - **Sends:** the URL, `Accept: application/vnd.github+json` to GitHub's API, `If-None-Match` where an ETag is known,
   the User-Agent. **Not sent:** which addons are installed, the system's version, serial or name. (The architecture
   is part of an asset's file name, e.g. `mosquitto-x86_64-2.1.2.tar.gz`, so a download shows it.)
-- **Off:** clear *Check daily*; the catalogue as a whole can be switched off in `occulited.json`
-  (`catalog.enabled: false`).
+- **Off:** the default; clear *Check daily* to switch it off again. The catalogue as a whole can be switched off in
+  `occulited.json` (`catalog.enabled: false`).
 
 ### Addon update checks
 
@@ -103,9 +112,9 @@ An addon names its own update check (the `Update:` line of its `rc.d` script, as
 - **A path on the system** (`/addons/<id>/update-check.cgi` and the like): the system calls the addon's own script
   through its local web server. What that script then asks on the internet is the addon's own (usually its GitHub
   releases).
-- **When:** the addon's check button; with the Addons page's *Check daily* on (the default): 2–5 minutes after the
-  start, then daily.
-- **Off:** clear *Check daily* on the Addons page.
+- **When:** the addon's check button; with the Addons page's *Check daily* on (off by default): 2–5 minutes after
+  the start, then daily.
+- **Off:** the default; clear *Check daily* on the Addons page to switch it off again.
 
 ### ACME certificates
 

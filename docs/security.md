@@ -423,7 +423,8 @@ for two X25519 recipients (config.md has the files):
 Every connection the system opens by itself - where to, when, which fields, and how to switch it off - is in
 [privacy.md](privacy.md), and the requests occulited builds are pinned by tests (`internal/*/outbound_test.go`). In
 short: the system release check (GitHub), the device firmware check and download (eQ-3), the addon catalogue and the
-addons' update checks (GitHub, each addon's URL) - each on *Check now* and, with *Check daily*, once a day; time (NTP)
+addons' update checks (GitHub, each addon's URL) - each on *Check now* and, with *Check daily*, once a day, **off on a
+fresh system** and asked once on the welcome page (D-90); time (NTP)
 always; eQ-3's HmIP key server at a radio module exchange and at pairing a device whose key is not on the system,
 unless in local key mode; ACME and OpenID Connect only when configured. No telemetry; no request carries a serial
 number, the host name or the list of devices, except the device types a firmware download names and the SGTINs the
