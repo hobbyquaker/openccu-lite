@@ -1,115 +1,67 @@
----
-name: 🐛 Bug Report
-description: Report a bug/issue related to OpenCCU
-labels: ":bug: bug-report"
+name: Bug report
+description: Something in openccu-lite does not work as it should - the firmware or occulited, its web interface.
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        ## Bug Report Rules
-  - type: markdown
+        Bugs in the firmware and in [occulited](https://github.com/hobbyquaker/occulited) (the web interface and the system service) both go here.
+        A security problem goes to the private report instead, see [SECURITY.md](https://github.com/hobbyquaker/openccu-lite/blob/main/SECURITY.md).
+  - type: dropdown
+    id: component
     attributes:
-      value: |
-        1. Do **NOT** use this ticket/issue system for support requests! It is meant to be used to report bugs only and not to search for help if you have problems using OpenCCU.
-        2. Do **NOT** submit bug reports about anything but the two most recently released versions!
-        3. Before you open a new bug/issue report here, please make sure that it hasn't been reported yet and please make sure to cross-check the discussion fora discussed below and try to discuss your problem there first before you are opening a new bug report here.
-
-        If you have problems while using OpenCCU and are seeking for help, please consult our [GitHub Community Forum](https://github.com/OpenCCU/OpenCCU/discussions) or the public [OpenCCU Forum](https://homematic-forum.de/forum/viewforum.php?f=65).
-  - type: markdown
-    attributes:
-      value: |
-        ## The problem
-  - type: textarea
+      label: Component
+      description: Where the problem shows. If you are not sure, pick the closest.
+      options:
+        - Firmware (boot, radio modules and interface daemons, network, update, recovery)
+        - occulited (the web interface, system settings, addons, the APIs)
+        - Not sure
     validations:
       required: true
-    attributes:
-      label: Describe the issue you are experiencing
-      description: Provide a clear and concise description of what the bug is.
-  - type: textarea
-    validations:
-      required: true
-    attributes:
-      label: Describe the behavior you expected
-      description: Describe what you expected to happen or it should look/behave.
-  - type: textarea
-    validations:
-      required: true
-    attributes:
-      label: Steps to reproduce the issue
-      description: |
-        Please tell us exactly how to reproduce your issue.
-        Provide clear and concise step by step instructions and add code snippets if needed.
-      value: |
-        1.
-        2.
-        3.
-        ...
-  - type: markdown
-    attributes:
-      value: |
-        ## Environment
   - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The Updates page of the web interface shows it.
+      placeholder: 1.0.0-dev.28
     validations:
       required: true
-    attributes:
-      label: What is the version this bug report is based on?
-      placeholder: 3.XX.YY-YYYYMMDD
-      description: >
-        The OpenCCU version you are using can be found in the help page of the WebUI and starts with `3.XX.YY-YYYYMMDD`.
   - type: dropdown
-    validations:
-      required: true
+    id: product
     attributes:
-      label: Which base platform are you running?
-      default: 2
-      description: >
-        This is the platform you are using to run OpenCCU on and corresponds to the image you are usually downloading for updating OpenCCU.
+      label: Product
+      description: Which image the system runs.
       options:
-        - rpi5 (RaspberryPi5, ARM64/aarch64)
-        - rpi4 (RaspberryPi4, ARM64/aarch64)
-        - rpi3 (RaspberryPi3, ARM64/aarch64)
-        - odroid-c2 (ODROID C2, ARM64/aarch64)
-        - odroid-c4 (ODROID C4, ARM64/aarch64)
-        - odroid-n2 (ODROID N2/N2+, ARM64/aarch64)
-        - tinkerboard2 (Tinkerboard 2/2S, ARM64/aarch64)
-        - ova (Open Virtual Infrastructure, AMD64/x86_64)
-        - lxc_amd64 (Linux Container Infrastructure, AMD64/x86_64)
-        - lxc_arm64 (Linux Container Infrastructure, ARM64/aarch64)
-        - oci_amd64 (Open Container Infrastructure, AMD64/x86_64)
-        - oci_arm64 (Open Container Infrastructure, ARM64/aarch64)
-        - ha-addon (HomeAssistant Add-on)
-        - generic-x86_64 (Generic UEFI capable system, AMD64/x86_64)
-        - generic-aarch64 (Generic UEFI capable system, ARM64/aarch64)
-  - type: dropdown
+        - rpi3 (Raspberry Pi 3)
+        - rpi4 (Raspberry Pi 4)
+        - ccu3 (eQ-3 CCU3)
+        - ova (virtual machine)
+        - lxc (container)
     validations:
       required: true
+  - type: input
+    id: hardware
     attributes:
-      label: Which HomeMatic/homematicIP radio module are you using?
-      description: >
-        This is the radio module you are potentially using to communicate to HomeMatic/homematicIP devices.
-      options:
-        - RPI-RF-MOD
-        - HM-MOD-RPI-PCB
-        - HmIP-RFUSB
-        - HM-CFG-LAN
-        - HM-CFG-USB-2
-        - n/a
-  - type: markdown
-    attributes:
-      value: |
-        ## Details
+      label: Radio hardware
+      description: The radio module or gateway, if it matters (RPI-RF-MOD, HmIP-RFUSB, HB-RF-ETH, ...).
   - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+      description: What you did and what the system did. Steps to reproduce help most.
     validations:
       required: true
-    attributes:
-      label: Anything in the logs that might be useful for us?
-      description: >
-        The OpenCCU logs can be found in the `/var/log` directory on the central.
-      render: txt
   - type: textarea
+    id: expected
     attributes:
-      label: Additional information
-      description: >
-        If you have any additional information for us, use the field below.
-        Please note, you can attach screenshots or screen recordings here, by
-        dragging and dropping files in the field below.
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        The journal around the time it happened: the Log page of the web interface, or `journalctl -b` on the system.
+        Please remove anything private (addresses, names, serial numbers) you do not want to publish.
+      render: text

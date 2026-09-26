@@ -1,22 +1,8 @@
----
 blank_issues_enabled: false
 contact_links:
-  - name: ✋ Support Request
-    url: https://github.com/OpenCCU/OpenCCU/discussions
-    about: You have a generic problem in using OpenCCU or this repository.
-
-  - name: 🇺🇸 OpenCCU Documentation
-    url: https://github.com/OpenCCU/OpenCCU/wiki/en.Home
-    about: If you search for answers, please consult the documentation area first.
-
-  - name: 🇺🇸 OpenCCU Discussions
-    url: https://github.com/OpenCCU/OpenCCU/discussions
-    about: Please ask and answer questions in the OpenCCU discussion fora.
-
-  - name: 🇩🇪 OpenCCU Dokumentation
-    url: https://github.com/OpenCCU/OpenCCU/wiki
-    about: Wenn Sie nach Antworten suchen, konsultieren Sie bitte zuerst die Dokumentation.
-
-  - name: 🇩🇪 OpenCCU Diskussionsforum
-    url: https://homematic-forum.de/forum/viewforum.php?f=65
-    about: Hier können Sie bei Problemen Fragen Stellen und Antworten erhalten.
+  - name: Security problem
+    url: https://github.com/hobbyquaker/openccu-lite/security/advisories/new
+    about: Please report security problems privately, not as an issue (see SECURITY.md).
+  - name: Documentation
+    url: https://github.com/hobbyquaker/openccu-lite/tree/main/docs
+    about: Installing, switching from OpenCCU, addons, security and more.
