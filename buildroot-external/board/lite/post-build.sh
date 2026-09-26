@@ -43,8 +43,8 @@ else
 	sed -i -e 's/^PRODUCT=\(.*\)-lite\(-systemd\)\?\(_.*\)\?$/PRODUCT=\1\3/' -e 's/^PLATFORM=\(.*\)-lite\(-systemd\)\?$/PLATFORM=\1/' "${TARGET_DIR}/VERSION"
 fi
 grep -q "^VARIANT=" "${TARGET_DIR}/VERSION" || echo "VARIANT=lite" >>"${TARGET_DIR}/VERSION"
-# D-44 (was D-37): VERSION stays the OpenCCU base tag (what the recovery and
-# checkFirmwareUpdate.sh compare); LITE is openccu-lite's own semantic version, the release
+# D-44 (was D-37): VERSION stays the OpenCCU base tag (what the recovery
+# compares); LITE is openccu-lite's own semantic version, the release
 # identity occulited shows and compares against the feed
 if [ -n "${LITE_BASE:-}" ]; then
   sed -i -e "s/^VERSION=.*/VERSION=${LITE_BASE}/" "${TARGET_DIR}/VERSION"
@@ -67,6 +67,11 @@ rm -f "${TARGET_DIR}/bin/checkPortForwarding.sh"
 
 # The addon update check moves into the system service (D-23).
 rm -f "${TARGET_DIR}/bin/checkAddonUpdates.sh"
+# So does the firmware update check (B-244): occulited's update check (internal/sysupdate) replaced
+# upstream's checkFirmwareUpdate.sh, which asked GitHub for OpenCCU's releases and could download
+# one. Nothing starts it here (no cron line, no unit, not on the helper's program list), and a
+# script that talks to the internet whenever anyone runs it does not belong in the image.
+rm -f "${TARGET_DIR}/bin/checkFirmwareUpdate.sh"
 
 # hss_led leaves the image (D-63, task 95): its health check needs ReGaHss, so it could only show
 # red here, and occulited's status LED controller is the LED's one writer after the boot. Its udev

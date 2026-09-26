@@ -234,9 +234,7 @@ Unless you send it yourself (a backup, a syslog server, MQTT, an addon), none of
 ## Not in the image
 
 openccu-lite removes OpenCCU's own calls: the internet check (`checkInternet`, and with it the `hasInternet` status),
-the port forwarding check (`checkPortForwarding.sh`), the addon update script (`checkAddonUpdates.sh`), the WebUI's
-update check, and eQ-3's `ssdpd` and `eq3configd` (replaced by the answers above). No CA certificate is fetched: the
-trusted roots come with the image and with what you add under *Trust stores*.
-
-Upstream's `checkFirmwareUpdate.sh` (a GitHub release check for OpenCCU) is still in the image, but nothing starts
-it; it will be removed (B-244).
+the port forwarding check (`checkPortForwarding.sh`), the addon update script (`checkAddonUpdates.sh`), the firmware
+update script (`checkFirmwareUpdate.sh`, OpenCCU's GitHub release check; the *System release check* above replaces
+it), the WebUI's update check, and eQ-3's `ssdpd` and `eq3configd` (replaced by the answers above). No CA certificate
+is fetched: the trusted roots come with the image and with what you add under *Trust stores*.
