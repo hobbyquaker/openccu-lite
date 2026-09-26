@@ -6,8 +6,10 @@
 > openccu-lite is under development. Much of it is still untested.
 > **Please use it on test systems only.**
 >
-> **It is aimed at experienced users** who know what they are doing: people who know a CCU from
-> the inside (`rfd`, `hs485d`, the HmIP server, radio modules, the RPC protocol, the paramsets, ...).
+> **It is aimed at experienced users** who know what they are doing and can help themselves if
+> need be: people who know a CCU from the inside (`rfd`, `hs485d`, the `hmipserver`, radio modules
+> and key handling, the RPC protocol, the paramsets, ...).
+>
 > There is no ReGaHSS, no programme editor and no Homematic scripts in openccu-lite.
 
 ## Installation
