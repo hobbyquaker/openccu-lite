@@ -305,7 +305,7 @@ session).
 paths; and each named operation's own check **at the boundary**, not only in the caller (the key is parsed again,
 the certificate is parsed again, the pid must be an `sshd-session`).
 
-**Has gone wrong here:** the shell allowlist was a prefix test; write paths ran outside the helper; the ownership repair walked addon-controlled paths as root.
+**Has gone wrong here:** the shell allowlist was a prefix test; write paths ran outside the helper; the ownership repair walked addon-controlled paths as root; the program list checked names and passed the arguments through — `systemd-run /bin/sh -c …` was root (B-234, fixed: a shape per program); the symlink operation checked the link and not its target, and a write followed any link (B-235, fixed: the target checked, only the image's links followed, nothing followed below the check).
 
 **The rule:** the unprivileged side assembles, the helper decides. Anything the helper accepts because "occulited
 would not send that" is a bug waiting to be found.
@@ -420,14 +420,14 @@ and its tooling have to confirm, and is the list that becomes findings.
 | **R**epudiation | — | The helper logs what it refuses, and the daemon logs what it asked for | Whether every refusal is logged once and not per line (a journalctl refusal was once a silent failure on the daemon's side) |
 | **I**nformation disclosure | Reading a file through the helper that the daemon may not read | `ReadPaths` is an allowlist; `/etc/config/shadow` is deliberately not on it; the answers carry only what the page shows (the log listing returns names and sizes, never content) | Each read path, against what the page actually needs |
 | **D**enial of service | A request that never ends, or a flood | One connection per call with a deadline; the helper is single-purpose | The timeouts on the long operations (a flash, a firewall load) |
-| **E**levation | A path or a program that is wider than intended | The policy's exact paths and prefixes; the program list; the checks at the boundary | Every prefix in the policy, read as an attacker would: what is under it that an addon can write? |
+| **E**levation | A path or a program that is wider than intended | The policy's exact paths and prefixes; the program list with an argument shape per program (B-234: a verb table for `systemctl`, the two transient units of `systemd-run`, a pid the helper inspects for `kill`, one action word for the scripts); the checks at the boundary | Every prefix in the policy, read as an attacker would: what is under it that an addon can write? Every new command line the daemon builds needs its shape, or the helper refuses it |
 
 ### B4 · The helper ↔ root
 
 | | Here that would be | In the way today | To check |
 | --- | --- | --- | --- |
 | **S**poofing | — | The helper is root; there is nothing above it to impersonate | — |
-| **T**ampering | Writing through a symlink an addon controls; a partial write that leaves a broken file | The writes stage and rename; the ownership walk does not follow links (the fix) | Every write the helper does, for symlink and TOCTOU handling; that a rename cannot land outside the intended directory |
+| **T**ampering | Writing through a symlink an addon controls; a partial write that leaves a broken file | The writes stage and rename; the ownership walk does not follow links (the fix); the helper resolves every path itself and follows only the image's links, checks the resolved path against the policy, refuses a link target outside it, and acts through directory descriptors with `O_NOFOLLOW` at every component (B-235) | A new trusted-link case (an image link the daemon writes through) needs its resolved path on the list; that a rename cannot land outside the intended directory |
 | **R**epudiation | — | The journal | — |
 | **I**nformation disclosure | A file read as root and handed out whole | The named operations return only what is needed (the certificate's blocks, not the key) | Each operation's answer, field by field |
 | **D**enial of service | An operation that blocks the helper for everyone | Timeouts; the helper answers one connection at a time | Which operations can run long, and whether one caller can starve the others |
@@ -566,8 +566,8 @@ The "to check" rows that were checked, and what became of them. One entry per sl
 | B2 *Spoofing* — a faked `X-Forwarded-For` | lighttpd appends the real address to a client-sent header and occulited takes the first element → **B-230** — **fixed** 2026-09-26: occulited takes the last element, and only from the loopback; the fork's global magnet and the gate remove the client's header (`lite-lighttpd-redirect-test.sh` checks it on a real lighttpd) |
 | B2 *Repudiation* — the log's address | the forwarded one, and therefore the client's choice → **B-230** — **fixed** 2026-09-26: lighttpd's element |
 | — (V6.3) | the login skips argon2 for an unknown account: a timing oracle for names → **B-233** |
-| B3 *Elevation* — every program and prefix, read as an attacker would | `programAllowed` shapes the arguments of `sh` only; `systemd-run`, `systemctl`, `kill`, `ip`, `install_addon`, `restoreBackup.sh` … run with any arguments — a compromised daemon is root → **B-234** |
-| B4 *Tampering* — every write, for symlink and TOCTOU handling | the `symlink` operation checks the link, not its target, and `WriteFile` resolves links before writing → a root write to any file from an allowed prefix → **B-235**; the writes into addon-controlled trees are listed there |
+| B3 *Elevation* — every program and prefix, read as an attacker would | `programAllowed` shaped the arguments of `sh` only; `systemd-run`, `systemctl`, `kill`, `ip`, `install_addon`, `restoreBackup.sh` … ran with any arguments — a compromised daemon was root → **B-234, fixed** (occulited `d8345a8`): one argument shape per program, `TestProgramsHaveShapes`, `TestProgramShapes` with the daemon's real lines and the finding's |
+| B4 *Tampering* — every write, for symlink and TOCTOU handling | the `symlink` operation checked the link, not its target, and `WriteFile` resolved links before writing → a root write to any file from an allowed prefix → **B-235, fixed** (occulited `9b943d3`): the target checked, only the image's links followed, the resolved path checked again, `O_NOFOLLOW` at every component below the check; `TestSymlinkBoundary`, `TestLocalNoFollow`. The writes into addon-controlled trees are listed in the item; none lands there today |
 
 ## How this document is kept
 

@@ -222,8 +222,20 @@ socket. In the other direction the helper **passes a descriptor** rather than by
 addon's CGI names in an `X-Sendfile` answer is opened as root and the descriptor is handed back
 over the socket (`SCM_RIGHTS`), so occulited streams it without ever holding the privilege to open
 that path — see "What moved across the boundary" below. Every command is an argument slice —
-never a shell string — and every input that reaches one is validated first. With `--root` pointing
-anywhere but `/` no command runs at all.
+never a shell string — and every input that reaches one is validated first. **A program on the
+list is a program with a shape** (B-234): the helper admits, per program, only the command lines
+occulited builds — `systemctl` a table of verbs and unit names without a slash (never `link`,
+`edit`, `set-environment`, and `enable`/`disable`/`mask` only `--runtime`), `systemd-run` its two
+transient units (the addon install scope around `install_addon` or an rc.d script, the DHCPv6
+client), `kill` a pid the helper looks at itself (a DHCP client, or an addon's process outside the
+system's own units), `restoreBackup.sh` an archive under the backup or staging directory, `crypttool`
+its four fixed forms, the init and rc.d scripts one action word — and a name on the list without a
+shape fails the tests. **No write follows a link an addon or occulited planted** (B-235): the
+helper resolves every path itself and follows a symlink only when it is the image's — root's, in
+a directory only root writes, not on removable media — checks the resolved path against the same
+lists, refuses a link's target outside them, and then acts through directory descriptors with
+`O_NOFOLLOW` at every component, so a link swapped in after the check is an error, not a detour.
+With `--root` pointing anywhere but `/` no command runs at all.
 
 The socket `/run/occulite/helper.sock` is root:occulite 0660; the systemd unit adds
 `NoNewPrivileges`, `ProtectSystem=strict` (the daemon can write only its state directory and
