@@ -22,4 +22,4 @@ accepted are in [docs/security.md](docs/security.md) and [docs/threat-model.md](
 
 A problem that is in upstream OpenCCU as well (the parts openccu-lite takes unchanged) is best
 reported to [OpenCCU](https://github.com/OpenCCU/OpenCCU/security) too; a problem in eQ-3's
-programs (`rfd`, `hs485d`, `multimacd`, `hmipserver`) belongs to OpenCCU-base.
+programs (`rfd`, `hs485d`, `multimacd`, `hmipserver`) belongs to [OpenCCU-base](https://github.com/OpenCCU/OpenCCU-base).
