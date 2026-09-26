@@ -188,6 +188,37 @@ elif ! grep -q '^server\.max-request-size[[:space:]]*=[[:space:]]*2359296' "${LI
 	exit 1
 fi
 
+# No request body in RAM before the backend sees it. Upstream's lighttpd.conf streams a request
+# body to the backend (server.stream-request-body = 1) except when the request carries no
+# Content-Length: a chunked body is then buffered whole, into server.upload-dirs - /dev/shm first,
+# a tmpfs of half the RAM - before any backend, session or scope has seen the request, and
+# server.max-request-size (2.25 GiB above) is the only bound. An anonymous client on the LAN could
+# take the RAM that way, and one such spill (a large upload on a 2 GB VM) swapped the system into
+# the ground. The exception was for backends that cannot read a chunked body (the ReGa); on lite
+# every backend can (occulited is Go, the addons' servers behind /addons/ read as they go), so it
+# goes, and the overflow directory - what lighttpd still buffers when a backend is slower than the
+# client - is one on the userfs that lighttpd's own user can write, made by lighttpd-prepare.service
+# before every start: the shared /usr/local/tmp is root's (the "Permission denied" in the journal
+# of that night), and /dev/shm is RAM. Both lines are upstream's lighttpd.conf's own, edited with the
+# same guards as above.
+if grep -q '^\$REQUEST_HEADER\["Content-Length"\] == "" { server\.stream-request-body = 0 }' "${LIGHTTPD_CONF}"; then
+	sed -i '/^\$REQUEST_HEADER\["Content-Length"\] == "" { server\.stream-request-body = 0 }/d' "${LIGHTTPD_CONF}"
+fi
+if grep -q 'stream-request-body = 0' "${LIGHTTPD_CONF}"; then
+	echo "post-build (lite): a stream-request-body = 0 line is left in ${LIGHTTPD_CONF}" >&2
+	exit 1
+fi
+if ! grep -q '^server\.stream-request-body[[:space:]]*=[[:space:]]*1' "${LIGHTTPD_CONF}"; then
+	echo "post-build (lite): no server.stream-request-body = 1 line in ${LIGHTTPD_CONF}" >&2
+	exit 1
+fi
+if grep -q '^server\.upload-dirs[[:space:]]*=' "${LIGHTTPD_CONF}"; then
+	sed -i 's|^server\.upload-dirs[[:space:]]*=.*$|server.upload-dirs = ( "/usr/local/tmp/lighttpd" )|' "${LIGHTTPD_CONF}"
+else
+	echo "post-build (lite): no server.upload-dirs line to set in ${LIGHTTPD_CONF}" >&2
+	exit 1
+fi
+
 # No mod_cgi on a lite image: the addons' CGIs run through occulited (conf.d/occulited.conf proxies
 # all of /addons/ to it), the lite modules.conf loads neither the module nor conf.d/cgi.conf, and
 # the base overlay's cgi.conf (".cgi" to tclsh, X-Sendfile from /usr/local/tmp) would only be a

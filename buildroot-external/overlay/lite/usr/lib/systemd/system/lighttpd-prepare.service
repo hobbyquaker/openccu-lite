@@ -31,14 +31,19 @@ ExecStart=-/usr/libexec/occu/lite-starting-page
 ExecStart=-/usr/libexec/occu/lite-cert-perms
 # the addons' lighttpd drop-ins as validated root-owned copies, before the daemon reads them
 ExecStart=-/usr/bin/occulited -lighttpd-dropins
+# the upload overflow directory (lighttpd.conf's server.upload-dirs): on the userfs, the web
+# server's own, closed to everyone else. The shared /usr/local/tmp is root's and is emptied at boot,
+# so the directory is made here, before every start; without it a body the backend does not take
+# as fast as the client sends it has nowhere to go but an error (never RAM: /dev/shm is not on the list)
+ExecStart=-/usr/bin/install -d -o www-data -g www-data -m 0700 /usr/local/tmp/lighttpd
 # a oneshot has no start timeout of its own; the web server's is 120 s
 TimeoutStartSec=120
 StandardOutput=journal+console
 StandardError=journal+console
 
 # Root, with root's file system view - that is what this unit is for - but nothing beyond what
-# its four steps do: files under /etc/config and /var/etc, openssl, a route lookup over netlink
-# for the system's address, systemctl. No new capabilities, no namespaces, no realtime, no
+# its five steps do: files under /etc/config, /var/etc and /usr/local/tmp, openssl, a route lookup
+# over netlink for the system's address, systemctl. No new capabilities, no namespaces, no realtime, no
 # writable-and-executable memory; kernel tunables, modules, logs, cgroups and the clock untouched.
 ProtectHome=yes
 PrivateTmp=yes

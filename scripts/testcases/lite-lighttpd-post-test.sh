@@ -78,6 +78,22 @@ else
   # the shipped post-build sets exactly these values
   grep -q 'max-read-idle:60' "$PB" && grep -q 'max-write-idle:360' "$PB" && ok "the post-build sets the two idle values" || bad "the post-build does not set the idle values"
   grep -q 'server.max-request-size = 2359296' "$PB" && ok "the post-build sets the request-size limit" || bad "the post-build does not set the request-size limit"
+  # ---- no request body in RAM: the Content-Length exception to streaming goes, the overflow
+  # directory is the web server's own on the userfs, /dev/shm is off the list
+  grep -q '^\$REQUEST_HEADER\["Content-Length"\] == "" { server\.stream-request-body = 0 }$' "$tmpc" && ok "base lighttpd.conf has the Content-Length exception to remove" || bad "base lighttpd.conf: no Content-Length exception line to remove (rebase?)"
+  grep -q '^server\.upload-dirs[[:space:]]*=.*"/dev/shm"' "$tmpc" && ok "base lighttpd.conf has /dev/shm among the upload directories to replace" || bad "base lighttpd.conf: no server.upload-dirs line with /dev/shm to replace (rebase?)"
+  sed -i '/^\$REQUEST_HEADER\["Content-Length"\] == "" { server\.stream-request-body = 0 }/d' "$tmpc"
+  sed -i 's|^server\.upload-dirs[[:space:]]*=.*$|server.upload-dirs = ( "/usr/local/tmp/lighttpd" )|' "$tmpc"
+  grep -q 'stream-request-body = 0' "$tmpc" && bad "a stream-request-body = 0 is left: a chunked body would be buffered whole" || ok "no request body is buffered whole before the backend"
+  grep -q '^server\.stream-request-body = 1$' "$tmpc" && ok "request bodies stream to the backend" || bad "server.stream-request-body = 1 is gone"
+  grep -q '^server\.upload-dirs = ( "/usr/local/tmp/lighttpd" )$' "$tmpc" && ok "the upload overflow directory is the web server's own on the userfs" || bad "server.upload-dirs not set to /usr/local/tmp/lighttpd"
+  grep -q '/dev/shm' "$tmpc" && bad "/dev/shm is still named in lighttpd.conf" || ok "/dev/shm is no upload directory"
+  grep -q 'stream-request-body = 0 }/d' "$PB" && ok "the post-build removes the Content-Length exception" || bad "the post-build does not remove the Content-Length exception"
+  grep -q 'server.upload-dirs = ( "/usr/local/tmp/lighttpd" )' "$PB" && ok "the post-build sets the upload directory" || bad "the post-build does not set the upload directory"
+  PREP="$EXT/overlay/lite/usr/lib/systemd/system/lighttpd-prepare.service"
+  grep -q '^ExecStart=-/usr/bin/install -d -o www-data -g www-data -m 0700 /usr/local/tmp/lighttpd$' "$PREP" && ok "lighttpd-prepare makes the upload directory, www-data's, 0700" || bad "lighttpd-prepare.service does not make /usr/local/tmp/lighttpd for www-data"
+  UNIT="$EXT/overlay/lite/usr/lib/systemd/system/lighttpd.service"
+  grep -q '^BindPaths=-/usr/local/tmp$' "$UNIT" && grep -q '^ReadWritePaths=-/usr/local/tmp$' "$UNIT" && ok "lighttpd.service binds /usr/local/tmp writable for the overflow directory" || bad "lighttpd.service does not bind /usr/local/tmp writable"
   rm -f "$tmpc"
 fi
 
@@ -105,9 +121,20 @@ class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     def answer(self):
         cl = self.headers.get("Content-Length")
-        n = int(cl) if cl is not None else 0
-        body = self.rfile.read(n) if n else b""
-        out = ("%s cl=%s body=%d" % (self.command, cl if cl is not None else "none", len(body))).encode()
+        te = self.headers.get("Transfer-Encoding")
+        if te == "chunked":
+            body = b""
+            while True:
+                n = int(self.rfile.readline().split(b";")[0].strip(), 16)
+                if n == 0:
+                    self.rfile.readline()
+                    break
+                body += self.rfile.read(n)
+                self.rfile.readline()
+        else:
+            n = int(cl) if cl is not None else 0
+            body = self.rfile.read(n) if n else b""
+        out = ("%s cl=%s%s body=%d" % (self.command, cl if cl is not None else "none", " te=chunked" if te == "chunked" else "", len(body))).encode()
         self.send_response(200)
         self.send_header("Content-Length", str(len(out)))
         self.end_headers()
@@ -124,8 +151,11 @@ server.bind = "127.0.0.1"
 server.port = 8080
 server.modules = ( "mod_proxy" )
 server.max-request-size = 1
+server.stream-request-body = 1
+server.upload-dirs = ( "/tmp/lighttpd-upload" )
 proxy.server = ( "" => ( ( "host" => "127.0.0.1", "port" => 9000 ) ) )
 CONF
+mkdir -p /tmp/lighttpd-upload
 run() {  # start the built lighttpd
   ./b/src/lighttpd -D -f /tmp/l.conf -m "$PWD/b/src" & LPID=$!
   i=0; until curl -s -o /dev/null http://127.0.0.1:8080/ || [ $i -ge 50 ]; do sleep 0.1; i=$((i+1)); done
@@ -149,6 +179,12 @@ r=$(q -X POST -d abc $U); [ "$r" = "POST cl=3 body=3 200" ] && echo "ok   a POST
 r=$(q -X POST -d '' $U); [ "$r" = "POST cl=0 body=0 200" ] && echo "ok   an empty body with Content-Length: 0 is unchanged" || echo "FAIL POST -d '': '$r'"
 r=$(q $U); [ "$r" = "GET cl=none body=0 200" ] && echo "ok   a GET gets no Content-Length" || echo "FAIL GET: '$r'"
 r=$(head -c 2048 /dev/zero | tr '\0' a | q -o /dev/null -X POST --data-binary @- $U); [ "$r" = " 413" ] && echo "ok   server.max-request-size still refuses a body that is too large" || echo "FAIL a body over the limit: '$r'"
+# no Content-Length exception: a chunked body reaches the backend whole (a small one that is
+# complete when the backend connection is made goes with a Content-Length, a longer one as chunks),
+# and nothing of it lands in the upload directory
+r=$(head -c 600 /dev/zero | tr '\0' b | q -X POST -H 'Transfer-Encoding: chunked' --data-binary @- $U); case "$r" in "POST cl=600 body=600 200"|"POST cl=none te=chunked body=600 200") echo "ok   a chunked body reaches the backend ($r)" ;; *) echo "FAIL chunked POST: '$r'" ;; esac
+r=$(head -c 2048 /dev/zero | tr '\0' b | q -o /dev/null -X POST -H 'Transfer-Encoding: chunked' --data-binary @- $U); [ "$r" = " 413" ] && echo "ok   server.max-request-size bounds a chunked body too" || echo "FAIL a chunked body over the limit: '$r'"
+[ -z "$(ls -A /tmp/lighttpd-upload)" ] && echo "ok   nothing was spilled into the upload directory" || echo "FAIL the upload directory holds a spill: $(ls -A /tmp/lighttpd-upload)"
 stop
 kill $BPID
 INNER

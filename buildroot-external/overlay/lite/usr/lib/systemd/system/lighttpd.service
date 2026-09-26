@@ -100,9 +100,10 @@ PrivateTmp=yes
 # configuration directory (the drop-ins in lighttpd/, the certificate, the classic RPC pair - the
 # directory as a whole, because occulited and the certificate check replace those files by
 # writing a new one and renaming it, and a bind of a single file would keep showing the old one),
-# the addon trees (their drop-ins name error pages there), and the upload overflow directory
-# (lighttpd.conf's server.upload-dirs, after /dev/shm), writable. Optional ("-"): a path a
-# restored backup or a factory reset does not have must not fail the namespace setup.
+# the addon trees (their drop-ins name error pages there), and /usr/local/tmp, writable, for the
+# upload overflow directory in it (lighttpd.conf's server.upload-dirs: /usr/local/tmp/lighttpd,
+# the web server's own, made by lighttpd-prepare.service; nothing in RAM). Optional ("-"): a path
+# a restored backup or a factory reset does not have must not fail the namespace setup.
 TemporaryFileSystem=/usr/local:ro
 BindReadOnlyPaths=-/usr/local/etc/config -/usr/local/addons
 BindPaths=-/usr/local/tmp
@@ -118,7 +119,8 @@ InaccessiblePaths=-/usr/local/etc/config/hs485d -/usr/local/etc/config/hs485type
 # pipe runs /bin/sh and /usr/bin/systemd-cat, both under /usr/bin.
 NoExecPaths=/
 ExecPaths=/usr/bin /usr/sbin /usr/lib /usr/libexec
-# /dev/shm stays (server.upload-dirs); /dev/log is the journal's socket
+# /dev/shm stays as a device but is no upload directory (server.upload-dirs names the userfs
+# alone); /dev/log is the journal's socket
 PrivateDevices=yes
 DevicePolicy=closed
 ProtectKernelTunables=yes

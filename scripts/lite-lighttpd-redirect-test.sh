@@ -86,6 +86,10 @@ rm -f /etc/lighttpd/conf.d/cgi.conf
 if grep -q '^server\.pid-file[[:space:]]*=' /etc/lighttpd/lighttpd.conf; then
   sed -i 's|^server\.pid-file[[:space:]]*=.*$|server.pid-file = "/run/lighttpd/lighttpd.pid"|' /etc/lighttpd/lighttpd.conf
   ok "lighttpd.conf: server.pid-file replaced as the post-build does"
+  # and the body handling as the post-build leaves it: every body streams, the overflow directory is
+  # the web server's own on the userfs
+  sed -i '/^\$REQUEST_HEADER\["Content-Length"\] == "" { server\.stream-request-body = 0 }/d' /etc/lighttpd/lighttpd.conf
+  sed -i 's|^server\.upload-dirs[[:space:]]*=.*$|server.upload-dirs = ( "/usr/local/tmp/lighttpd" )|' /etc/lighttpd/lighttpd.conf
 else
   bad "lighttpd.conf: no server.pid-file line for the post-build to replace"
 fi
@@ -100,6 +104,7 @@ addgroup -S certs
 WWW=lighttpd
 mkdir -p /run/lighttpd && chown $WWW:$WWW /run/lighttpd
 chmod 1777 /usr/local/tmp
+mkdir -p /usr/local/tmp/lighttpd && chown $WWW:$WWW /usr/local/tmp/lighttpd && chmod 0700 /usr/local/tmp/lighttpd # as lighttpd-prepare.service makes it
 : >/var/log/lighttpd-error.log && chown $WWW:$WWW /var/log/lighttpd-error.log
 CERTS_GID=$(getent group certs | cut -d: -f3)
 # lighttpd as the unit runs it: the user, the certs group, CAP_NET_BIND_SERVICE and nothing else in

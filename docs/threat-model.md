@@ -575,7 +575,7 @@ The "to check" rows that were checked, and what became of them. One entry per sl
 
 | row | outcome |
 | --- | --- |
-| B1 *Denial of service* — lighttpd's own limits, the upload's size cap | upstream's idle limits and no request-size limit → **B-254**; the reverse proxy buffers a body without `Content-Length` before the backend sees it → the audit's reading in **B-239**; the system-update upload has no cap → **B-256** (low); the regadom import stages into RAM → **B-255**. Every other upload: a cap, the staging directory on the userfs, a name the system chooses — pass |
+| B1 *Denial of service* — lighttpd's own limits, the upload's size cap | upstream's idle limits and no request-size limit → **B-254**; the reverse proxy buffered a body without `Content-Length` whole, into RAM, before the backend saw it → **B-239** (fixed: every body streams, the overflow directory is on the userfs, small caps on the routes that take no upload); the system-update upload has no cap → **B-256** (low); the regadom import stages into RAM → **B-255**. Every other upload: a cap, the staging directory on the userfs, a name the system chooses — pass |
 | B1 *Information disclosure* — error texts with a path or version | `apiError` codes; the X-Sendfile path never in an answer; lighttpd's `Server` header empty and its error pages the starting page — pass |
 | B2 *Tampering* — the path rewriting rules | none on lite: `/api/`, `/addons/` and the rest are proxied as they are; the gate reads `uri.path` after lighttpd's normalisation and `url-path-2f-decode` stays off, so `%2F` cannot fold a path — pass |
 | B2 *Information disclosure* — a route cached by lighttpd | no cache module; `Cache-Control: private, no-cache` on everything but images — pass |
