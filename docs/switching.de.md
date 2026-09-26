@@ -174,8 +174,8 @@ davon kann die Checkliste oben nicht formulieren, weil vorher niemand so weit ge
 
 Mit diesen Korrekturen besteht die Liste: das System installiert eine Release-Zip von seiner
 eigenen Status-Seite und ist nach zweieinhalb Minuten mit seinen Addons, seinem Metadaten-Speicher
-und seiner Konfiguration intakt zurück; *Namen → Von diesem System importieren* liest die
-ReGa-Datenbank und meldet, was es gefunden hat; die Seiten Funk, Namen, Zusatzsoftware, Netzwerk,
+und seiner Konfiguration intakt zurück; *Namen → Namen aus einer ReGa-Datenbank importieren* liest die
+eigene ReGa-Datenbank des Systems und meldet, was es gefunden hat; die Seiten Funk, Namen, Zusatzsoftware, Netzwerk,
 Protokoll und Dienste antworten alle mit dem wirklichen Zustand des Systems; und die fünf
 geprüften Katalog-Addons installieren sich, starten in ihren eigenen Units und überleben das
 Firmware-Update.

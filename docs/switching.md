@@ -25,14 +25,14 @@ offered an HM-Script export to paper over the gap. Both are gone (2026-09-08).**
 ## OpenCCU / CCU3 → openccu-lite
 
 **The short version for an OpenCCU VM (`ova`) or an SD-card product**: on the OpenCCU WebUI go to
-Settings → Control panel → Firmware update, upload `openccu-lite-<product>-<version>.zip`, confirm,
+Settings → Control panel → CCU maintenance → Perform software update, upload `openccu-lite-<product>-<version>.zip`, confirm,
 let it reboot. OpenCCU's own recovery system flashes the image and keeps `/usr/local`; the lite system
 comes up with your pairings, keys and addons, reads the names, rooms and functions out of the ReGa
 database on its first boot, and asks you for an administrator password. The `.zip` is accepted
 because the lite image's `/VERSION` carries upstream's `PLATFORM` — the recovery compares
 exactly that. **The way back**: flash OpenCCU through the *System update* section of the lite Status page with upstream's `OpenCCU-<version>-ova.zip`, then **restore the backup you took before migrating**. The flash alone gets you a working OpenCCU with your pairings, keys and addons — `/usr/local` survives — but its ReGa database is the one from the day you left. The backup is what makes the system the system it was.
 
-1. **Back up** on the old system (Settings → Control panel → Backup, or `createBackup.sh`).
+1. **Back up** on the old system (Settings → Control panel → Security → Create backup, or `createBackup.sh`).
    Keep the `.sbk`.
 2. **Flash / update** to openccu-lite. The updater accepts the package; the recovery system is
    upstream's.
@@ -112,7 +112,7 @@ OpenCCU VM so the way back is one click even if the software way back fails.
 1. Before: note on the OpenCCU WebUI the device count, one device name, one room, the security
    key state (Settings → Control panel → Security), the LAN gateways, the addons, the IP/hostname.
    Take a `.sbk` backup and the Proxmox snapshot.
-2. Upload `openccu-lite-x86_64-ova-<version>.zip` in Settings → Control panel → Firmware update, confirm,
+2. Upload `openccu-lite-x86_64-ova-<version>.zip` in Settings → Control panel → CCU maintenance → Perform software update, confirm,
    let it reboot. The recovery shows its progress on the console; the whole thing is ~3 minutes.
 3. First visit of `http://<system>/`: the welcome page asks for an administrator password and shows
    the regadom import result — devices, channels, rooms and functions counted. `curl
@@ -149,7 +149,7 @@ checklist above cannot phrase because nobody had got that far before:
 
 With those fixed, the list passes: the system installs a release zip from its own Status page and is
 back in two and a half minutes with its addons, its metadata store and its configuration intact;
-*Names → Import from this system* reads the ReGa database and reports what it found; the Radio,
+*Names → Import names from a ReGa database* reads the system's own ReGa database and reports what it found; the Radio,
 Names, Addons, Network, Log and Services pages all answer with the system's real state; and the five
 verified catalogue addons install, start in their own units and survive the firmware update.
 
