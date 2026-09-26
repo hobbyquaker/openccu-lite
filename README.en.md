@@ -9,8 +9,13 @@
 > **It is aimed at experienced Homematic users** who know what they are doing and can help themselves if
 > need be: people who know a CCU from the inside (`rfd`, `hs485d`, the `hmipserver`, radio modules
 > and key handling, the RPC protocol, the paramsets, ...).
->
-> There is no ReGaHSS, no programme editor and no Homematic scripts in openccu-lite.
+
+openccu-lite is a fork of the [OpenCCU project](https://github.com/OpenCCU/OpenCCU) that removes some old software parts
+which users who run their automation elsewhere (e.g. in Home Assistant, ioBroker, Node-RED, ...) do not need:
+**There is no ReGaHSS, no WebUI program and no Homematic scripts in openccu-lite.**
+The old CCU WebUI has been replaced by a newly developed interface, and the new daemon ["occulited"](https://github.com/hobbyquaker/occulited)
+takes over the system administration tasks. System internals such as the init system, logging, radio module detection and the like
+have been redesigned from the ground up, and many new security features have been implemented.
 
 ## Installation
 
