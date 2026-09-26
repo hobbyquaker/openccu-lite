@@ -569,6 +569,31 @@ The "to check" rows that were checked, and what became of them. One entry per sl
 | B3 *Elevation* — every program and prefix, read as an attacker would | `programAllowed` shaped the arguments of `sh` only; `systemd-run`, `systemctl`, `kill`, `ip`, `install_addon`, `restoreBackup.sh` … ran with any arguments — a compromised daemon was root → **B-234, fixed** (occulited `d8345a8`): one argument shape per program, `TestProgramsHaveShapes`, `TestProgramShapes` with the daemon's real lines and the finding's |
 | B4 *Tampering* — every write, for symlink and TOCTOU handling | the `symlink` operation checked the link, not its target, and `WriteFile` resolved links before writing → a root write to any file from an allowed prefix → **B-235, fixed** (occulited `9b943d3`): the target checked, only the image's links followed, the resolved path checked again, `O_NOFOLLOW` at every component below the check; `TestSymlinkBoundary`, `TestLocalNoFollow`. The writes into addon-controlled trees are listed in the item; none lands there today |
 
+**2026-09-26 (evening) — the input, file, lighttpd, cryptography and addon slices** (occulited `2412769`, image
+`1.0.0-dev.28`; measured read-only on a lab system as three addon users; the checklist rows are in
+[security-asvs.md](security-asvs.md) V1, V2, V4, V5, V11–V15):
+
+| row | outcome |
+| --- | --- |
+| B1 *Denial of service* — lighttpd's own limits, the upload's size cap | upstream's idle limits and no request-size limit → **B-254**; the reverse proxy buffers a body without `Content-Length` before the backend sees it → the audit's reading in **B-239**; the system-update upload has no cap → **B-256** (low); the regadom import stages into RAM → **B-255**. Every other upload: a cap, the staging directory on the userfs, a name the system chooses — pass |
+| B1 *Information disclosure* — error texts with a path or version | `apiError` codes; the X-Sendfile path never in an answer; lighttpd's `Server` header empty and its error pages the starting page — pass |
+| B2 *Tampering* — the path rewriting rules | none on lite: `/api/`, `/addons/` and the rest are proxied as they are; the gate reads `uri.path` after lighttpd's normalisation and `url-path-2f-decode` stays off, so `%2F` cannot fold a path — pass |
+| B2 *Information disclosure* — a route cached by lighttpd | no cache module; `Cache-Control: private, no-cache` on everything but images — pass |
+| B2 *Elevation* — no route trusts the gate alone | the API's `Middleware` checks the session on every `/api/*` call; the gate's header is for the addon CGIs — pass |
+| B3 *Spoofing* — who is in the `occulite` group | measured: nobody (`occulite:x:8100:`); but a manifest may put a confined addon there → **B-251** |
+| B3 *Tampering* — the older operations refuse the fields they do not use | one argument shape per program since B-234; `read` takes a path alone, `write`/`rename`/`chown`/`chmod` their path fields; a request with an unknown operation is refused and logged — pass |
+| B3 *Information disclosure* — each read path against the page's need | seven exact files (`ReadPaths`); the daemon strips the gateway keys from `rfd.conf`/`hs485d.conf`, lists SSIDs from `wpa_supplicant.conf`, shows the user from `classic-rpc.htpasswd`, answers a device key from `sgtin.map` only after the confirmation of task 154 — pass, the list is in the checklist (V14.3) |
+| B3 *Denial of service* — the timeouts on the long operations | each connection in its own goroutine with the caller's deadline; smartctl 60 s, the firewall's input 15 s, the radio-module flash 120–240 s, `RuntimeMaxSec` on every transient unit — pass |
+| B4 *Information disclosure* — each operation's answer field by field | `read` answers a whole file, by design, for the seven paths; the certificate operation returns the blocks and the marker, never the key; the log listing names and sizes; the SSH operations the keys' public lines — pass |
+| B4 *Denial of service* — one caller starving the others | concurrent connections, per-operation timeouts — pass |
+| B5 *Tampering* — every path an addon can write that another component reads | measured as three addon users: none of the shared directories is writable (`/usr/local/etc/config`, `rc.d`, `addon-policy`, `addons`, `lighttpd`, `/usr/local/tmp`, `/usr/local/addons`, `/etc/config`, `/firmware/rftypes`); the fence is the directories' `root:root` modes — pass today, and **B-251** notes that the policy's `paths` field relies on that fence |
+| B5 *Information disclosure* — what an addon user can read, measured | the keys, occulited's state and the other addons' tokens are unreadable; **every addon's tree is readable** (`0755`, files `0644`/`0664`) → **B-252**; one vendor daemon's data files `0664` → **B-253**; `server.pem` readable through `certs` — D-46, the decision stands; `local-token` `0644` — the design (a `meta:read` token for every addon) |
+| B5 *Elevation* — what an unconfined addon means; what a confined one may declare | a confined addon's manifest may declare root-equivalent capabilities and groups, applied as declared (D-119) → **B-251** |
+| B7 *Spoofing* — the trust store, no plain-HTTP fallback | every outbound `tls.Config` has `RootCAs` from the stores and `MinVersion` 1.2; the destinations are HTTPS constants; one `InsecureSkipVerify` shows a chain for comparison and trusts nothing — pass |
+| B7 *Denial of service* — response size limits | the catalogue 1 MiB / 4 MiB (releases) / 400 MiB (a package), the feed 8 MiB, the firmware index 8 MiB and a bundle 64 MiB, OIDC 1 MiB, the checksum line 4 KiB — pass |
+| B7 *Elevation* — the parsers of what the sources answer | Go's JSON with its nesting limit, the manifest by regex, the bundle's `info` as key=value, `update_script` runs only when the administrator installs — pass; the fuzz tests are task 265 |
+| B8 *Spoofing*, *Tampering* — a file's own claim; the sum checked again at install | the kind is read from the content (`detectUpdateKind`), the board from the name and shown; the sum is checked at staging; the recovery checks kind, board and space again; a signature is task 263 (R3) — pass, with R3 |
+
 ## How this document is kept
 
 - **Reviewed at every minor release** (the standing process), and whenever a boundary changes: a new helper
