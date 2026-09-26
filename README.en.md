@@ -24,6 +24,8 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
   in [install-lxc.md](docs/install-lxc.md).
 - a new install can (as long as no devices are paired yet) import paired devices, keys, names and rooms from an
   (Open)CCU backup.
+- **Pairing and configuring devices, managing direct links:** install
+  [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) from the addon catalogue.
 
 ## Documentation
 

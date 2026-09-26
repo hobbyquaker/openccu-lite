@@ -24,6 +24,8 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
   [install-lxc.md](docs/install-lxc.md).
 - eine Neuinstallation kann (solange noch keine Geräte angelernt sind) angelernte Geräte, Schlüssel, Namen und Räume aus einem 
   (Open)CCU Backup importieren.
+- **Geräte anlernen und konfigurieren, Direktverknüpfungen verwalten:** dafür den
+  [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) aus dem Addon-Katalog installieren.
 
 ## Dokumentation
 
