@@ -187,6 +187,17 @@ running as root can change anything on the system, the firmware and openccu-lite
 `addons.default_mode` in `occulited.json` flips the whole system back to `root` for someone who wants
 the old behaviour.
 
+**Your tree is yours alone.** When an addon runs confined, the ownership step that runs before its
+unit starts (`lite-addon-own`) also closes its directories to other users: `/usr/local/addons/<id>`,
+`/usr/local/etc/config/addons/<id>` and any data directory it took over become traversable but not
+listable by others (`0751`), and the files in them become the addon's own (`0640`, with the group the
+addon's own user — so unreadable to any other addon or local account). One addon can no longer read
+another's configuration, sessions or credentials. Your own web tree (`www`) stays world-readable,
+because the system serves it to the browser; keep secrets out of `www`, and write a credential file
+`0600` yourself rather than relying on the step (it only ever tightens, never loosens). This differs
+from a classic CCU, where every addon is `root` and reads everything, so an addon that reached into
+another addon's files will need its own copy or a shared, deliberately readable location.
+
 **Undeclared addons.** An addon whose manifest carries no `runtime` block — or that has no
 manifest at all, neither in its package nor as an adapter manifest in the catalogue — has declared
 nothing about how it can run. It is confined like any other, and both the Addons page and the Services page mark it
