@@ -14,7 +14,8 @@
 In [`docs/`](docs/) of this repository: moving from and to OpenCCU
 ([switching.md](docs/switching.md)), the Proxmox container ([install-lxc.md](docs/install-lxc.md)),
 addons ([addons.md](docs/addons.md)), security ([security.md](docs/security.md),
-[threat-model.md](docs/threat-model.md)), certificates ([tls-acme.md](docs/tls-acme.md)) and the
+[threat-model.md](docs/threat-model.md)), privacy – what the system sends to outside sources
+([privacy.md](docs/privacy.md)), certificates ([tls-acme.md](docs/tls-acme.md)) and the
 porting kit for addon maintainers ([porting-from-rega.md](docs/porting-from-rega.md)). The system
 service with the web UI is [occulited](https://github.com/hobbyquaker/occulited); its
 [`docs/`](https://github.com/hobbyquaker/occulited/tree/master/docs) describe the metadata, system

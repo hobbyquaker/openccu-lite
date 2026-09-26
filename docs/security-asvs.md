@@ -104,7 +104,7 @@ The items named (`B-n`, `task n`) are the project's roadmap items; a finding get
 | V11 cryptography | argon2id, SHA-256 for tokens, `crypto/rand`, age for encrypted backups (task 91), TLS 1.2+ in lighttpd (`sslsettings.conf`) | the ACME account key's storage, the backup key derivation |
 | V12 secure communication | HTTPS optional with ACME, HSTS optional, TLS 1.2 minimum; occulited and the interface processes on the loopback only (D-29) | the outbound calls' TLS (task 231's four stores cover the roots) |
 | V13 configuration | `occulited.service` sandboxed (task 208), lighttpd's unit too; PIE and RELRO gaps — **task 261** | `systemd-analyze security` for every lite unit (task 264) |
-| V14 data protection | the keys in clear on the storage and in backups (R6); backups encrypted on request (task 91) | **task 266** (what leaves the system) |
+| V14 data protection | the keys in clear on the storage and in backups (R6); backups encrypted on request (task 91) | what leaves the system: [privacy.md](privacy.md) (task 266), pinned by tests |
 | V15 secure coding | Go, no cgo, stdlib first; the helper's allowlist | **task 264** (SAST), **task 265** (fuzzing) |
 | V17 WebRTC | — | n.a. |
 

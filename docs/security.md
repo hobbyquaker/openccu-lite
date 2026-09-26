@@ -420,12 +420,14 @@ for two X25519 recipients (config.md has the files):
 
 ## Outbound calls
 
-Exactly three, all off by a switch or on demand: eQ-3's firmware server (daily, the switch
-on the first-boot page), GitHub's releases API for the catalogue (on the Catalogue page, with
-ETags), and each addon's own `Update:` URL through its CGI (daily). Nothing phones home
-otherwise. An OIDC provider is called only when configured, and the ACME directory (and, for
-DNS-01, the DNS provider's API) only once the certificate mode is switched to ACME — then twice
-a day for the renewal check, which talks to the CA only when a renewal is due.
+Every connection the system opens by itself - where to, when, which fields, and how to switch it off - is in
+[privacy.md](privacy.md), and the requests occulited builds are pinned by tests (`internal/*/outbound_test.go`). In
+short: the system release check (GitHub), the device firmware check and download (eQ-3), the addon catalogue and the
+addons' update checks (GitHub, each addon's URL) - each on *Check now* and, with *Check daily*, once a day; time (NTP)
+always; eQ-3's HmIP key server at a radio module exchange and at pairing a device whose key is not on the system,
+unless in local key mode; ACME and OpenID Connect only when configured. No telemetry; no request carries a serial
+number, the host name or the list of devices, except the device types a firmware download names and the SGTINs the
+key server needs.
 
 ## Not done
 
