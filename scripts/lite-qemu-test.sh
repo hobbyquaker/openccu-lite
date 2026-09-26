@@ -377,7 +377,11 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # gateway alone (its local section off, no module), the interface list is the template's cut
   # for the hardware (BidCos-RF for the gateway, no HmIP-RF, the foreign entry lost as on OpenCCU).
   say "guest: seeding an OpenCCU-shaped userfs for boot 2 (a LAN gateway in rfd.conf, a foreign interface entry)"
-  guest 'cp /usr/local/etc/config/rfd.conf /usr/local/etc/config/rfd.conf.lite-qemu-test 2>/dev/null; cp /etc/config_templates/rfd.conf /usr/local/etc/config/rfd.conf && printf "\n[Interface 1]\nType = HMLGW2\nSerial Number = KEQ0123456\nEncryption Key = 00000000000000000000000000000000\nIP Address = 192.0.2.1\n\n" >>/usr/local/etc/config/rfd.conf && { grep -v "</interfaces>" /etc/config_templates/InterfacesList.xml; printf "\t<ipc>\n\t \t<name>CCU-Jack</name>\n\t \t<url>xmlrpc://127.0.0.1:2121/RPC3</url> \n\t \t<info>CCU-Jack</info> \n\t</ipc>\n</interfaces>\n"; } >/usr/local/etc/config/InterfacesList.xml && grep -c Interface /usr/local/etc/config/rfd.conf && grep -c "<name>" /usr/local/etc/config/InterfacesList.xml'
+  # The seeded LAN gateway must stay silent (B-229's skip): QEMU's user-mode network answers every
+  # ICMP echo it routes through its gateway, a documentation address included (seen on the 1.0.0-dev.26
+  # image: 192.0.2.1 "answered", so the firmware step ran into eq3configcmd's timeouts). An unused address
+  # on the guest's own link gets no ARP answer, so its ping fails as an unplugged gateway's would.
+  guest 'cp /usr/local/etc/config/rfd.conf /usr/local/etc/config/rfd.conf.lite-qemu-test 2>/dev/null; cp /etc/config_templates/rfd.conf /usr/local/etc/config/rfd.conf && printf "\n[Interface 1]\nType = HMLGW2\nSerial Number = KEQ0123456\nEncryption Key = 00000000000000000000000000000000\nIP Address = 10.0.2.200\n\n" >>/usr/local/etc/config/rfd.conf && { grep -v "</interfaces>" /etc/config_templates/InterfacesList.xml; printf "\t<ipc>\n\t \t<name>CCU-Jack</name>\n\t \t<url>xmlrpc://127.0.0.1:2121/RPC3</url> \n\t \t<info>CCU-Jack</info> \n\t</ipc>\n</interfaces>\n"; } >/usr/local/etc/config/InterfacesList.xml && grep -c Interface /usr/local/etc/config/rfd.conf && grep -c "<name>" /usr/local/etc/config/InterfacesList.xml'
   say "guest: rebooting"; guest 'systemctl --no-block reboot' >/dev/null
   # the shell on the other side dies with the reboot: end the driver, the next guest call reopens
   guest_close
@@ -393,7 +397,7 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   boot_checks "boot 2"
   # the seeded gateway is a documentation address nobody answers: the firmware update skips it with
   # a line, a success - it used to run eq3configcmd into three timeouts and fail the unit
-  R=$(guest 'systemctl show -p Result --value occu-lgw-firmware-update.service; journalctl -b -u occu-lgw-firmware-update.service --no-pager -o cat | grep -c "no RF LAN gateway answers (192.0.2.1)"'); case "$R" in *'| success'*'| 1'*) ;; *) fail "occu-lgw-firmware-update did not skip the silent gateway as a success: $R";; esac
+  R=$(guest 'systemctl show -p Result --value occu-lgw-firmware-update.service; journalctl -b -u occu-lgw-firmware-update.service --no-pager -o cat | grep -c "no RF LAN gateway answers (10.0.2.200)"'); case "$R" in *'| success'*'| 1'*) ;; *) fail "occu-lgw-firmware-update did not skip the silent gateway as a success: $R";; esac
   R=$(guest 'systemctl is-active addon-litetest.service'); case "$R" in *'| active'*) ;; *) fail "addon-litetest.service not active after the reboot";; esac
   # counted by their rows: systemd 257 prints a header line above them
   R=$(guest 'journalctl --list-boots --no-pager | grep -cE "^ *-?[0-9]+ [0-9a-f]{32} "'); case "$R" in *'| 2'*) ;; *) fail "expected two boots in the persistent journal";; esac
@@ -429,4 +433,7 @@ fi
 
 kill "$(cat "$WORK/qemu.pid")" 2>/dev/null; sleep 1
 if [ "$FAILED" = 0 ]; then rm -rf "$WORK"; say "OK"; exit 0; fi
+# the disk copy goes even on a failure: $WORK is usually on a tmpfs, and each kept copy held up to
+# 1.5 GB of the build host's memory until later runs were ended by the OOM killer (dev.26's round)
+rm -f "$WORK/disk.img" "$WORK/zImage"
 say "last serial output:"; tail -n 60 "$WORK/serial.log" 2>/dev/null | sed 's/^/  | /'; say "serial log kept at $WORK/serial.log"; exit 1
