@@ -5,14 +5,24 @@
 # update-ca-certificates --default links every certificate, writes the bundle and hashes the
 # directory: one to three and a half seconds on a Raspberry Pi, for a result that only changes with
 # the image or with the user's own certificates. So:
-#   - no certificate of the user's (no *.crt under /usr/local/share/ca-certificates) and nothing in
-#     /etc/ca-certificates.conf: the directory the image ships prebuilt is copied (the build ran the
-#     same steps as update-ca-certificates --default on the same certificates);
+#   - no certificate of the user's (no *.crt under /usr/local/share/ca-certificates), nothing in
+#     /etc/ca-certificates.conf and no "!<name>" line in /usr/local/etc/ca-certificates.conf: the
+#     directory the image ships prebuilt is copied (the build ran the same steps as
+#     update-ca-certificates --default on the same certificates);
 #   - otherwise the copy cached on the userfs is used, when it was written for this image and for
-#     exactly these certificates (names and contents); if not, update-ca-certificates --default runs
-#     as before and its result replaces the cache. The cache is left out of backups (.nobackup).
+#     exactly these certificates (names and contents) and deselections; if not, update-ca-certificates
+#     runs as before and its result replaces the cache. The cache is left out of backups (.nobackup).
 # The directory is copied, not linked, so it stays writable as before: an update-ca-certificates run
 # by hand still works.
+#
+# The userfs file /usr/local/etc/ca-certificates.conf holds the certificates of the image's bundle
+# this system does not trust, one "!<name relative to /usr/share/ca-certificates>" line each (the
+# Trust stores page writes it; any other line is ignored). With such lines the bundle is built from a
+# generated configuration in update-ca-certificates' own format - every image certificate listed, the
+# deselected ones with the "!" - instead of --default, which would take them all.
+#
+# occulited runs this script through its privilege helper after a change of the userfs additions or
+# the deselections, so the bundle follows at once; the next boot runs it again the same way.
 #
 # Usage: lite-ca-certificates
 set -u
@@ -20,6 +30,8 @@ ETC=${CA_ETCCERTSDIR:-/var/etc/ssl/certs}
 PREBUILT=${CA_PREBUILT:-/usr/share/ca-certificates-prebuilt}
 LOCAL=${CA_LOCALCERTSDIR:-/usr/local/share/ca-certificates}
 CONF=${CA_CERTSCONF:-/etc/ca-certificates.conf}
+CERTSDIR=${CA_CERTSDIR:-/usr/share/ca-certificates}
+DISTRUST=${CA_DISTRUST:-/usr/local/etc/ca-certificates.conf}
 CACHE=${CA_CACHE:-/usr/local/etc/ca-certificates-cache}
 VERSION_FILE=${CA_VERSION_FILE:-/VERSION}
 UPDATE=${CA_UPDATE:-/usr/sbin/update-ca-certificates}
@@ -35,10 +47,31 @@ install_copy() {
     chmod 0755 "$ETC"
 }
 
-# run update-ca-certificates into an empty $ETC, as the boot did before
+# the "!<name>" lines of the userfs distrust file: the image certificates this system does not trust
+distrust_lines=
+[ -s "$DISTRUST" ] && distrust_lines=$(sed -n -e 's/^[[:space:]]*!//p' "$DISTRUST" | sed -e 's/[[:space:]]*$//' -e '/^$/d' | LC_ALL=C sort -u)
+
+# run update-ca-certificates into an empty $ETC, as the boot did before; with deselections from a
+# generated configuration (every image certificate, the deselected ones marked "!") instead of
+# --default
 run_update() {
-  rm -rf "$ETC" && mkdir -p "$ETC" && chmod 0755 "$ETC" &&
+  rm -rf "$ETC" && mkdir -p "$ETC" && chmod 0755 "$ETC" || return 1
+  if [ -z "$distrust_lines" ]; then
     "$UPDATE" --default --etccertsdir "$ETC" --localcertsdir "$LOCAL" --certsconf "$CONF" >/dev/null
+    return $?
+  fi
+  gen=$(mktemp) || return 1
+  (cd "$CERTSDIR" && find -L . -type f -name '*.crt' | sed 's|^\./||' | LC_ALL=C sort) | while IFS= read -r crt; do
+    if printf '%s\n' "$distrust_lines" | grep -qxF -- "$crt"; then
+      printf '!%s\n' "$crt"
+    else
+      printf '%s\n' "$crt"
+    fi
+  done > "$gen"
+  "$UPDATE" --fresh --etccertsdir "$ETC" --localcertsdir "$LOCAL" --certsdir "$CERTSDIR" --certsconf "$gen" >/dev/null
+  rc=$?
+  rm -f "$gen"
+  return $rc
 }
 
 user_certs=
@@ -46,7 +79,7 @@ user_certs=
 conf_lines=
 [ -s "$CONF" ] && conf_lines=$(sed -e '/^[[:space:]]*$/d' -e '/^#/d' "$CONF")
 
-if [ -z "$user_certs" ] && [ -z "$conf_lines" ]; then
+if [ -z "$user_certs" ] && [ -z "$conf_lines" ] && [ -z "$distrust_lines" ]; then
   if [ -f "$PREBUILT/ca-certificates.crt" ] && install_copy "$PREBUILT"; then
     echo "the image's CA bundle ($(grep -c 'BEGIN CERTIFICATE' "$ETC/ca-certificates.crt") certificates)"
     exit 0
@@ -57,26 +90,30 @@ if [ -z "$user_certs" ] && [ -z "$conf_lines" ]; then
   exit 0
 fi
 
-# the cache's key: this image, the configuration, and every user certificate by name and content
+# the cache's key: this image, the configuration, the deselections, and every user certificate by
+# name and content
 key=$(
   {
     cat "$VERSION_FILE" 2>/dev/null
     printf '%s\n' "$conf_lines"
+    printf '%s\n' "$distrust_lines"
     printf '%s\n' "$user_certs" | while IFS= read -r crt; do
+      [ -n "$crt" ] || continue
       printf '%s %s\n' "$crt" "$(cksum < "$crt")"
     done
   } | cksum
 )
 count=$(printf '%s\n' "$user_certs" | grep -c .)
+dcount=$(printf '%s\n' "$distrust_lines" | grep -c .)
 
 if [ -f "$CACHE/.key" ] && [ "$(cat "$CACHE/.key")" = "$key" ] && [ -f "$CACHE/ca-certificates.crt" ] &&
    install_copy "$CACHE"; then
-  echo "the cached CA bundle with $count certificate(s) of the user's"
+  echo "the cached CA bundle with $count certificate(s) of the user's, $dcount deselected"
   exit 0
 fi
 
 run_update || exit 1
-echo "CA bundle built with $count certificate(s) of the user's"
+echo "CA bundle built with $count certificate(s) of the user's, $dcount deselected"
 # the new cache: written beside the old one and swapped, so a power cut leaves one or the other
 if rm -rf "$CACHE.new" && cp -a "$ETC" "$CACHE.new" && touch "$CACHE.new/.nobackup" &&
    printf '%s\n' "$key" > "$CACHE.new/.key" && rm -rf "$CACHE" && mv "$CACHE.new" "$CACHE"; then

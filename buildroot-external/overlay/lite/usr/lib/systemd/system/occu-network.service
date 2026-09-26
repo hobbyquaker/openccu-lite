@@ -12,6 +12,9 @@
 # After occu-firewall.service: the rules are loaded before any interface comes up,
 # whatever /var/hm_mode says - the edge on S01InitHost, which the hook's HM_MODE test needed, is
 # not needed any more (the firewall left the hook).
+# Reload: a new DHCP lease under the current host name (lite-network-reload). occulited asks for it
+# after a rename, so the DHCP server and the router's DNS learn the new name without a reboot; the
+# client stays in this cgroup. A static setup has nothing to tell and the reload does nothing.
 [Unit]
 Description=Network
 After=occu-firewall.service occu-init-system.service
@@ -25,6 +28,7 @@ ExecStartPre=-/usr/libexec/occu/lite-psplash boot S40network
 ExecStart=/etc/init.d/S40network.script start
 ExecStartPost=-/usr/libexec/occu/lite-psplash done S40network
 ExecStop=/etc/init.d/S40network.script stop
+ExecReload=/usr/libexec/occu/lite-network-reload
 KillMode=control-group
 UMask=0002
 StandardOutput=journal+console

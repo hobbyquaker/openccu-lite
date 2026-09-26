@@ -12,57 +12,75 @@
 # server whose name does not resolve yet is resolved again later, so the clock is set whenever the
 # network comes. Units that need a correct clock order after occu-clock-valid.service.
 #
-# The server list is S46chronyd's: /etc/config/ntpclient (from the template when missing), the
-# DHCP-provided servers in front of it unless /etc/config/noDHCPNTP exists, the default gateway when
-# the list is empty. S46chronyd fell back to the template's servers when the user's did not answer;
-# here they are configured as well and the user's are marked "prefer", which chronyd honours
-# whenever one of them is usable. /var/status/hasNTP appears once chronyd reports a synchronised
+# The server list: /etc/config/ntpclient (from the template when missing), the DHCP-provided
+# servers in front of it unless /etc/config/noDHCPNTP exists, the default gateway when the list is
+# empty, and the template's servers (the de.pool) only when there is no gateway either.
+# Servers the user set replace the pool; they are not added to it, so a system told to ask a local
+# NTP server asks nobody else. /var/status/hasNTP appears once chronyd reports a synchronised
 # clock, and is removed at stop.
+#
+# "lite-chrony config" prints the configuration start would write, without starting anything
+# (scripts/testcases/lite-chrony-test.sh). The LITE_CHRONY_* variables move its inputs for the test.
 set -u
 DAEMON=/usr/sbin/chronyd
 CLIENT=/usr/bin/chronyc
-TEMPLATES=/etc/config_templates
+TEMPLATES=${LITE_CHRONY_TEMPLATES:-/etc/config_templates}
+CONFIG=${LITE_CHRONY_CONFIG:-/etc/config}
+BASECONF=${LITE_CHRONY_BASE:-/etc/chrony.conf}
+DHCPCONF=${LITE_CHRONY_DHCP:-/var/etc/ntp-dhcp.conf}
+IP=${LITE_CHRONY_IP:-/sbin/ip}
 CONF=/var/etc/chrony.conf
 PIDFILE=/run/chrony/chronyd.pid
+
+# the configuration: /etc/chrony.conf and the servers
+chrony_config() {
+  [ -e "$CONFIG/ntpclient" ] || cp "$TEMPLATES/ntpclient" "$CONFIG/"
+  NTPSERVERS=
+  # shellcheck source=/dev/null
+  [ -r "$CONFIG/ntpclient" ] && . "$CONFIG/ntpclient"
+  if [ "${NTPSERVERS}" = "ntp.homematic.com" ]; then
+    cp "$TEMPLATES/ntpclient" "$CONFIG/"
+    # shellcheck source=/dev/null
+    . "$CONFIG/ntpclient"
+  fi
+  servers=${NTPSERVERS}
+  if [ -s "$DHCPCONF" ] && [ ! -f "$CONFIG/noDHCPNTP" ]; then
+    NTPSERVERS_DHCP=
+    # shellcheck source=/dev/null
+    . "$DHCPCONF"
+    servers="${NTPSERVERS_DHCP} ${servers}"
+  fi
+  # shellcheck disable=SC2086
+  if [ -z "$(echo ${servers})" ]; then
+    servers=$("$IP" route | grep default | head -1 | cut -d' ' -f3)
+  fi
+  # shellcheck disable=SC2086
+  if [ -z "$(echo ${servers})" ]; then
+    # nothing set, nothing from DHCP, no gateway: the template's servers, as S46chronyd's fallback
+    # shellcheck source=/dev/null
+    servers=$(NTPSERVERS=; . "$TEMPLATES/ntpclient"; echo "${NTPSERVERS}")
+  fi
+
+  cat "$BASECONF"
+  echo "# the servers, written by lite-chrony at start"
+  seen=" "
+  for s in ${servers}; do
+    case "$seen" in
+      *" ${s} "*) ;;
+      *) echo "server ${s} iburst"; seen="${seen}${s} " ;;
+    esac
+  done
+}
 
 case "${1:-}" in
   start)
     [ -x "$DAEMON" ] || exit 0
-    [ -e /etc/config/ntpclient ] || cp "$TEMPLATES/ntpclient" /etc/config/
-    NTPSERVERS=
-    [ -r /etc/config/ntpclient ] && . /etc/config/ntpclient
-    if [ "${NTPSERVERS}" = "ntp.homematic.com" ]; then
-      cp "$TEMPLATES/ntpclient" /etc/config/
-      . /etc/config/ntpclient
-    fi
-    user_servers=${NTPSERVERS}
-    if [ -s /var/etc/ntp-dhcp.conf ] && [ ! -f /etc/config/noDHCPNTP ]; then
-      NTPSERVERS_DHCP=
-      . /var/etc/ntp-dhcp.conf
-      user_servers="${NTPSERVERS_DHCP} ${user_servers}"
-    fi
-    # shellcheck disable=SC2086
-    if [ -z "$(echo ${user_servers})" ]; then
-      user_servers=$(/sbin/ip route | grep default | head -1 | cut -d' ' -f3)
-    fi
-    default_servers=$(NTPSERVERS=; . "$TEMPLATES/ntpclient"; echo "${NTPSERVERS}")
-
     mkdir -p /var/lib/chrony /var/etc
     chown chrony:chrony /var/lib/chrony
     # chronyd refuses its command socket unless its run directory belongs to it and nobody else may
     # enter ("Wrong permissions on /var/run/chrony"); chronyc then only works over UDP
     install -d -o chrony -g chrony -m 0770 /run/chrony
-    {
-      cat /etc/chrony.conf
-      echo "# the servers, written by lite-chrony at start"
-      for s in ${user_servers}; do echo "server ${s} iburst prefer"; done
-      for s in ${default_servers}; do
-        case " ${user_servers} " in
-          *" ${s} "*) ;;
-          *) echo "server ${s} iburst" ;;
-        esac
-      done
-    } > "$CONF.tmp" && mv -f "$CONF.tmp" "$CONF" || exit 1
+    chrony_config > "$CONF.tmp" && mv -f "$CONF.tmp" "$CONF" || exit 1
 
     rm -f /var/status/hasNTP
     start-stop-daemon -S -q -x "$DAEMON" -- -f "$CONF" || exit 1
@@ -70,12 +88,15 @@ case "${1:-}" in
     ( "$CLIENT" -n waitsync 0 0 0 10 >/dev/null 2>&1 && touch /var/status/hasNTP ) </dev/null >/dev/null 2>&1 &
     echo "chronyd started with $(grep -c '^server ' "$CONF") server(s)"
     ;;
+  config)
+    chrony_config
+    ;;
   stop)
     start-stop-daemon -K -q -p "$PIDFILE"
     rm -f /var/status/hasNTP
     ;;
   *)
-    echo "Usage: $0 {start|stop}" >&2
+    echo "Usage: $0 {start|stop|config}" >&2
     exit 1
     ;;
 esac

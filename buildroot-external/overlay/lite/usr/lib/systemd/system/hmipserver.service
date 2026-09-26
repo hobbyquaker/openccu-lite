@@ -74,6 +74,16 @@ UMask=0002
 SyslogIdentifier=hmipserver
 StandardOutput=journal
 StandardError=journal
+# A registered XML-RPC listener that takes an event and never answers holds its worker pool in
+# hmipserver, and Vert.x's blocked-thread checker then logs that thread with a stack trace every
+# second (about 43 lines a second, measured on a Pi 4) until the connection ends. journald's own
+# limit (10000 messages per 30 s, scaled up with the free space) never stops that, and it turned
+# a 16 MiB RAM journal over in about 20 minutes. The unit's own limit lets 100 lines per 30 s
+# through - a start logs about 15, a day at the info level a handful - and journald says how many
+# it suppressed. The first lines of each 30 s still carry the checker's line, which is how
+# occulited names the listener and offers to end its connection.
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=100
 OOMScoreAdjust=-900
 
 User=hmipserver
