@@ -2,7 +2,8 @@
 # buildroot's chrony.service. No timesyncd.
 #
 # /usr/libexec/occu/lite-chrony starts chronyd at once, with S46chronyd's server list (the user's,
-# the DHCP-provided ones, the gateway, the template's as fallback) in a generated configuration.
+# the DHCP-provided ones, the gateway; the template's only when none of them gives one) in a
+# generated configuration.
 # S46chronyd's blocking one-shot ntpdate is gone: it held the boot back by ten seconds, and when
 # it failed (no internet at boot) the script exited without starting chronyd at all, leaving the
 # box unsynchronised until the next reboot. chronyd steps the first large offsets itself (makestep)

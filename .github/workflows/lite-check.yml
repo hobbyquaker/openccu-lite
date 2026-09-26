@@ -62,6 +62,7 @@ jobs:
           sh scripts/testcases/lite-extension-dirs-test.sh
           sh scripts/testcases/lite-machine-id-test.sh
           sh scripts/testcases/lite-clock-save-test.sh
+          sh scripts/testcases/lite-chrony-test.sh
           sh scripts/testcases/lite-dhcp6-test.sh
           sh scripts/testcases/lite-usb-mount-test.sh
           sh scripts/testcases/lite-classic-rpc-conf-test.sh

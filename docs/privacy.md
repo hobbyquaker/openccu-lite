@@ -19,7 +19,7 @@ occulited repository). A change to what leaves the system fails those tests, and
 | [ACME certificates](#acme-certificates) | the chosen CA (e.g. Let's Encrypt), a DNS provider | only in ACME mode: at the order, then a renewal when due | the system's names, the contact mail if given | Certificate page (default: self-signed, no calls) |
 | [Login with OpenID Connect](#login-with-openid-connect) | the configured provider | only when configured: at a login and at *Check* | the client id, the redirect URI | Users page (default: off) |
 | [Status LED internet check](#status-led-internet-check) | the hosts of the above | only when the LED is set to show it: every 5 minutes | a TCP connection, nothing sent | Status LED page (default: off) |
-| [Time (NTP)](#time-ntp) | your servers, the DHCP ones, and `0-3.de.pool.ntp.org` | always | the NTP protocol only | Network page (the pool servers stay, see there) |
+| [Time (NTP)](#time-ntp) | your servers or the DHCP ones; the gateway, or `0-3.de.pool.ntp.org`, only when there are none | always | the NTP protocol only | Network page (your servers replace the pool) |
 | [HmIP key server](#hmip-key-server) | eQ-3 (`secgtw.homematic.com:8443`) | a radio module exchange; pairing a device whose key is not on the system | the radio module's and the device's serial numbers (SGTIN) | Keys page: *Local key mode* |
 
 Everything else stays on your local network, unless you point it elsewhere yourself: see
@@ -149,10 +149,10 @@ Nothing is sent over it. The Status LED page switches it off.
 The radio stack needs a correct clock, so time synchronisation (chrony) always runs, on every product but the LXC
 container (which takes the host's clock).
 
-- **To:** the servers set on the Network page (`/etc/config/ntpclient`), the ones your DHCP server hands out (unless
-  switched off there), the default gateway when neither gives one - **and always also `0.de.pool.ntp.org` to
-  `3.de.pool.ntp.org`**, with your own servers preferred. That the pool is asked even when you set your own servers
-  is a known bug (B-242).
+- **To:** the servers set on the Network page (`/etc/config/ntpclient`) and the ones your DHCP server hands out
+  (unless switched off there); the default gateway when neither gives one; `0.de.pool.ntp.org` to
+  `3.de.pool.ntp.org` only when there is no gateway either. Servers you set replace the pool: a system told to ask a
+  server on your LAN asks nobody else. A new system starts with the pool servers in the Network page's list.
 - **Sends:** NTP packets, which carry nothing but timestamps.
 - **Off:** not switchable (the radio stack needs the time); the firewall can block UDP 123 to the internet if your own
   server is on the LAN.
