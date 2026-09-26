@@ -2,4 +2,4 @@
 # go mod vendor with Go 1.26.6, repacked by support/download/helpers mk_tar_gz; buildroot names a Go
 # package's vendored archive <name>-go2.tar.gz). Bump together
 # with OCCULITED_VERSION.
-sha256  aed09e493429f409bff187576c827593ca921f0281ae2fada77e94e521cd4aec  occulited-58b7ab4b56ae63ddef7c12634a72d5a40df7a01e-go2.tar.gz
+sha256  66c412936b2af4b8cc80f2a00255b51c7ecbc2cbfe65f77dee15dcc6e0d30254  occulited-570f283e5c1c97e5aea308b869b65dbd56b7760a-go2.tar.gz
