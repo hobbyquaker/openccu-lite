@@ -144,14 +144,13 @@ for f in overlay/base/etc/network/if-up.d/eQ3StartNetwork overlay/base/bin/dhcp.
 done
 
 # the link wait polls every 0.2 s for the same 12 s, with a dot every 2 s
-for f in overlay/base/etc/network/if-up.d/eQ3StartNetwork; do
-  if grep -q '^ *sleep 0\.2$' "$HERE/buildroot-external/$f" && grep -q 'if \[\[ \$i -ge 60 \]\]' "$HERE/buildroot-external/$f" &&
-     grep -q '\[\[* \$((i % 10)) -eq 0 \]\]*' "$HERE/buildroot-external/$f"; then
-    ok "$f: the link wait polls every 0.2 s up to 12 s"
-  else
-    bad "$f: the link wait is not the 0.2 s poll"
-  fi
-done
+f=overlay/base/etc/network/if-up.d/eQ3StartNetwork
+if grep -q '^ *sleep 0\.2$' "$HERE/buildroot-external/$f" && grep -q 'if \[\[ \$i -ge 60 \]\]' "$HERE/buildroot-external/$f" &&
+   grep -q '\[\[* \$((i % 10)) -eq 0 \]\]*' "$HERE/buildroot-external/$f"; then
+  ok "$f: the link wait polls every 0.2 s up to 12 s"
+else
+  bad "$f: the link wait is not the 0.2 s poll"
+fi
 
 # a timer that catches up at boot runs after the boot
 need occu-fstrim.service multi-user.target
