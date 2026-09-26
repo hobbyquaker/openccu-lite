@@ -37,6 +37,8 @@ jobs:
           sh scripts/lite-id-guard.sh
       - name: Upstream's shellcheck rules on the delta
         run: sh scripts/lite-shellcheck.sh
+      - name: The upstream paths the fork removed stay removed
+        run: sh scripts/testcases/lite-upstream-merge-test.sh
       - name: The journal is the one log
         run: |
           sh scripts/testcases/lite-log-guard-test.sh

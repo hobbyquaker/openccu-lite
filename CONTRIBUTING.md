@@ -86,9 +86,28 @@ These run without a build tree, and `lite-check` runs them on GitHub:
 ```sh
 sh scripts/lite-id-guard.sh          # no internal task, decision or bug numbers in what the system shows a user
 sh scripts/lite-shellcheck.sh        # upstream's shellcheck options over lite's scripts; warnings fail
+sh scripts/testcases/lite-upstream-merge-test.sh   # the merge helper below, and no removed upstream path is back
 sh scripts/testcases/lite-unit-order-test.sh    # and the other scripts/testcases/*-test.sh lite-check.yml lists
 git ls-files | grep -v '^[A-Za-z0-9_./@-]*$'   # must print nothing: buildroot's repack chokes on odd file names
 ```
 
 [lite-check.yml](.github/workflows/lite-check.yml) lists the full set. The image build and the QEMU boot test run
 on the project's own build host (`lite-build.yml`).
+
+## Merging upstream
+
+Upstream's release tags are merged into `lite` (not rebased). The fork has removed some upstream files (the Home
+Assistant add-ons, upstream's CI and bots, the OCI product and its Helm chart, …) and rewritten others as its own
+(the issue forms, this file); [scripts/lite-upstream-paths.txt](scripts/lite-upstream-paths.txt) lists them.
+A tag that touches one of them conflicts or brings it back, so:
+
+```sh
+git fetch upstream --tags
+git merge --no-commit <tag>
+scripts/lite-upstream-merge.sh       # removes the removed paths again, keeps lite's own files, lists the rest
+# resolve the conflicts it lists, run the guards and tests above
+scripts/lite-upstream-merge.sh --check
+git commit
+```
+
+A path the fork stops carrying, or a file it takes over from upstream, gets its line in that list.

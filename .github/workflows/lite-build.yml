@@ -39,6 +39,10 @@ jobs:
         # the shell scripts of the lite overlays, board/lite and scripts/ with the options OpenCCU's
         # own CI passes to shellcheck; warnings and errors fail, style notes are printed
         run: sh scripts/lite-shellcheck.sh
+      - name: The upstream paths the fork removed stay removed
+        # scripts/lite-upstream-merge.sh on a made-up upstream merge, then --check on the fork:
+        # no path of scripts/lite-upstream-paths.txt came back with an upstream tag
+        run: sh scripts/testcases/lite-upstream-merge-test.sh
       - name: The journal is the one log
         # the configuration guard the lite post-build runs on the image, the hmipserver log4j2
         # template as S62HMServer builds it, the journal storage decision and its ram-sync copy, and

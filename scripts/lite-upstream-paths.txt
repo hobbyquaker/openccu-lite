@@ -1,0 +1,49 @@
+# openccu-lite: upstream paths this fork does not carry, and upstream paths it has rewritten as
+# its own. Upstream's release tags are merged into lite; a tag that changes one of these paths
+# conflicts (modify/delete, or both modified), and a tag that adds a file under a removed
+# directory brings it back. scripts/lite-upstream-merge.sh settles both after the merge.
+#
+# One git pathspec per line, after a keyword:
+#   remove <pathspec>   never in lite: deleted again, whatever the merge brought
+#   ours <pathspec>     lite's own version: taken from lite (HEAD) whole; a file upstream added
+#                       under it is removed
+# `:(exclude)<pathspec>` narrows the remove lines before it. Blank lines and # comments are ignored.
+
+# Home Assistant add-ons
+remove home-assistant-addon/
+remove home-assistant-addon-dev/
+remove home-assistant-addon-hapdrap/
+remove home-assistant-addon-proxy/
+remove repository.json
+remove scripts/patch-ha-addon-macvlan.sh
+
+# upstream's CI, bots and their configs: every workflow that is not lite's
+remove .github/workflows/
+remove :(exclude).github/workflows/lite-*
+remove .github/labeler.yml
+remove .github/label-actions.yml
+remove .github/no-response.yml
+remove .github/release-template*.md
+remove .github/release-changelog-config*.json
+remove .github/dependabot.yml
+remove .github/copilot-instructions.md
+remove .coderabbit.yaml
+remove copilot-fix-linter-checks-job-failure.patch
+remove .github/FUNDING.yml
+
+# the OCI container product and its Helm chart
+remove buildroot-external/configs/oci_*
+remove buildroot-external/board/oci/
+remove buildroot-external/overlay/base-openccu_oci/
+remove release/updatepkg/oci_*
+remove helm/
+remove scripts/install-docker.sh
+
+# the ReGa WebUI's update check
+remove release/LATEST-VERSION.js
+
+# community files
+remove CODE_OF_CONDUCT.md
+remove DEVELOPMENT.md
+ours .github/ISSUE_TEMPLATE/
+ours CONTRIBUTING.md
