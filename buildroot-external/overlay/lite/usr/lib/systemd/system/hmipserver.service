@@ -18,6 +18,14 @@
 # server need the LAN. No MemoryDenyWriteExecute: the JVM's JIT writes code. The address-family
 # and realtime lines take effect once systemd is built with seccomp.
 #
+# UMask=0077: what the server writes - its device files, the access point's identity and key
+# files under crRFD/data, the heating groups, its handler registrations - is its own alone, as
+# rfd's AES device files are rfd's. The vendor's init script ran it with umask 0002, which left
+# every file world-readable; the prep step tightens what an older image or a restored backup left
+# behind. What another process needs of the server's files it gets through occulited's privilege
+# helper (hmip_user.conf, sgtin.map, the identity files) or a bind of a file the prep step made
+# (the handler files, 0644 root-made before the start).
+#
 # Logging: the image's log4j2 template writes to the JVM's stdout, every line prefixed with its
 # syslog level (<3> error, <4> warning, <6> info, <7> debug), and the JVM is this unit's main
 # process, so the messages carry the identifier hmipserver and their real priorities, a remote
@@ -70,7 +78,7 @@ Restart=always
 RestartSec=2
 RestartSteps=8
 RestartMaxDelaySec=300
-UMask=0002
+UMask=0077
 SyslogIdentifier=hmipserver
 StandardOutput=journal
 StandardError=journal
