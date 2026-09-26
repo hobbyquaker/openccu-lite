@@ -1,6 +1,7 @@
-# openccu-lite: CI for the buildroot fork. Runs on the self-hosted runner (label `buildroot`,
-# host mode) on Gitea today and on GitHub after release day (D-24); only `runs-on` differs.
-# lite-only file (D-22): never part of an upstream PR.
+# openccu-lite: CI for the buildroot fork. Runs on the project's own self-hosted runner (label
+# `buildroot`, host mode) on the forge the project is developed on, never on GitHub (the jobs' `if`):
+# no self-hosted runner is attached to the public repository; lite-check.yml runs the shell tests on
+# GitHub-hosted runners there. lite-only file: never part of an upstream PR.
 name: lite-build
 
 on:
@@ -17,8 +18,7 @@ permissions:
 
 jobs:
   check:
-    # Gitea today:  runs-on: buildroot
-    # GitHub later: runs-on: [self-hosted, buildroot]
+    if: github.server_url != 'https://github.com'
     runs-on: buildroot
     timeout-minutes: 30
     steps:
@@ -35,6 +35,10 @@ jobs:
         run: |
           sh scripts/testcases/lite-id-guard-test.sh
           sh scripts/lite-id-guard.sh
+      - name: Upstream's shellcheck rules on the delta
+        # the shell scripts of the lite overlays, board/lite and scripts/ with the options OpenCCU's
+        # own CI passes to shellcheck; warnings and errors fail, style notes are printed
+        run: sh scripts/lite-shellcheck.sh
       - name: The journal is the one log
         # the configuration guard the lite post-build runs on the image, the hmipserver log4j2
         # template as S62HMServer builds it, the journal storage decision and its ram-sync copy, and
@@ -62,6 +66,7 @@ jobs:
         # against stand-ins for mount, umount and modprobe
         run: |
           sh scripts/testcases/lite-unit-order-test.sh
+          sh scripts/testcases/lite-network-reload-test.sh
           sh scripts/testcases/occu-addons-generator-test.sh
           sh scripts/testcases/lite-addon-own-test.sh
           sh scripts/testcases/addon-rc-wrapper-test.sh
@@ -106,9 +111,10 @@ jobs:
         # fragment's proxy port and the gate's session shapes, so the test only breaks when they do)
         run: |
           rev=$(sed -n 's/^OCCULITED_VERSION *= *//p' buildroot-external/package/occulited/occulited.mk)
-          site=$(sed -n 's/^OCCULITED_SITE *= *//p' buildroot-external/package/occulited/occulited.mk)
-          rm -rf /tmp/occulited-pin && mkdir -p /tmp/occulited-pin
-          curl -sSfL "$site/$rev.tar.gz" | tar -xz -C /tmp/occulited-pin
+          repo=$(sed -n 's/^OCCULITED_SITE *= *$(call github,\([^,]*\),\([^,]*\),.*/\1\/\2/p' buildroot-external/package/occulited/occulited.mk)
+          test -n "$rev" && test -n "$repo"
+          rm -rf /tmp/occulited-pin && mkdir -p /tmp/occulited-pin/occulited
+          curl -sSfL "https://github.com/$repo/archive/$rev.tar.gz" | tar -xz --strip-components=1 -C /tmp/occulited-pin/occulited
           bash scripts/lite-lighttpd-redirect-test.sh /tmp/occulited-pin/occulited
       - name: A POST without a body reaches the API and the addons
         # every lite product takes board/lite/patches, and lighttpd of the pinned version, built in an
@@ -123,7 +129,7 @@ jobs:
 
   build:
     # Manual only: a full image build is hours, and it should not race a push.
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && github.server_url != 'https://github.com'
     needs: check
     runs-on: buildroot
     timeout-minutes: 300

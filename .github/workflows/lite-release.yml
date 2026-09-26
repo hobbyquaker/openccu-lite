@@ -1,188 +1,51 @@
-# openccu-lite: the release workflow (task 16). Modelled on upstream's release.yml, reduced to
-# the lite products, plus a CycloneDX SBOM per product. lite-only file (D-22).
+# openccu-lite: the release workflow. lite-only file, never part of an upstream PR.
 #
-# Status 2026-09-06: DRAFT, never run. Gitea 1.23 cannot dispatch it and no tag has been pushed
-# (nothing goes out before release day, D-24). On GitHub the two "GitHub only" steps
-# (attestation, ghcr push) become live; on Gitea the release assets go through the API step.
+# Runs on the project's own forge only, never on GitHub (every job's `if`; it is also disabled in the
+# GitHub repository's Actions settings). A release is built here, on the build host, and published on
+# GitHub as a draft through GitHub's API - no self-hosted runner is attached to the public repository.
+#
+# How a release is made:
+#   1. The dev round 1.0.0-dev.<N> is built from a commit of `lite` by the round script on the build
+#      host (as root, incrementally in the warm trees, holding /ssd/build/.release.lock) and checked in
+#      the lab. Releases keep the dev series for now: the release IS that round, file for file.
+#   2. `lite` is on GitHub's `main` at that commit or later (the guard script's push).
+#   3. The maintainer pushes the tag v1.0.0-dev.<N> on that commit to this forge. This workflow runs:
+#      it checks that the build tree is that commit and the round's images are that version with the
+#      pinned occulited, writes SHA256SUMS, creates the draft release v1.0.0-dev.<N> on GitHub with a
+#      short header plus GitHub's generated notes, and uploads the assets (zip, ova, ccu3.tgz, SBOMs,
+#      their .sha256, SHA256SUMS; no raw .img, no sources archive - the sources are on request).
+#      scripts/lite-release-github.sh does the work; `--dry-run` there checks without writing.
+#   4. By hand, afterwards: the draft's files are staged on the lab systems; the maintainer signs
+#      SHA256SUMS with the offline minisign key (`minisign -Sm SHA256SUMS`), uploads
+#      SHA256SUMS.minisig to the draft, edits the notes and publishes - which creates the tag on GitHub.
+#
+# The secret GH_RELEASE_TOKEN (a repository secret here; a name starting with GITHUB_ is not allowed)
+# is a fine-grained GitHub token of the maintainer for hobbyquaker/openccu-lite and
+# hobbyquaker/occulited, permission Contents: read and write only, with an expiry. It is used by the
+# one step below and nowhere else.
 name: lite-release
 
 on:
   push:
     tags: ['v*']
-  workflow_dispatch:
-    inputs:
-      products:
-        description: Comma-separated list of products (x86_64-ova, aarch64-rpi3, aarch64-rpi4, aarch64-rpi5 - D-39/D-43, task 32; lxc-lite_amd64, lxc-lite_arm64 - the Proxmox CT templates, task 34)
-        default: x86_64-ova
-      build:
-        description: The build number N of this round (D-88) - the version is <LITE-VERSION>.<N>, e.g. 1.0.0-dev.7; take the next free N from the build ledger
-        required: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
+  draft:
+    if: github.server_url != 'https://github.com' && startsWith(github.ref, 'refs/tags/v')
     runs-on: buildroot
-    timeout-minutes: 600
-    strategy:
-      fail-fast: false
-      max-parallel: 1 # one buildroot build at a time on the 8-core runner
-      matrix:
-        product: ${{ fromJSON(format('["{0}"]', replace(github.event.inputs.products || 'x86_64-ova', ',', '","'))) }}
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@v5
-
-      - name: Version from the tag
-        id: v
-        run: |
-          # D-44: the tag is v<semver> and must equal VERSION in LITE-VERSION.
-          # D-88: a dispatched run builds <VERSION>.<N> with the build number N given as the
-          # input (1.0.0-dev.7), one N per build round from the agents repository's ledger;
-          # the -snapshot.<sha> form is gone.
-          L=$(sed -n 's/^VERSION=//p' LITE-VERSION)
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
-            V="${GITHUB_REF#refs/tags/v}"
-            [ "$V" = "$L" ] || { echo "tag $V does not match LITE-VERSION ($L)"; exit 1; }
-          else
-            N="${{ github.event.inputs.build }}"
-            [[ "$N" =~ ^[0-9]+$ ]] || { echo "build number '$N' is not a number (D-88)"; exit 1; }
-            V="$L.$N"
-          fi
-          echo "version=$V" >> "$GITHUB_OUTPUT"
-          echo "lite_release=$V" >> "$GITHUB_OUTPUT"
-          echo "occulited=$(sed -n 's/^OCCULITED_VERSION *= *//p' buildroot-external/package/occulited/occulited.mk)" >> "$GITHUB_OUTPUT"
-
-      - name: Parallelism
-        run: |
-          if [ -f /sys/fs/cgroup/cpu.max ]; then read -r q p < /sys/fs/cgroup/cpu.max; [ "$q" = max ] && J=$(nproc) || J=$((q / p)); else J=$(nproc); fi
-          [ "$J" -lt 1 ] && J=1
-          echo "JLEVEL=$J" >> "$GITHUB_ENV"
-
-      - name: Build ${{ matrix.product }}
+        with:
+          fetch-depth: 0
+      - name: Draft release on GitHub
         env:
-          BR2_DL_DIR: /mnt/download
-          BR2_CCACHE_DIR: /mnt/ccache/${{ matrix.product }}
+          GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN }}
         run: |
-          mkdir -p "$BR2_CCACHE_DIR"
-          # a release is built from a clean tree (reproducibility, ROADMAP task 16)
-          rm -rf "build-${{ matrix.product }}"
-          nice -n 19 make PRODUCT=${{ matrix.product }} LITE_VERSION=${{ steps.v.outputs.version }} BR2_DL_DIR="$BR2_DL_DIR" BR2_CCACHE_DIR="$BR2_CCACHE_DIR" BR2_JLEVEL="$JLEVEL" release
-
-      - name: SBOM (CycloneDX)
-        run: |
-          # task 179: the build wrote it into the image (board/lite/post-build-sbom.sh, checked
-          # there); the release asset is the same file, uncompressed
-          F="release/openccu-lite-${{ matrix.product }}-${{ steps.v.outputs.version }}.cdx.json"
-          gunzip -c "build-${{ matrix.product }}/target/usr/share/openccu-lite/sbom.cdx.json.gz" > "$F"
-          sha256sum "$F" > "$F.sha256"
-
-      - name: Sources for the release (legal-info)
-        run: |
-          # task 179 (D-111, 2026-09-19): one sources archive per release, the products'
-          # legal-info sources merged - each package's directory once, since they are mostly the
-          # same. The runner keeps them between the matrix jobs; the sources job packs them.
-          D="${LITE_SOURCES_DIR:-/ssd/build/release-sources}/${{ steps.v.outputs.version }}"
-          mkdir -p "$D"
-          for pkg in "build-${{ matrix.product }}/legal-info/sources/"*/; do
-            [ -d "$D/$(basename "$pkg")" ] || cp -a "$pkg" "$D/"
-          done
-          cp "build-${{ matrix.product }}/legal-info/manifest.csv" "$D/manifest-${{ matrix.product }}.csv"
-
-      - name: Smoke test
-        run: |
-          case "${{ matrix.product }}" in
-            x86_64-ova) scripts/lite-qemu-test.sh "build-${{ matrix.product }}/images/sdcard.img" ;;
-            # the aarch64 board images have no smoke test yet - the QEMU test drives an x86
-            # disk image and nothing here emulates a Raspberry Pi. They are tested on hardware.
-            aarch64-rpi3|aarch64-rpi4|aarch64-rpi5) echo "no automated smoke test for ${{ matrix.product }}" ;;
-            # task 34: a CT template is not a bootable disk image, so the QEMU test does not apply;
-            # the gate is a container on Proxmox (docs/install-lxc.md in the agents repository)
-            lxc-lite_amd64|lxc-lite_arm64) echo "no automated smoke test for ${{ matrix.product }}: a CT template, tested on Proxmox" ;;
-            # a product with no case here would pass the step silently; say so instead
-            *) echo "no smoke test defined for ${{ matrix.product }}"; exit 1 ;;
-          esac
-
-      - name: Release assets
-        run: |
-          ls -la release/ | grep "openccu-lite-${{ matrix.product }}-${{ steps.v.outputs.version }}" || true
-          # Gitea: attach the files to the release of this tag through the API (token in RELEASE_TOKEN).
-          # GitHub: replaced by softprops/action-gh-release on release day.
-          if [ -n "${{ secrets.RELEASE_TOKEN }}" ] && [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            API="${GITHUB_SERVER_URL}/api/v1/repos/${GITHUB_REPOSITORY}"
-            TAG="${GITHUB_REF#refs/tags/}"
-            ID=$(curl -sf -H "Authorization: token ${{ secrets.RELEASE_TOKEN }}" "$API/releases/tags/$TAG" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' 2>/dev/null || true)
-            if [ -z "$ID" ]; then
-              ID=$(curl -sf -X POST -H "Authorization: token ${{ secrets.RELEASE_TOKEN }}" -H 'Content-Type: application/json' -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"draft\":true}" "$API/releases" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-            fi
-            # The assets are listed, not globbed (B-44, B-45). A glob over
-            # OpenCCU-<version>-<product>.* uploaded the raw .img - 2.25 GiB for x86_64-ova, over
-            # GitHub's 2 GiB per-asset limit, and redundant because the .zip contains it - and it
-            # would have missed both files whose name is not the product's: the .ova, which D-39
-            # names OpenCCU-<version>.ova after upstream's board/ova/post-release.sh, and the
-            # in-place CCU3 package, which upstream's board/rpi3/post-release.sh names
-            # OpenCCU-<version>-ccu3.tgz. Upstream's release.yml lists its assets for the same
-            # reasons. The .mf is deliberately not published: it is a build-internal manifest and it
-            # lists the .img we do not upload.
-            V="${{ steps.v.outputs.version }}"
-            P="${{ matrix.product }}"
-            ASSETS="release/openccu-lite-$P-$V.cdx.json release/openccu-lite-$P-$V.cdx.json.sha256"
-            case "$P" in
-              # task 34: the CT templates are a .tar.xz named after the board (lxc-amd64,
-              # lxc-arm64), not the product, as board/lxc-lite/post-release.sh writes it
-              lxc-lite_*)   B="lxc-${P#lxc-lite_}"; ASSETS="$ASSETS release/openccu-lite-$B-$V.tar.xz release/openccu-lite-$B-$V.tar.xz.sha256" ;;
-              x86_64-ova)   ASSETS="$ASSETS release/openccu-lite-$P-$V.zip release/openccu-lite-$P-$V.zip.sha256 release/openccu-lite-$P-$V.ova release/openccu-lite-$P-$V.ova.sha256" ;;
-              aarch64-rpi3) ASSETS="$ASSETS release/openccu-lite-$P-$V.zip release/openccu-lite-$P-$V.zip.sha256 release/openccu-lite-$P-$V-ccu3.tgz release/openccu-lite-$P-$V-ccu3.tgz.sha256" ;;
-              *)            ASSETS="$ASSETS release/openccu-lite-$P-$V.zip release/openccu-lite-$P-$V.zip.sha256" ;;
-            esac
-            MISSING=0
-            for f in $ASSETS; do
-              if [ ! -f "$f" ]; then
-                echo "ERROR: expected release asset is missing: $f"
-                MISSING=1
-                continue
-              fi
-              curl -sf -X POST -H "Authorization: token ${{ secrets.RELEASE_TOKEN }}" -F "attachment=@$f" "$API/releases/$ID/assets?name=$(basename "$f")" > /dev/null && echo "uploaded $(basename "$f")"
-            done
-            # An asset that silently fails to appear is exactly what B-44 was; say so and fail.
-            [ "$MISSING" = 0 ] || exit 1
-          else
-            echo "no RELEASE_TOKEN or not a tag: assets stay in release/"
-          fi
-
-      # - name: Attest build provenance (GitHub only)
-      #   uses: actions/attest-build-provenance@v3
-      #   with:
-      #     subject-path: release/OpenCCU-${{ steps.v.outputs.version }}-${{ matrix.product }}.*
-
-  # task 179: the GPL/LGPL sources as one archive per release (the products' legal-info sources,
-  # merged by the build jobs above), attached like the other assets
-  sources:
-    needs: build
-    runs-on: buildroot
-    timeout-minutes: 120
-    steps:
-      - uses: actions/checkout@v5
-      - name: Pack and attach the sources
-        run: |
-          L=$(sed -n 's/^VERSION=//p' LITE-VERSION)
-          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then V="${GITHUB_REF#refs/tags/v}"; else V="$L.${{ github.event.inputs.build }}"; fi
-          D="${LITE_SOURCES_DIR:-/ssd/build/release-sources}/$V"
-          [ -d "$D" ] || { echo "no sources collected in $D"; exit 1; }
-          mkdir -p release
-          F="release/openccu-lite-$V-sources.tar"
-          # the tarballs inside are compressed already
-          tar -C "$D" -cf "$F" .
-          sha256sum "$F" > "$F.sha256"
-          ls -la "$F"
-          if [ -n "${{ secrets.RELEASE_TOKEN }}" ] && [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            API="${GITHUB_SERVER_URL}/api/v1/repos/${GITHUB_REPOSITORY}"
-            TAG="${GITHUB_REF#refs/tags/}"
-            ID=$(curl -sf -H "Authorization: token ${{ secrets.RELEASE_TOKEN }}" "$API/releases/tags/$TAG" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
-            for f in "$F" "$F.sha256"; do
-              curl -sf -X POST -H "Authorization: token ${{ secrets.RELEASE_TOKEN }}" -F "attachment=@$f" "$API/releases/$ID/assets?name=$(basename "$f")" > /dev/null && echo "uploaded $(basename "$f")" || { echo "ERROR: $(basename "$f") was not attached"; exit 1; }
-            done
-            rm -rf "$D"
-          else
-            echo "no RELEASE_TOKEN or not a tag: the archive stays in release/, the sources in $D"
-          fi
+          V="${GITHUB_REF#refs/tags/v}"
+          SHA="$(git rev-parse "${GITHUB_REF}^{commit}")"
+          # one release at a time, and never while a round script builds in the same trees
+          flock -w 3600 /ssd/build/.release.lock scripts/lite-release-github.sh "$V" "$SHA"

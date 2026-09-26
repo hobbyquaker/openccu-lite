@@ -1,0 +1,80 @@
+# openccu-lite: the fork's checks on GitHub-hosted runners, for every push to main and every pull
+# request. lite-only file, never part of an upstream PR.
+#
+# The shell tests of scripts/testcases run against stand-ins and need no build tree, so they run
+# on ubuntu-latest. The image build, its guards and the boot test run on the project's own build host
+# (lite-build.yml there, which is skipped on GitHub). No secrets, read-only: a pull request from a
+# fork runs this as it is.
+name: lite-check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lite-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq rsync openssl python3 shellcheck > /dev/null
+      - name: No roadmap ids in the lite overlays
+        run: |
+          sh scripts/testcases/lite-id-guard-test.sh
+          sh scripts/lite-id-guard.sh
+      - name: Upstream's shellcheck rules on the delta
+        run: sh scripts/lite-shellcheck.sh
+      - name: The journal is the one log
+        run: |
+          sh scripts/testcases/lite-log-guard-test.sh
+          sh scripts/testcases/hmipserver-log4j2-test.sh
+          sh scripts/testcases/lite-journal-persist-test.sh
+          sh scripts/testcases/lite-journal-sync-test.sh
+          sh scripts/testcases/lite-syslog-forward-test.sh
+          sh scripts/testcases/multimacd-loglevel-test.sh
+          sh scripts/testcases/lite-recovery-log-test.sh
+      - name: The out-of-tree modules carry the kernel's key
+        run: sh scripts/testcases/lite-module-sig-guard-test.sh
+      - name: The boot order and the boot path
+        run: |
+          sh scripts/testcases/lite-unit-order-test.sh
+          sh scripts/testcases/lite-network-reload-test.sh
+          sh scripts/testcases/occu-addons-generator-test.sh
+          sh scripts/testcases/lite-addon-own-test.sh
+          sh scripts/testcases/addon-rc-wrapper-test.sh
+          sh scripts/testcases/lite-addon-rc-test.sh
+          sh scripts/testcases/lite-init-addons-test.sh
+          sh scripts/testcases/lite-initscripts-test.sh
+          sh scripts/testcases/lite-boot-path-test.sh
+          sh scripts/testcases/lite-extension-dirs-test.sh
+          sh scripts/testcases/lite-machine-id-test.sh
+          sh scripts/testcases/lite-clock-save-test.sh
+          sh scripts/testcases/lite-chrony-test.sh
+          sh scripts/testcases/lite-dhcp6-test.sh
+          sh scripts/testcases/lite-usb-mount-test.sh
+          sh scripts/testcases/lite-classic-rpc-conf-test.sh
+      - name: The interface daemons run confined, the radio chain decides as the oracle says
+        run: |
+          sh scripts/testcases/lite-radio-confine-test.sh
+          sh scripts/testcases/lite-radio-oracle-test.sh
+      - name: The boot screen and the board LEDs
+        run: |
+          sh scripts/testcases/lite-boot-screen-test.sh
+          sh scripts/testcases/lite-board-leds-test.sh
+      - name: The overlays and the products
+        run: |
+          sh scripts/testcases/lite-overlay-prune-test.sh
+          sh scripts/testcases/lite-smartd-test.sh
