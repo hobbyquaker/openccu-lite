@@ -1,5 +1,7 @@
 # Switching between OpenCCU (or a CCU3) and openccu-lite
 
+*English — the German version is [switching.de.md](switching.de.md).*
+
 Going **to** openccu-lite is a supported operation. Coming **back** is done by restoring the
 backup you took before you left — not by flashing OpenCCU over lite and expecting your
 configuration to be there.

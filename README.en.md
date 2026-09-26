@@ -18,8 +18,7 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
   Pairings, keys and addons stay; the system takes over names, rooms and functions at its first start.
   Details in [switching.md](docs/switching.md).
 - **Switching from a CCU3:** upload `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` in the CCU3's firmware update.
-- **New install on a Raspberry Pi 3/4:** unpack the release `.zip` and write the `.img` inside it to the SD card with
-  Raspberry Pi Imager or balenaEtcher.
+- **New install on a Raspberry Pi 3/4:** unpack the release `.zip` and write the `.img` inside it to the SD card.
 - **New install as a VM:** import the `.ova` (Proxmox, VMware, VirtualBox and so on); the LXC container is described
   in [install-lxc.md](docs/install-lxc.md).
 
