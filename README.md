@@ -9,6 +9,20 @@
 > kennen (`rfd`, `hs485d`, der `hmipserver`, Funkmodule, das RPC-Protokoll, die Paramsets, ...).
 > Es gibt in openccu-lite keine ReGaHSS, keinen Programm-Editor und keine Homematic-Scripte.
 
+## Installation
+
+Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https://github.com/hobbyquaker/openccu-lite/releases).
+
+- **Wechsel von OpenCCU (Raspberry Pi oder VM):** erst ein Backup anlegen, dann in der OpenCCU-WebUI unter
+  Einstellungen → Systemsteuerung → Firmware-Update die `openccu-lite-<produkt>-<version>.zip` hochladen. Anlernungen,
+  Schlüssel und Addons bleiben; Namen, Räume und Gewerke übernimmt das System beim ersten Start.
+  Details in [switching.md](docs/switching.md).
+- **Wechsel von einer CCU3:** die `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` im Firmware-Update der CCU3 hochladen.
+- **Neuinstallation auf einem Raspberry Pi 3/4:** die `.zip` des Releases entpacken und die `.img` darin mit dem
+  Raspberry Pi Imager oder balenaEtcher auf die SD-Karte schreiben.
+- **Neuinstallation als VM:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.); den LXC-Container beschreibt
+  [install-lxc.md](docs/install-lxc.md).
+
 ## Dokumentation
 
 Englisch, in [`docs/`](docs/) dieses Repositorys: der Wechsel von und zu OpenCCU

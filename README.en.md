@@ -9,6 +9,20 @@
 > the inside (`rfd`, `hs485d`, the HmIP server, radio modules, the RPC protocol, the paramsets, ...).
 > There is no ReGaHSS, no programme editor and no Homematic scripts in openccu-lite.
 
+## Installation
+
+The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://github.com/hobbyquaker/openccu-lite/releases).
+
+- **Switching from OpenCCU (Raspberry Pi or VM):** take a backup first, then upload
+  `openccu-lite-<product>-<version>.zip` in the OpenCCU WebUI under Settings → Control panel → Firmware update.
+  Pairings, keys and addons stay; the system takes over names, rooms and functions at its first start.
+  Details in [switching.md](docs/switching.md).
+- **Switching from a CCU3:** upload `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` in the CCU3's firmware update.
+- **New install on a Raspberry Pi 3/4:** unpack the release `.zip` and write the `.img` inside it to the SD card with
+  Raspberry Pi Imager or balenaEtcher.
+- **New install as a VM:** import the `.ova` (Proxmox, VMware, VirtualBox and so on); the LXC container is described
+  in [install-lxc.md](docs/install-lxc.md).
+
 ## Documentation
 
 In [`docs/`](docs/) of this repository: moving from and to OpenCCU
