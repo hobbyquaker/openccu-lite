@@ -52,6 +52,35 @@ for cfg in "$EXT"/configs/*.config; do
 done
 [ "$lite" -ge 6 ] && ok "$lite lite products checked" || bad "only $lite lite products found"
 
+# ---- B-254: the slow-client and request-size limits the lite post-build sets on lighttpd.conf.
+# Apply the same sed edits to the shipped upstream lighttpd.conf and check the result, so a rebase
+# that moves or renames a line (the post-build would then exit 1) is caught here too.
+BASECONF="$EXT/overlay/base/etc/lighttpd/lighttpd.conf"
+PB="$EXT/board/lite/post-build.sh"
+if [ ! -f "$BASECONF" ]; then
+  bad "no base lighttpd.conf at $BASECONF"
+else
+  tmpc=$(mktemp)
+  cp "$BASECONF" "$tmpc"
+  # the upstream values the fix replaces must be there to replace
+  grep -q '^server\.max-read-idle[[:space:]]*=[[:space:]]*1200' "$tmpc" && ok "base lighttpd.conf has the 1200 s read idle to tighten" || bad "base lighttpd.conf: no server.max-read-idle = 1200 to replace (rebase?)"
+  grep -q '^server\.max-write-idle[[:space:]]*=[[:space:]]*1200' "$tmpc" && ok "base lighttpd.conf has the 1200 s write idle to tighten" || bad "base lighttpd.conf: no server.max-write-idle = 1200 to replace (rebase?)"
+  grep -q '^#server\.max-request-size[[:space:]]*=' "$tmpc" && ok "base lighttpd.conf has the commented max-request-size to enable" || bad "base lighttpd.conf: no #server.max-request-size to enable (rebase?)"
+  # the same edits the post-build makes
+  sed -i 's|^server\.max-read-idle[[:space:]]*=.*$|server.max-read-idle = 60|' "$tmpc"
+  sed -i 's|^server\.max-write-idle[[:space:]]*=.*$|server.max-write-idle = 360|' "$tmpc"
+  sed -i 's|^#server\.max-request-size[[:space:]]*=.*$|server.max-request-size = 2359296|' "$tmpc"
+  grep -q '^server\.max-read-idle = 60$' "$tmpc" && ok "read idle becomes 60 s" || bad "read idle not 60 s after the edit"
+  grep -q '^server\.max-write-idle = 360$' "$tmpc" && ok "write idle becomes 360 s" || bad "write idle not 360 s after the edit"
+  grep -q '^server\.max-request-size = 2359296$' "$tmpc" && ok "max-request-size becomes 2.25 GiB" || bad "max-request-size not set after the edit"
+  grep -q '=[[:space:]]*1200' "$tmpc" && bad "a 1200 s idle value is left in lighttpd.conf" || ok "no 1200 s idle value is left"
+  grep -q '^#server\.max-request-size' "$tmpc" && bad "the request-size limit is still commented out" || ok "the request-size limit is active"
+  # the shipped post-build sets exactly these values
+  grep -q 'max-read-idle:60' "$PB" && grep -q 'max-write-idle:360' "$PB" && ok "the post-build sets the two idle values" || bad "the post-build does not set the idle values"
+  grep -q 'server.max-request-size = 2359296' "$PB" && ok "the post-build sets the request-size limit" || bad "the post-build does not set the request-size limit"
+  rm -f "$tmpc"
+fi
+
 if [ -n "${SKIP_BUILD:-}" ]; then
   echo "skip the build part (SKIP_BUILD)"
 elif ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then

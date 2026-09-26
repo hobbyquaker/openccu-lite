@@ -155,6 +155,39 @@ elif ! grep -q '^server\.pid-file[[:space:]]*=[[:space:]]*"/run/lighttpd/lighttp
 	exit 1
 fi
 
+# Slow-client and request-size limits (B-254). Upstream's lighttpd.conf keeps a 1200 s read and
+# write idle and no request-size limit - values from a CCU where the ReGa's own behaviour dwarfed
+# them. On lite lighttpd is a thin proxy to occulited, which answers in milliseconds and pings its
+# long-lived streams every 15-30 s (the change stream, the RPC WebSocket, the log follow), so tight
+# idle limits cost nothing and close the Slowloris door: a client that opens a connection and then
+# sends or reads nothing is dropped in a minute, not twenty. lighttpd's own defaults (60 s read,
+# 360 s write) are used, well above the 30 s ping.
+#
+# server.max-request-size caps the request lighttpd buffers before the backend even sees it (it is
+# unset = unlimited upstream). It is a generous global backstop of 2.25 GiB - above the largest
+# upload (a 2 GiB backup plus multipart overhead) so no upload route breaks and no addon backend
+# under /addons/ is squeezed - while occulited enforces the tight per-endpoint caps (a 64 KiB JSON
+# cap, the staged uploads' own limits). The point here is only that "unlimited" is gone.
+#
+# These three lines are upstream's lighttpd.conf's own, so they are edited here rather than by a
+# copy of the whole file, and the build stops when one is gone, as for server.errorlog above.
+for lite_lighttpd_idle in max-read-idle:60 max-write-idle:360; do
+	lite_opt="server.${lite_lighttpd_idle%%:*}"
+	lite_val="${lite_lighttpd_idle##*:}"
+	if grep -q "^${lite_opt}[[:space:]]*=" "${LIGHTTPD_CONF}"; then
+		sed -i "s|^${lite_opt}[[:space:]]*=.*\$|${lite_opt} = ${lite_val}|" "${LIGHTTPD_CONF}"
+	else
+		echo "post-build (lite): no ${lite_opt} line to set in ${LIGHTTPD_CONF}" >&2
+		exit 1
+	fi
+done
+if grep -q '^#server\.max-request-size[[:space:]]*=' "${LIGHTTPD_CONF}"; then
+	sed -i 's|^#server\.max-request-size[[:space:]]*=.*$|server.max-request-size = 2359296|' "${LIGHTTPD_CONF}"
+elif ! grep -q '^server\.max-request-size[[:space:]]*=[[:space:]]*2359296' "${LIGHTTPD_CONF}"; then
+	echo "post-build (lite): no #server.max-request-size line to set in ${LIGHTTPD_CONF}" >&2
+	exit 1
+fi
+
 # No mod_cgi on a lite image: the addons' CGIs run through occulited (conf.d/occulited.conf proxies
 # all of /addons/ to it), the lite modules.conf loads neither the module nor conf.d/cgi.conf, and
 # the base overlay's cgi.conf (".cgi" to tclsh, X-Sendfile from /usr/local/tmp) would only be a
