@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
+  openccu-lite: modified from eQ-3's original; the original and this modification are under the Homematic Software License (HMSL) 2.0, see NOTICE.md.
+
   openccu-lite: hmipserver logs to the journal. S62HMServer copies this template to
   /var/etc/log4j2.xml at every start and sets every level attribute from LOGLEVEL_HMIP
   (the Log page's level setting). There is no file appender and no syslog appender: the only
