@@ -175,8 +175,23 @@ guest_open() {
   guest 'export SYSTEMD_PAGER=cat PAGER=cat SYSTEMD_COLORS=0 TERM=dumb' >/dev/null
   # HTTP answers long before the boot is over (occulited is Before=lighttpd, the addons and the
   # end-of-boot units come after); every check below assumes a finished boot, so wait for it -
-  # "degraded" counts, psplash-start fails here (see above)
-  guest 'for i in $(seq 1 90); do s=$(systemctl is-system-running 2>/dev/null); case "$s" in starting|initializing) sleep 2;; *) break;; esac; done; echo "system: $s after ${i}x2s"'
+  # "degraded" counts, psplash-start fails here (see above). Up to 8 minutes: hmipserver's JVM
+  # under TCG on a loaded runner has taken more than 6 (2026-09-25, load 5 on 8 cores) and its unit
+  # allows 7 (TimeoutStartSec=420); a settled boot leaves the loop at once
+  guest 'for i in $(seq 1 240); do s=$(systemctl is-system-running 2>/dev/null); case "$s" in starting|initializing) sleep 2;; *) break;; esac; done; echo "system: $s after ${i}x2s"'
+}
+
+# boot_checks: the boot settled (running or degraded - psplash-start fails here, see above), and no
+# unit failed but the two allowed. A boot that is still "starting" after guest_open's 180 s wait,
+# or a failed unit, fails the test - both were printed and passed over before (the second boot of
+# 1.0.0-dev.24 and dev.25 sat in "starting" for the whole wait with a failed
+# occu-lgw-firmware-update, and the run said OK). What the failed units said is printed: without
+# it a failed unit in a VM that is gone a minute later is a name and nothing else.
+boot_checks() {
+  R=$(guest 'systemctl is-system-running'); case "$R" in *'| running'*|*'| degraded'*) ;; *) fail "$1 did not settle: $R"
+    guest 'systemctl list-units --state=activating,deactivating,failed --no-legend --plain --no-pager; systemctl list-jobs --no-legend --no-pager | head -20';; esac
+  R=$(guest 'systemctl --failed --no-legend --plain --no-pager | grep -v "^psplash-start.service \|^occu-interface-clock.service " | wc -l'); case "$R" in *'| 0'*) ;; *) fail "$1: failed units (see above)"
+    guest 'for u in $(systemctl --failed --no-legend --plain --no-pager | cut -d" " -f1); do echo "== $u"; systemctl show -p Result,ExecMainCode,ExecMainStatus "$u"; journalctl -b -u "$u" --no-pager -n 15 -o cat; systemctl status "$u" --no-pager -n 15 | tail -n 15; done';; esac
 }
 
 guest_close() {
@@ -222,7 +237,7 @@ boot() {
 
 wait_http() {
   T0=$(date +%s)
-  for i in $(seq 1 180); do
+  for _ in $(seq 1 180); do
     H=$(curl -s --max-time 3 "http://127.0.0.1:$PORT/api/system/v1/health" 2>/dev/null)
     case "$H" in *'"ok":true'*) break;; esac
     sleep 5
@@ -254,9 +269,7 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # skipped without rfd since task 129 (B-142); its old failure stays tolerated for older images.
   # --no-pager: systemctl pages on the debug shell's tty and the listing came out as escape codes.
   say "guest: system state"; guest 'systemctl is-system-running; systemctl --failed --no-legend --plain --no-pager'
-  R=$(guest 'systemctl --failed --no-legend --plain --no-pager | grep -v "^psplash-start.service \|^occu-interface-clock.service " | wc -l'); case "$R" in *'| 0'*) ;; *) fail "failed units (see above)"
-    # what they said: without it a failed unit in a VM that is gone a minute later is a name and nothing else
-    guest 'for u in $(systemctl --failed --no-legend --plain --no-pager | cut -d" " -f1); do echo "== $u"; systemctl show -p Result,ExecMainCode,ExecMainStatus "$u"; journalctl -b -u "$u" --no-pager -n 15 -o cat; systemctl status "$u" --no-pager -n 15 | tail -n 15; done';; esac
+  boot_checks "boot 1"
   say "guest: boot time"; guest 'journalctl -b --no-pager -o short-monotonic | grep -m1 "Startup finished"; journalctl -b -u occu-leds.service --no-pager -o short-monotonic | grep -m1 "booted, OK"'
   say "guest: the lite units"; guest 'systemctl list-units --all --no-legend --plain "occu-*" "addon*" addons.target occulited.service lighttpd.service chrony.service sshd.service hs485d.service multimacd.service rfd.service hmipserver.service crond.service ca-certificates.service qemu-guest-agent.service'
   say "guest: timers"; guest 'systemctl list-timers --all --no-legend --plain "occu-*"'
@@ -292,6 +305,71 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # override on hmipserver (the one interface daemon that runs on a VM without radio: its
   # VirtualDevices half; rfd is skipped by its marker condition since task 129) and a switch-off of
   # crond the way occulited writes them; boot 2 checks.
+  # task 14: the addon install e2e - the D-19 set from the catalogue (homematic-manager, RedMatic,
+  # ccu-addon-mosquitto, hm2mqtt.js), each installed through the API as the Addons page does, its
+  # unit active, the rc.d script's info, the session gate on its pages (a browser without a session
+  # is sent to the login, one with the session gets through), uninstalled, and nothing left behind.
+  # The guest reaches GitHub through QEMU's user network; a set that cannot be fetched fails the
+  # run - that is the verdict the catalogue's flags rest on. LITE_QEMU_ADDONS="" skips the phase,
+  # LITE_QEMU_ADDONS="mosquitto" narrows it. The synthetic litetest addon above stays the control.
+  ADDONS=${LITE_QEMU_ADDONS-mosquitto hm2mqtt hmm redmatic}
+  if [ -n "$ADDONS" ] && [ "$FAILED" = 0 ]; then
+    BASE="http://127.0.0.1:$PORT"
+    say "addons: the first account and a session"
+    curl -s --max-time 10 -X POST -H 'Content-Type: application/json' -d '{"username":"litetest","password":"lite-qemu-test-2026"}' "$BASE/api/auth/v1/setup" >"$WORK/setup.json"
+    SID=$(sed -n 's/.*"sid":"\([^"]*\)".*/\1/p' "$WORK/setup.json")
+    [ -n "$SID" ] || fail "no session from the first account's setup: $(cat "$WORK/setup.json")"
+    AUTH="Authorization: Bearer $SID"
+    code=$(curl -s -o "$WORK/refresh.json" -w '%{http_code}' --max-time 300 -X POST -H "$AUTH" "$BASE/api/system/v1/catalog/refresh"); say "addons: catalogue refresh -> $code"
+    [ "$code" = 200 ] || fail "the catalogue could not be refreshed (GitHub not reachable from the guest?): $(cat "$WORK/refresh.json")"
+    # the refresh answers 200 with per-entry errors kept inside (a manifest that could not be
+    # fetched - GitHub's unauthenticated API limit is 60 calls an hour per address, and four runs
+    # in an hour from one runner reached it on 2026-09-26); an addon without its manifest is
+    # "unknown" to the install, so check the catalogue first and say why an entry is missing
+    curl -s --max-time 30 -H "$AUTH" "$BASE/api/system/v1/catalog" >"$WORK/catalog.json"
+    for id in $ADDONS; do
+      grep -q "\"id\":\"$id\"" "$WORK/catalog.json" || fail "$id is not in the catalogue after the refresh; the entries' errors: $(grep -o '"error":"[^"]*"' "$WORK/catalog.json" | sort -u | tr '\n' ' ' | cut -c1-600)"
+    done
+    for id in $ADDONS; do
+      [ "$FAILED" = 0 ] || break
+      say "addons: installing $id from the catalogue"
+      T0=$(date +%s)
+      code=$(curl -s -o "$WORK/install.json" -w '%{http_code}' --max-time 30 -X POST -H "$AUTH" -H 'Content-Type: application/json' -d '{}' "$BASE/api/system/v1/catalog/$id/install")
+      [ "$code" = 202 ] || { fail "install of $id not accepted ($code): $(cat "$WORK/install.json")"; continue; }
+      P=""
+      for _ in $(seq 1 300); do
+        P=$(curl -s --max-time 10 -H "$AUTH" "$BASE/api/system/v1/catalog/progress")
+        case "$P" in *'"phase":"done"'*|*'"phase":"failed"'*) break;; esac
+        sleep 5
+      done
+      say "addons: $id after $(( $(date +%s) - T0 )) s: $(printf '%s' "$P" | sed 's/"result":{.*//' | cut -c1-300)"
+      case "$P" in *'"phase":"done"'*) ;; *) fail "$id did not install: $(printf '%s' "$P" | cut -c1-400)"; continue;; esac
+      A=$(curl -s --max-time 30 -H "$AUTH" "$BASE/api/system/v1/addons")
+      case "$A" in *"\"id\":\"$id\""*) ;; *) fail "$id is not in the addon list after the install";; esac
+      R=$(guest "sleep 5; systemctl is-active addon-$id.service; systemctl show -p Result --value addon-$id.service"); case "$R" in *'| active'*) ;; *) fail "addon-$id.service is not active after the install: $R";; esac
+      say "addons: $id info"; guest "/usr/local/etc/config/rc.d/$id info 2>&1 | head -4"
+      code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Accept: text/html' "$BASE/addons/$id/"); say "addons: /addons/$id/ without a session -> $code"
+      [ "$code" = 302 ] || fail "the gate let a browser without a session at /addons/$id/ ($code)"
+      code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -H 'Accept: text/html' -b "occulite_session=$SID" "$BASE/addons/$id/"); say "addons: /addons/$id/ with the session -> $code"
+      case "$code" in 302|401|403) fail "the gate refused the session at /addons/$id/ ($code)";; esac
+      say "addons: uninstalling $id"
+      code=$(curl -s -o "$WORK/uninstall.json" -w '%{http_code}' --max-time 300 -X POST -H "$AUTH" "$BASE/api/system/v1/addons/$id/uninstall")
+      [ "$code" = 200 ] || fail "uninstall of $id answered $code: $(cat "$WORK/uninstall.json" | cut -c1-300)"
+      # what the uninstall must leave: no tree, no rc.d script, no www or config directory, no
+      # hm_addons.cfg line, and no unit - the unit goes when its process has stopped and the
+      # generator has reloaded, which takes RedMatic (Node-RED) a good many seconds, so poll for it.
+      # The marker is built in the guest: the guest echoes the command line back, and a literal
+      # "LEFTOVER:" in it would match its own echo.
+      R=$(guest "m=LEFT; m=\"\${m}OVER\"; for i in \$(seq 1 30); do n=\$(systemctl list-units --all --plain --no-legend addon-$id.service | wc -l); [ \"\$n\" = 0 ] && break; sleep 2; done; for p in /usr/local/addons/$id /usr/local/etc/config/rc.d/$id /usr/local/etc/config/addons/www/$id /usr/local/etc/config/addons/$id; do [ -e \$p ] && echo \"\$m: \$p\"; done; grep -c '^$id ' /usr/local/etc/config/hm_addons.cfg 2>/dev/null; echo \"unit \$n after \$i\"; [ \"\$n\" = 0 ] || systemctl status addon-$id.service --no-pager -n5 2>&1 | head -12; echo checked")
+      case "$R" in *'LEFTOVER:'*) fail "$id left files behind: $R";; esac
+      case "$R" in *'| 0'*'| unit 0 after'*'| checked'*) ;; *) fail "$id is still in hm_addons.cfg or its unit is still known: $R";; esac
+      A=$(curl -s --max-time 30 -H "$AUTH" "$BASE/api/system/v1/addons")
+      case "$A" in *"\"id\":\"$id\""*) fail "$id is still in the addon list after the uninstall";; esac
+    done
+  else
+    say "addons: the install e2e is skipped (LITE_QEMU_ADDONS empty or an earlier failure)"
+  fi
+
   say "guest: seeding a unit override and a switched-off unit for boot 2"; guest 'mkdir -p /usr/local/etc/occulite/unit-overrides && printf "[Service]\nEnvironment=OCCULITE_TEST=boot\n" >/usr/local/etc/occulite/unit-overrides/hmipserver.service.conf && printf "{\"masked\":[\"crond.service\"]}\n" >/usr/local/etc/occulite/unit-switch.json && ls -l /usr/local/etc/occulite/unit-overrides /usr/local/etc/occulite/unit-switch.json'
   # task 129 (D-82, D-97), the switch guarantee: a userfs as a CCU3 or OpenCCU leaves it - an
   # rfd.conf with a BidCos LAN gateway (unreachable here) and an InterfacesList.xml with an entry
@@ -299,12 +377,16 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # gateway alone (its local section off, no module), the interface list is the template's cut
   # for the hardware (BidCos-RF for the gateway, no HmIP-RF, the foreign entry lost as on OpenCCU).
   say "guest: seeding an OpenCCU-shaped userfs for boot 2 (a LAN gateway in rfd.conf, a foreign interface entry)"
-  guest 'cp /usr/local/etc/config/rfd.conf /usr/local/etc/config/rfd.conf.lite-qemu-test 2>/dev/null; cp /etc/config_templates/rfd.conf /usr/local/etc/config/rfd.conf && printf "\n[Interface 1]\nType = HMLGW2\nSerial Number = KEQ0123456\nEncryption Key = 00000000000000000000000000000000\nIP Address = 192.0.2.1\n\n" >>/usr/local/etc/config/rfd.conf && { grep -v "</interfaces>" /etc/config_templates/InterfacesList.xml; printf "\t<ipc>\n\t \t<name>CCU-Jack</name>\n\t \t<url>xmlrpc://127.0.0.1:2121/RPC3</url> \n\t \t<info>CCU-Jack</info> \n\t</ipc>\n</interfaces>\n"; } >/usr/local/etc/config/InterfacesList.xml && grep -c Interface /usr/local/etc/config/rfd.conf && grep -c "<name>" /usr/local/etc/config/InterfacesList.xml'
+  # The seeded LAN gateway must stay silent (B-229's skip): QEMU's user-mode network answers every
+  # ICMP echo it routes through its gateway, a documentation address included (seen on the 1.0.0-dev.26
+  # image: 192.0.2.1 "answered", so the firmware step ran into eq3configcmd's timeouts). An unused address
+  # on the guest's own link gets no ARP answer, so its ping fails as an unplugged gateway's would.
+  guest 'cp /usr/local/etc/config/rfd.conf /usr/local/etc/config/rfd.conf.lite-qemu-test 2>/dev/null; cp /etc/config_templates/rfd.conf /usr/local/etc/config/rfd.conf && printf "\n[Interface 1]\nType = HMLGW2\nSerial Number = KEQ0123456\nEncryption Key = 00000000000000000000000000000000\nIP Address = 10.0.2.200\n\n" >>/usr/local/etc/config/rfd.conf && { grep -v "</interfaces>" /etc/config_templates/InterfacesList.xml; printf "\t<ipc>\n\t \t<name>CCU-Jack</name>\n\t \t<url>xmlrpc://127.0.0.1:2121/RPC3</url> \n\t \t<info>CCU-Jack</info> \n\t</ipc>\n</interfaces>\n"; } >/usr/local/etc/config/InterfacesList.xml && grep -c Interface /usr/local/etc/config/rfd.conf && grep -c "<name>" /usr/local/etc/config/InterfacesList.xml'
   say "guest: rebooting"; guest 'systemctl --no-block reboot' >/dev/null
   # the shell on the other side dies with the reboot: end the driver, the next guest call reopens
   guest_close
   # the VM reboots in place (-kernel boots are not -no-reboot); wait until the endpoint is gone
-  for i in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     curl -s --max-time 2 "http://127.0.0.1:$PORT/api/system/v1/health" >/dev/null 2>&1 || break
     sleep 2
   done
@@ -312,6 +394,10 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   guest_open # again in this shell, not in the first $( ) that follows
   say "guest (boot 2): the addon unit came back from the generator at boot, the journal remembers boot 1"
   guest 'systemctl is-system-running; systemctl --failed --no-legend --plain --no-pager; systemctl status addon-litetest.service --no-pager -n0 | sed -n 1,8p; journalctl --list-boots --no-pager; cat /etc/machine-id; cat /usr/local/etc/machine-id; journalctl -b --no-pager -o short-monotonic | grep -m1 "Startup finished"'
+  boot_checks "boot 2"
+  # the seeded gateway is a documentation address nobody answers: the firmware update skips it with
+  # a line, a success - it used to run eq3configcmd into three timeouts and fail the unit
+  R=$(guest 'systemctl show -p Result --value occu-lgw-firmware-update.service; journalctl -b -u occu-lgw-firmware-update.service --no-pager -o cat | grep -c "no RF LAN gateway answers (10.0.2.200)"'); case "$R" in *'| success'*'| 1'*) ;; *) fail "occu-lgw-firmware-update did not skip the silent gateway as a success: $R";; esac
   R=$(guest 'systemctl is-active addon-litetest.service'); case "$R" in *'| active'*) ;; *) fail "addon-litetest.service not active after the reboot";; esac
   # counted by their rows: systemd 257 prints a header line above them
   R=$(guest 'journalctl --list-boots --no-pager | grep -cE "^ *-?[0-9]+ [0-9a-f]{32} "'); case "$R" in *'| 2'*) ;; *) fail "expected two boots in the persistent journal";; esac
@@ -347,4 +433,7 @@ fi
 
 kill "$(cat "$WORK/qemu.pid")" 2>/dev/null; sleep 1
 if [ "$FAILED" = 0 ]; then rm -rf "$WORK"; say "OK"; exit 0; fi
+# the disk copy goes even on a failure: $WORK is usually on a tmpfs, and each kept copy held up to
+# 1.5 GB of the build host's memory until later runs were ended by the OOM killer (dev.26's round)
+rm -f "$WORK/disk.img" "$WORK/zImage"
 say "last serial output:"; tail -n 60 "$WORK/serial.log" 2>/dev/null | sed 's/^/  | /'; say "serial log kept at $WORK/serial.log"; exit 1
