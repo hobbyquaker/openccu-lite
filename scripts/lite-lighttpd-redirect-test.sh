@@ -64,7 +64,6 @@ cp /src/occulited/occulited.conf /etc/lighttpd/conf.d/occulited.conf
 cp /src/occulited/occulite-gate.lua /etc/lighttpd/occulite-gate.lua
 [ ! -f /src/occulited/occulite-starting.lua ] || cp /src/occulited/occulite-starting.lua /etc/lighttpd/occulite-starting.lua
 [ ! -f /src/occulited/occulite-starting.html ] || cp /src/occulited/occulite-starting.html /etc/lighttpd/occulite-starting.html
-sed -i '/mod_authn_rega/d' /etc/lighttpd/modules.conf # the CCU's ReGa authentication, not in Alpine
 cp /src/overlay/base/etc/init.d/S50lighttpd /etc/init.d/S50lighttpd
 chmod +x /etc/init.d/S50lighttpd
 # lighttpd-prepare.service's steps run through their unit-file names: the script under its .script
