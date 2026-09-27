@@ -101,9 +101,23 @@ sed 's|.*/|  |' "$STAGE/assets"
 
 # ---- GitHub ---------------------------------------------------------------------------------------
 api() { # method path [curl args...] -> body on stdout, fails on HTTP >= 400
-  local m="$1" p="$2"; shift 2
-  curl -sS --fail-with-body -X "$m" -H "Authorization: Bearer $GH_TOKEN" \
-    -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$@" "$GH_API$p"
+  # on an error GitHub's own message goes to stderr (never the token), so a 403 says why
+  local m="$1" p="$2" out rc; shift 2
+  out=$(curl -sS --fail-with-body -X "$m" -H "Authorization: Bearer $GH_TOKEN" \
+    -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28" "$@" "$GH_API$p") && rc=0 || rc=$?
+  if [ "$rc" != 0 ]; then
+    printf '%s' "$out" | python3 -c '
+import json, sys
+raw = sys.stdin.read()
+try:
+    d = json.loads(raw); msg = d.get("message", ""); doc = d.get("documentation_url", ""); errs = d.get("errors", "")
+except Exception:
+    msg, doc, errs = raw[:300], "", ""
+print("lite-release-github: GitHub " + sys.argv[1] + " " + sys.argv[2] + ": " + str(msg) + (" " + str(errs) if errs else "") + (" (" + doc + ")" if doc else ""), file=sys.stderr)
+' "$m" "$p"
+    return "$rc"
+  fi
+  printf '%s' "$out"
 }
 [ -n "${GH_TOKEN:-}" ] || { [ "$dry" = 1 ] && { say "dry run without GH_TOKEN: GitHub not asked"; exit 0; }; fail "GH_TOKEN is not set"; }
 
@@ -142,7 +156,8 @@ openccu-lite $V: a Homematic CCU firmware without ReGaHSS, built on OpenCCU $BAS
 EOF
 )
   req=$(python3 -c 'import json,sys; print(json.dumps({"tag_name":sys.argv[1],"target_commitish":sys.argv[2],"name":"openccu-lite "+sys.argv[3],"body":sys.argv[4],"draft":True,"prerelease":sys.argv[5]=="true","generate_release_notes":True}))' "$TAG" "$SHA" "$V" "$body" "$PRE")
-  ID=$(api POST "/repos/$GH_REPO/releases" -H 'Content-Type: application/json' -d "$req" | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+  resp=$(api POST "/repos/$GH_REPO/releases" -H 'Content-Type: application/json' -d "$req") || fail "GitHub refused to create the draft $TAG (see its message above)"
+  ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$resp")
   say "draft $TAG created: release $ID"
 fi
 
