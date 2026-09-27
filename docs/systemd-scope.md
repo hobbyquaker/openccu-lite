@@ -366,6 +366,27 @@ incident (systemd resets the interval once the unit has been running). `TimeoutS
 value the script needs (420 s for HMServer's `HMServerStarted` wait, 300 s for chrony's ntpdate,
 180 s for sshd's key generation) and `TimeoutStopSec` is bounded everywhere.
 
+**A crash loop is reported, not hidden by the backoff** (task 283). A unit that fails at every
+start never reaches the failed state under this policy; it retries every five minutes for good.
+occulited samples the core units' `NRestarts` every 15 s: a unit that restarted three times within
+ten minutes and has not stayed active for 120 s since is the Status page's `crash-loop` warning
+(an error, naming the units, linking the Services page) and the status LED's `service-failed`
+state; both clear once the unit has stayed up. occulited cannot report its own loop while it loops,
+so `occulited.service` keeps a small state file for lighttpd: its `ExecStartPre=`, `ExecStartPost=`
+and `ExecStopPost=` run `/usr/libexec/occulited/unit-state` as root (`-+`), which writes
+`/run/occulite/occulited-state.json` - starting, restarting after a failure, a crash loop (three
+failures in a row, each within 120 s of its start), stopped on purpose, the system going down,
+with the restart count and the next attempt. lighttpd's waiting page shows which case it is
+(German and English, with the journal command and the recovery hint for a loop), and occulited,
+once back, shows the `occulited-crash-loop` warning for a day.
+
+**Addon daemons** keep the CCU's rc.d ABI: the generated unit stays `Type=oneshot` around the
+script's `start`. For an addon whose manifest declares `runtime.daemon: true`, occulited supervises
+the daemon instead: when the unit is active with an empty cgroup (the daemon ended), occulited
+restarts the unit - the script's `stop`, then `start` - after 2 s doubling to 300 s, and three
+such restarts within fifteen minutes are the same `crash-loop` warning. A unit the user stopped is
+left alone; an addon without the declaration keeps the `addon-ended` warning only.
+
 ### The init-script wrapper
 
 Addons and people do call the init scripts by hand — RedMatic's uninstall runs

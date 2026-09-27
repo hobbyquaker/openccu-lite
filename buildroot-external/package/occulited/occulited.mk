@@ -51,7 +51,18 @@ define OCCULITED_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0644 $(@D)/deploy/lighttpd/occulite-gate.lua $(TARGET_DIR)/etc/lighttpd/occulite-gate.lua
 	$(INSTALL) -D -m 0644 $(@D)/deploy/lighttpd/occulite-starting.lua $(TARGET_DIR)/etc/lighttpd/occulite-starting.lua
 	$(INSTALL) -D -m 0644 $(@D)/deploy/lighttpd/occulite-starting.html $(TARGET_DIR)/etc/lighttpd/occulite-starting.html
+	$(OCCULITED_INSTALL_UNIT_STATE)
 	$(OCCULITED_INSTALL_CATALOG)
+endef
+
+# task 283: the script occulited.service's hooks run as root to keep the waiting page's state file
+# (/run/occulite/occulited-state.json). The guard is for a pin older than the occulited commit
+# that added it: that archive's unit does not call it either (its "-" prefix would skip a missing
+# script anyway).
+define OCCULITED_INSTALL_UNIT_STATE
+	if [ -f $(@D)/deploy/systemd/occulited-unit-state ]; then \
+		$(INSTALL) -D -m 0755 $(@D)/deploy/systemd/occulited-unit-state $(TARGET_DIR)/usr/libexec/occulited/unit-state; \
+	fi
 endef
 
 # The catalogue from the same archive as the binary. The guard is for a pin older than the
