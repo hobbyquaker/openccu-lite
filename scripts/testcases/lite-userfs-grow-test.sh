@@ -12,7 +12,8 @@
 #     the reason of a failure in the saved log, and a reboot into the normal system;
 #   - the growth branch itself runs against a loop-device image inside a privileged container
 #     (lite-userfs-grow-inner.sh): fresh growth, the retry, nothing to grow, preen's refusal,
-#     a busy userfs. Skipped with a note when docker is not available.
+#     a busy userfs. Skipped with a note when docker or the host's loop devices are not
+#     available (an unprivileged container as the CI runner has no /dev/loop-control).
 #
 # Usage: sh scripts/testcases/lite-userfs-grow-test.sh    (from the fork's checkout)
 #        LITE_GROW_NO_DOCKER=1 skips the container part.
@@ -71,6 +72,8 @@ if [ "${LITE_GROW_NO_DOCKER:-0}" = 1 ]; then
   echo "skip the container part (LITE_GROW_NO_DOCKER=1)"
 elif ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   echo "skip the container part: docker is not available"
+elif [ ! -e /dev/loop-control ]; then
+  echo "skip the container part: no loop devices on this host (/dev/loop-control)"
 else
   name="lite-grow-$$"
   # privileged for losetup, mount and partprobe; /dev of the host so the partition nodes appear;

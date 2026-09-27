@@ -28,6 +28,10 @@ jobs:
           echo "runner: $(hostname), $(nproc) cores, $(free -h | awk '/^Mem/{print $2}') RAM"
           df -h /ssd /srv
           make help | head -3
+      - name: Every check GitHub runs runs here too
+        # lite-check.yml's tests on GitHub-hosted runners are a subset of this job, so a push that is
+        # green here is green there; the publishing script pushes nothing whose check here is not green
+        run: sh scripts/testcases/lite-ci-parity-test.sh
       - name: No roadmap ids in the lite overlays
         # units and drop-ins are what `systemctl cat` shows in the unit editor, script output is the
         # Log page: neither may cite task, decision or bug ids (docs/systemd-scope.md); the guard's
@@ -54,10 +58,13 @@ jobs:
           sh scripts/testcases/lite-journal-sync-test.sh
           sh scripts/testcases/lite-syslog-forward-test.sh
           sh scripts/testcases/multimacd-loglevel-test.sh
+          sh scripts/testcases/lite-recovery-log-test.sh
       - name: The out-of-tree modules carry the kernel's key
         # the guard the lite post-build runs on the image: an updates/ module signed with another key
         # than the kernel's is refused at boot (CONFIG_MODULE_SIG_FORCE), the radio drivers first
         run: sh scripts/testcases/lite-module-sig-guard-test.sh
+      - name: The binaries carry the build's hardening flags
+        run: sh scripts/testcases/lite-hardening-guard-test.sh
       - name: The boot order is a dependency graph
         # the units' After= edges against the intended graph (no serial SysV chain coming back, no
         # cycle), /var/run a link before any early writer (usbmount's lock under /run, tmpfiles L+),
@@ -74,9 +81,17 @@ jobs:
           sh scripts/testcases/occu-addons-generator-test.sh
           sh scripts/testcases/lite-addon-own-test.sh
           sh scripts/testcases/addon-rc-wrapper-test.sh
+          sh scripts/testcases/lite-addon-rc-test.sh
           sh scripts/testcases/lite-init-addons-test.sh
+          sh scripts/testcases/lite-initscripts-test.sh
           sh scripts/testcases/lite-boot-path-test.sh
           sh scripts/testcases/lite-extension-dirs-test.sh
+          sh scripts/testcases/lite-machine-id-test.sh
+          sh scripts/testcases/lite-clock-save-test.sh
+          sh scripts/testcases/lite-chrony-test.sh
+          sh scripts/testcases/lite-dhcp6-test.sh
+          sh scripts/testcases/lite-usb-mount-test.sh
+          sh scripts/testcases/lite-classic-rpc-conf-test.sh
       - name: The interface daemons run confined
         # the users table, the udev rules and the tmpfiles line, every daemon unit's user and
         # sandbox with the device drop-in and its marker condition, occulited's root steps in the
@@ -107,6 +122,10 @@ jobs:
         # loses the daemon, its unit, its drop-in and its enable link; a VM loses what an earlier
         # build left; a smartd the step does not know stops the build
         run: sh scripts/testcases/lite-smartd-test.sh
+      - name: The recovery grows the userfs
+        # the static checks of fwinstall.sh and S90AutoUpdate; the loop-device part needs /dev/loop-control,
+        # which this runner's container has not, so it runs on GitHub's runners and on a workstation only
+        run: sh scripts/testcases/lite-userfs-grow-test.sh
       - name: The lighttpd redirects and the session gate, on a real lighttpd
         # the base and lite overlays' lighttpd configuration with occulited's fragment and gate, parsed
         # and driven by curl in an Alpine container (docker, apk over the network): the HTTP -> HTTPS
@@ -118,7 +137,14 @@ jobs:
           repo=$(sed -n 's/^OCCULITED_SITE *= *$(call github,\([^,]*\),\([^,]*\),.*/\1\/\2/p' buildroot-external/package/occulited/occulited.mk)
           test -n "$rev" && test -n "$repo"
           rm -rf /tmp/occulited-pin && mkdir -p /tmp/occulited-pin/occulited
-          curl -sSfL "https://github.com/$repo/archive/$rev.tar.gz" | tar -xz --strip-components=1 -C /tmp/occulited-pin/occulited
+          # the pin's source archive as the image build seeds it (a commit this forge has and GitHub
+          # may not have yet), else GitHub's
+          seed="/mnt/download/occulited/occulited-$rev-go2.tar.gz"
+          if [ -r "$seed" ]; then
+            tar -xzf "$seed" --strip-components=1 -C /tmp/occulited-pin/occulited
+          else
+            curl -sSfL "https://github.com/$repo/archive/$rev.tar.gz" | tar -xz --strip-components=1 -C /tmp/occulited-pin/occulited
+          fi
           bash scripts/lite-lighttpd-redirect-test.sh /tmp/occulited-pin/occulited
       - name: A POST without a body reaches the API and the addons
         # every lite product takes board/lite/patches, and lighttpd of the pinned version, built in an

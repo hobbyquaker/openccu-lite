@@ -60,6 +60,19 @@ fs_bytes() { tune2fs -l "$DEV" 2>/dev/null | awk -F: '/^Block count:/ {c=$2} /^B
 part_end_sector() { sfdisk -d "$LOOP" | awk -v p="$DEV" '$1==p { for(i=1;i<=NF;i++){ if($i=="start=") s=$(i+1); if($i=="size=") z=$(i+1) } gsub(/,/,"",s); gsub(/,/,"",z); print s+z }'; }
 run_fn() { bash -c ". '$FN'; expand_userfs_to_max; rc=\$?; echo; echo rc=\$rc" 2>&1; }
 MiB=$((1024*1024))
+# Every case after the first starts from the same state: the userfs unmounted, checked and shrunk
+# back to 32 MiB inside a partition that reaches the disk end, then mounted read-only again.
+# resize2fs refuses to shrink a filesystem mounted since its last check ("Please run 'e2fsck -f'
+# first") - whether that holds depends on the seconds between the previous case's fsck and its
+# mount, so the check always comes first here. A case whose setup fails is skipped: its checks
+# would only report the setup again.
+shrink_userfs() { # $1 = case
+  if grep -q " /userfs " /proc/mounts && ! umount /userfs; then bad "$1 setup: umount /userfs"; return 1; fi
+  e2fsck -fy "$DEV" >/tmp/setup.log 2>&1
+  [ $? -le 1 ] || { bad "$1 setup: e2fsck -fy: $(tr '\n' ';' </tmp/setup.log)"; return 1; }
+  resize2fs "$DEV" 32M >/tmp/setup.log 2>&1 || { bad "$1 setup: resize2fs shrink: $(tr '\n' ';' </tmp/setup.log)"; return 1; }
+  [ "$(fs_bytes)" -eq $((32*MiB)) ] || { bad "$1 setup: filesystem $(fs_bytes) after the shrink"; return 1; }
+}
 DISK_SECTORS=$(( $(disk_bytes) / 512 ))
 
 # --- 1: the partition has free space behind it: resizepart, fsck, resize2fs -------------------------
@@ -77,11 +90,10 @@ sig=$(dd if="$LOOP" bs=1 skip=440 count=4 2>/dev/null | od -An -tx1 | tr -d ' \n
 [ "$sig" = "efbeedde" ] && ok "1 MBR disk signature 0xdeedbeef" || bad "1 MBR disk signature is $sig"
 
 # --- 2: the retry after a run cut short: partition at the disk end, filesystem still small ----------
-umount /userfs || bad "2 umount"
-e2fsck -fy "$DEV" >/dev/null 2>&1
-resize2fs "$DEV" 32M >/dev/null 2>&1 || bad "2 resize2fs shrink"
-mount /userfs || bad "2 mount ro"
-f2=$(fs_bytes); [ "$f2" -eq $((32*MiB)) ] && ok "2 setup: filesystem shrunk to 32 MiB, partition $(part_bytes) bytes" || bad "2 setup: filesystem $f2"
+case2() {
+shrink_userfs 2 || return
+mount /userfs || { bad "2 setup: mount ro"; return; }
+ok "2 setup: filesystem shrunk to 32 MiB, partition $(part_bytes) bytes"
 out=$(run_fn); rc=${out##*rc=}
 [ "$rc" = 0 ] && ok "2 retry: rc 0" || bad "2 retry: rc $rc: $out"
 echo "$out" | grep -q "userfs partition already at disk end, grow filesystem" && ok "2 says: partition already at disk end, grow filesystem" || bad "2 output: $out"
@@ -90,23 +102,32 @@ p2=$(part_bytes); f2=$(fs_bytes)
 [ $((p2 - f2)) -ge 0 ] && [ $((p2 - f2)) -le "$MiB" ] && ok "2 the filesystem fills the partition again ($f2 of $p2 bytes)" || bad "2 filesystem $f2, partition $p2"
 grep -q " /userfs .* rw" /proc/mounts && ok "2 /userfs mounted read-write" || bad "2 /userfs not rw"
 [ "$(cat /userfs/keep 2>/dev/null)" = "keep me across the resize" ] && ok "2 the data survived" || bad "2 the data is gone"
+}
+case2
 
 # --- 3: nothing left to grow ---------------------------------------------------------------------
-mount -o ro,remount /userfs
+# its own state: the filesystem grown to the partition that reaches the disk end
+case3() {
+grep -q " /userfs " /proc/mounts && { umount /userfs || { bad "3 setup: umount /userfs"; return; }; }
+e2fsck -fy "$DEV" >/dev/null 2>&1
+resize2fs "$DEV" >/tmp/setup.log 2>&1 || { bad "3 setup: resize2fs: $(tr '\n' ';' </tmp/setup.log)"; return; }
+mount /userfs || { bad "3 setup: mount ro"; return; }
 out=$(run_fn); rc=${out##*rc=}
 [ "$rc" = 1 ] && ok "3 maxed: rc 1" || bad "3 maxed: rc $rc: $out"
 echo "$out" | grep -q "userfs already maxed" && ok "3 says: userfs already maxed" || bad "3 output: $out"
 grep -q " /userfs " /proc/mounts && ok "3 /userfs left mounted" || bad "3 /userfs unmounted"
+}
+case3
 
 # --- 4: preen refuses (rc 4), the -fy run repairs, the growth goes on -------------------------------
-umount /userfs || bad "4 umount"
-resize2fs "$DEV" 32M >/dev/null 2>&1 || bad "4 resize2fs shrink"
+case4() {
+shrink_userfs 4 || return
 # an inode in use whose dtime holds an inode number: the mark of a corrupted orphan list,
 # which e2fsck -p will not fix on its own (task 277's lab finding)
-debugfs -w -R "sif /keep dtime 12" "$DEV" >/dev/null 2>&1 || bad "4 debugfs"
+debugfs -w -R "sif /keep dtime 12" "$DEV" >/dev/null 2>&1 || { bad "4 setup: debugfs"; return; }
 e2fsck -pf "$DEV" >/dev/null 2>&1; prc=$?
-[ "$prc" -ge 4 ] && ok "4 setup: e2fsck -p refuses (rc $prc)" || bad "4 setup: e2fsck -p rc $prc, the corruption does not reproduce preen's refusal"
-mount /userfs || bad "4 mount ro"
+[ "$prc" -ge 4 ] && ok "4 setup: e2fsck -p refuses (rc $prc)" || { bad "4 setup: e2fsck -p rc $prc, the corruption does not reproduce preen's refusal"; return; }
+mount /userfs || { bad "4 setup: mount ro"; return; }
 out=$(run_fn); rc=${out##*rc=}
 [ "$rc" = 0 ] && ok "4 preen refused, -fy repaired: rc 0" || bad "4 rc $rc: $out"
 echo "     the log line: $(echo "$out" | head -1 | cut -c1-400)"
@@ -117,11 +138,14 @@ p4=$(part_bytes); f4=$(fs_bytes)
 [ $((p4 - f4)) -ge 0 ] && [ $((p4 - f4)) -le "$MiB" ] && ok "4 the filesystem fills the partition ($f4 of $p4 bytes)" || bad "4 filesystem $f4, partition $p4"
 [ "$(cat /userfs/keep 2>/dev/null)" = "keep me across the resize" ] && ok "4 the data survived the repair" || bad "4 the data is gone"
 umount /userfs
-e2fsck -fn "$DEV" >/dev/null 2>&1 && ok "4 the filesystem is clean afterwards" || bad "4 e2fsck -fn finds errors"
-mount /userfs
+e2fsck -fn "$DEV" >/tmp/setup.log 2>&1 && ok "4 the filesystem is clean afterwards" || bad "4 e2fsck -fn finds errors: $(tr '\n' ';' </tmp/setup.log | cut -c1-400)"
+}
+case4
 
 # --- 5: the userfs cannot be unmounted: a clear error, nothing changed --------------------------------
-umount /userfs; resize2fs "$DEV" 32M >/dev/null 2>&1; mount /userfs
+case5() {
+shrink_userfs 5 || return
+mount /userfs || { bad "5 setup: mount ro"; return; }
 ( cd /userfs && sleep 60 ) & holder=$!
 sleep 0.2
 out=$(run_fn); rc=${out##*rc=}
@@ -129,6 +153,8 @@ kill "$holder" 2>/dev/null; wait "$holder" 2>/dev/null
 [ "$rc" = 2 ] && ok "5 busy userfs: rc 2" || bad "5 busy userfs: rc $rc: $out"
 echo "$out" | grep -q "ERROR: (umount /userfs failed, still mounted)" && ok "5 says why" || bad "5 output: $out"
 [ "$(fs_bytes)" -eq $((32*MiB)) ] && ok "5 the filesystem is untouched" || bad "5 the filesystem changed: $(fs_bytes)"
+}
+case5
 
 echo; [ "$fails" -eq 0 ] && { echo "lite-userfs-grow-inner: all checks passed"; exit 0; }
 echo "lite-userfs-grow-inner: $fails check(s) failed"; exit 1
