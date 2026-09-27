@@ -25,12 +25,70 @@ offered an HM-Script export to paper over the gap. Both are gone (2026-09-08).**
 ## OpenCCU / CCU3 → openccu-lite
 
 **The short version for an OpenCCU VM (`ova`) or an SD-card product**: on the OpenCCU WebUI go to
-Settings → Control panel → CCU maintenance → Perform software update, upload `openccu-lite-<product>-<version>.zip`, confirm,
+Settings → Control panel → CCU maintenance → Perform software update, upload `openccu-lite-<product>-<version>.zip`
+(**a CCU3 takes the `-ccu3.tgz` instead**, see *Which package for which system* below), confirm,
 let it reboot. OpenCCU's own recovery system flashes the image and keeps `/usr/local`; the lite system
 comes up with your pairings, keys and addons, reads the names, rooms and functions out of the ReGa
 database on its first boot, and asks you for an administrator password. The `.zip` is accepted
 because the lite image's `/VERSION` carries upstream's `PLATFORM` — the recovery compares
 exactly that. **The way back**: flash OpenCCU through the *System update* section of the lite Status page with upstream's `OpenCCU-<version>-ova.zip`, then **restore the backup you took before migrating**. The flash alone gets you a working OpenCCU with your pairings, keys and addons — `/usr/local` survives — but its ReGa database is the one from the day you left. The backup is what makes the system the system it was.
+
+### Which package for which system
+
+A release carries more than one file per board. Which one your system takes depends on how it was
+set up, not on the hardware alone — `cat /VERSION` over SSH (`PRODUCT=…`) tells you which one you have:
+
+| Your system | Package | What happens on the way |
+| --- | --- | --- |
+| OpenCCU written to an SD card or USB disk from an OpenCCU image (`PRODUCT=rpi3`, `rpi4`, `rpi5`, …) | `openccu-lite-<product>-<version>.zip` | one pass of the recovery system: it unpacks the image on the userfs, writes the boot and root partitions, keeps `/usr/local`, reboots. About three minutes. |
+| The OpenCCU VM (`PRODUCT=ova`) | `openccu-lite-x86_64-ova-<version>.zip` | the same, one pass. |
+| A CCU3, or any card set up from eQ-3's CCU3 image or a CCU3 backup image (`PRODUCT=ccu3`: bootfs 256 MB, rootfs 1 GB, userfs) | `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` | the WebUI unpacks the archive and the recovery runs its `update_script`: it writes the new boot partition — with openccu-lite's recovery system — and, because the root partition is 1 GB and the image 2 GB, hands the rest over to that new recovery. **Two recovery passes, two reboots:** the second one grows the root partition to 2 GB, moving the user partition, and writes the root filesystem. Plan for the system to be dark for ten minutes or more. |
+
+The `.zip` is the wrong package for a CCU3-shaped system: its image is laid out for an SD card,
+and the recovery would need the unpacked 2.4 GB on the userfs anyway. The `-ccu3.tgz` is the route
+built for that layout (upstream's CCU3 → OpenCCU path, which openccu-lite reuses).
+
+### The space the update needs
+
+The recovery unpacks the update **on the userfs (`/usr/local`) before it writes anything**: the
+`.zip`'s image is about 2.4 GB unpacked, the `-ccu3.tgz`'s root filesystem 2 GB, each on top of the
+upload itself. Check first — the stock WebUI shows it on the *CCU maintenance* page under *Perform
+software update* as *Available user space: X GB (> 2.8 GB required)*, and over SSH `df -h /usr/local`
+shows it in the *Avail* column. **Below 2.8 GB free, do not start.** Old backups under
+`/usr/local/tmp` and large addon data are the usual reason; remove them first. On a CCU3-shaped card
+whose user partition does not reach the end of the card, openccu-lite's recovery grows it — but that
+only helps on the second pass, and only when the free space is behind the partition, not when the
+partition is full.
+
+### Check before switching
+
+- **A backup taken and kept** — the `.sbk` from Settings → Control panel → Security → Create backup
+  (or `createBackup.sh`), copied off the system. It is the way back.
+- **Enough free space** on the userfs (above): at least 2.8 GB.
+- **The right package** for your system's shape (the table above), its `.sha256` checked.
+- **SSH or physical access at hand.** A switch that stops half-way leaves the system in its recovery
+  system, which speaks plain HTTP on port 80 only; the recovery LED pattern on a CCU3 is the hint. Have
+  the SD card or the VM's console reachable, and the address of the system written down: a failed
+  update may come back on a new DHCP address.
+- **A power supply you trust** for the duration: the second pass writes partition tables.
+
+### A recovery that stays at its menu
+
+A recovery system that stays up after an unattended update — a dark WebUI, and `http://<system>/`
+shows the recovery's menu instead of the update output — means **the update failed and the recovery
+did not boot the normal system**. eQ-3's 2018 CCU3 recovery, which every CCU3 runs before its first
+openccu-lite update, does exactly that: its unattended update stops at the menu on any error, and
+the reason is on the page only while the output is still there (the recovery page shows the running
+update's output; once it is over, the menu). OpenCCU's and openccu-lite's recovery systems reboot
+into the normal system after a failed unattended update instead, and openccu-lite keeps the reason:
+the last lines of `/usr/local/var/recovery/<time>.log`, which the journal carries on the next boot.
+
+**The way back from the menu:** *Normal Reboot* on the recovery page boots the system that was there
+before (`/usr/local` and the pairings untouched), and you can look at the space, the package and the
+`.sbk`, and start over. *Check storage* on the same page runs `e2fsck` over the partitions and shows
+what it repaired — useful after a failed second pass. What you must not do is upload the same package
+again from the menu without knowing why the first attempt failed: the space is the usual reason, and
+it does not grow by itself.
 
 1. **Back up** on the old system (Settings → Control panel → Security → Create backup, or `createBackup.sh`).
    Keep the `.sbk`.
@@ -44,6 +102,30 @@ exactly that. **The way back**: flash OpenCCU through the *System update* sectio
    system asks for one again on the next visit. That order is deliberate: nothing from the old system
    is lost, and nothing from before the restore lingers. The ReGa database inside the backup is
    accepted and simply ignored.
+3a. **Paired devices from the backup instead of a restore** (a new install, nothing paired yet): the
+   Backup page reads the `.sbk` once and *Import the paired devices and reboot* takes the three radios'
+   pairings with their identity - the BidCos address and key store, the HmIP identity, the LAN
+   gateways - and, first, the names, rooms and functions of the backup's ReGa database; then the
+   system reboots. Two things the panel tells you before you click:
+   - **Another radio module.** The HmIP identity in a backup is bound to the module of the system
+     that made it. When this system runs HmIP-RF on another module (a different SGTIN), hmipserver
+     takes the identity over onto this module when it starts after the import - the *adapter
+     exchange*: offline when the backup came from a system in local key mode, otherwise through
+     eQ-3's key server, which needs an internet connection and has to know this module. Every HmIP
+     device is then re-keyed for the new module; a battery device only when it wakes up, so press a
+     button on it if it stays silent, and give it hours rather than minutes. The Interfaces page
+     shows how the move went (pending, done, rejected) and offers a retry - a restart of HmIP-RF,
+     which attempts the exchange at every start. A module the key server refuses keeps HmIP-RF
+     stopped; the way out is the previous module, or a fresh start with this one (every HmIP device
+     paired again). BidCos-RF needs no exchange: rfd runs with the imported address and serial on
+     whatever module it has - an RPI-RF-MOD, an HM-MOD-RPI-PCB, an HmIP-RFUSB, an HM-CFG-USB-2 or a
+     LAN gateway alike - and the Interfaces page says whether it does.
+   - **A non-default BidCos security key.** The backup's key store comes along as it is - the BidCos
+     devices paired with it know that key - and you are not asked for the other system's passphrase
+     (nothing on this system needs it). Keep that passphrase safe all the same: you need it to
+     change the key later, or to pair a device that still holds it. A system that already has a key
+     of its own confirms that the backup's replaces it; a system with devices paired refuses the
+     import altogether, so no paired device is ever re-keyed by it.
 4. **Names, rooms and functions**: while the old CCU is still reachable, *Names → Import from a
    CCU* pulls them over its remote script port (8181). The old CCU's firewall must allow the new
    system (REGA: *full*, or the new address in the list). Rooms and functions become flat nodes;
@@ -199,7 +281,10 @@ back to *your* OpenCCU.
    pre-migration backup is the answer and not an afterthought.
 1. **Flash / update** to OpenCCU: lite Status page → *System update* → upstream's
    `OpenCCU-<version>-<PRODUCT>.zip` → *Reboot and install*. `/usr/local` survives, so pairings,
-   radio keys and addons are already there.
+   radio keys and addons are already there. A CCU3-shaped system (`PRODUCT=ccu3`) has a 2 GB root
+   partition after the switch, which is upstream's current layout too; its way back is upstream's
+   `OpenCCU-<version>-ccu3.tgz` — a route that has not been run here yet, so keep the `.sbk` and the
+   reflash fallback below in mind.
 2. **Restore the pre-migration `.sbk`** through OpenCCU's own WebUI. This is the step that makes
    it your system again.
 3. The metadata store's `meta.json` stays in `/usr/local/etc/occulite/` and is untouched by any of

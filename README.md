@@ -29,8 +29,11 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
 - **Neuinstallation auf einem Raspberry Pi 3/4:** die `.zip` des Releases entpacken und die `.img` darin auf die SD-Karte schreiben.
 - **Neuinstallation als VM:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.); den LXC-Container beschreibt
   [install-lxc.md](docs/install-lxc.md).
-- eine Neuinstallation kann (solange noch keine Geräte angelernt sind) angelernte Geräte, Schlüssel, Namen und Räume aus einem 
-  (Open)CCU Backup importieren.
+- eine Neuinstallation kann (solange noch keine Geräte angelernt sind) angelernte Geräte, Schlüssel, Namen und Räume aus einem
+  (Open)CCU-Backup in einem Schritt importieren. Der BidCos-Sicherheitsschlüssel der Sicherung kommt so mit, wie er ist (eine
+  Passphrase wird nicht abgefragt; die Passphrase des alten Systems für spätere Schlüsseländerungen aufbewahren); eine
+  HmIP-Identität, die an ein anderes Funkmodul gebunden ist, übernimmt hmipserver auf das Modul dieses Systems, und die
+  Seite Schnittstellen zeigt, wie das ausging ([switching.de.md](docs/switching.de.md)).
 - **Geräte anlernen und konfigurieren, Direktverknüpfungen verwalten:** dafür den
   [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) aus dem Addon-Katalog installieren.
 

@@ -6,9 +6,13 @@ The products `lxc-lite_amd64` and `lxc-lite_arm64` are **CT templates** for Prox
 the recipe for one, the checks that make it the release gate of the hardware checklist, and what a
 container cannot do.
 
-> **Status 2026-09-09: written before the first template was built** — the runner's disk had no
-> room for a build (see the status). Every command below is the plan; the ones marked
-> *to verify* have not been run against a real template yet. The gate is **not passed**.
+> **Status 2026-09-27: the first template of the 3.89.11 base is built** -
+> `openccu-lite-lxc-amd64-1.0.0-dev.29.tar.xz` (143 MB, 437 MB unpacked). Built clean with the
+> release checks (the hardening guard, the SBOM, the factory-reset marker in the tarball), and booted
+> once in an unprivileged container on the build host: `running`, no failed unit, occulited answering
+> through lighttpd. On Proxmox it is being tested now, with an HmIP-RFUSB (below). The checks of
+> 2026-09-09 further down were run on an earlier template (3.89.8 base); the ones marked *to verify*
+> have still not been run. The gate is **not passed** until the list below is done on this template.
 
 ## What is different from upstream's `install-proxmox.sh`
 
@@ -77,22 +81,63 @@ Line by line:
   LXC with `pct`-less tooling — the template is a plain rootfs tar and works with `lxc-create -t
   local` too).
 
-The console: `pct enter <VMID>` gives a root shell (no getty is needed). The address:
+The console: `pct enter <VMID>` gives a root shell (no getty is needed). The web server waits for
+the container's first address: the certificate it makes at the first start names that address, so
+until DHCP has answered lighttpd restarts every few seconds and the page does not load. The address:
 `pct exec <VMID> -- ip -4 -brief addr show eth0`. Then `http://<address>/` and the welcome page
 asks for the administrator password.
 
 ### HmIP-RFUSB through to the container
 
-Proxmox 8.2+ passes a device node into an unprivileged container with its ids mapped:
+The stick is **not a serial port**. Without eQ-3's driver the host lists it in `lsusb` as
+`1b1f:c020 eQ-3 Entwicklung GmbH HmIP-RFUSB` and makes no `/dev/ttyUSB*` and no
+`/dev/serial/by-id/` link for it. Its driver is piVCCU's `hb_rf_usb_2` on top of
+`generic_raw_uart` (the same modules the VM and the Pi images carry), which turns it into
+`/dev/raw-uart` with `/sys/class/raw-uart/raw-uart/device_type` =
+`eQ-3 HmIP-RFUSB@usb-<port>`. A container runs the host's kernel and loads no modules, so **the
+Proxmox host needs them**: the `pivccu-modules-dkms` package, as upstream's
+`scripts/install-proxmox.sh` installs it. On the host, as root:
 
 ```sh
-pct set <VMID> --dev0 /dev/serial/by-id/usb-eQ-3_HmIP-RFUSB_<serial>-if00-port0,uid=0,gid=0,mode=0660
-pct reboot <VMID>
+apt install -y proxmox-default-headers build-essential gpg   # headers for the running kernel (older PVE: pve-headers-$(uname -r))
+wget -qO - https://apt.pivccu.de/piVCCU/public.key \
+  | gpg --batch --yes --dearmor -o /usr/share/keyrings/pivccu-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/pivccu-archive-keyring.gpg] https://apt.pivccu.de/piVCCU stable main" \
+  > /etc/apt/sources.list.d/pivccu.list
+apt update && apt install -y pivccu-modules-dkms
 ```
 
-`uid`/`gid` are ids **inside** the container (rfd runs as root there). `S47InitRFHardware` finds
-the stick by its USB ids under `/sys` and at `/dev/ttyUSB*` — the symlink name above does not
-matter, the node it points at is what is passed in. *To verify*: not yet run with an RFUSB.
+Plug the stick in (or out and in again) and check:
+
+```sh
+lsusb | grep 1b1f:c020
+lsmod | grep -E 'generic_raw_uart|hb_rf_usb_2'
+ls -l /dev/raw-uart
+cat /sys/class/raw-uart/raw-uart/device_type      # eQ-3 HmIP-RFUSB@usb-...
+```
+
+Then pass the node in (the `devN` option of current Proxmox VE; the ids are the container's, occulited's radio step gives the
+node its group itself) and start the container again:
+
+```sh
+pct set <VMID> --dev0 /dev/raw-uart,mode=0660
+pct reboot <VMID>          # a stopped container: pct start <VMID>
+```
+
+What the container does with it: `occulited radio run` finds the node through
+`/sys/class/raw-uart` (the host's sysfs, read-only inside), probes it with `detect_radio_module`,
+and skips the module reset, which is a sysfs write. **HmIP works directly on the node; BidCos-RF on
+the stick does not**: sharing the stick between BidCos-RF and HmIP needs multimacd, and multimacd
+has the host's `eq3_char_loop` create `/dev/mmd_bidcos` and `/dev/mmd_hmip` while it runs - they
+appear in the host's `/dev`, never in the container's, and an unprivileged container may not create
+device nodes. So, once the administrator exists, on the **Interfaces** page set BidCos-RF to
+*No local radio (LAN gateways only)* and HmIP to the stick *directly*; the radio stack restarts and
+hmipserver opens `/dev/raw-uart` itself. BidCos-RF devices need a LAN gateway (HM-LGW-O-TW-W-EU,
+an HB-RF-ETH with its own module) or the VM product.
+
+The node is created in the container when it starts: the stick must be plugged in before
+`pct start`, or the start fails on the missing `/dev/raw-uart`. There is no udev inside, so a stick
+plugged in later is not seen - restart the container.
 
 ## What the system looks like from inside
 

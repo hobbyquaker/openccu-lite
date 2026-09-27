@@ -309,7 +309,12 @@ Journals.
   (SFTP), mit Test, „Jetzt sichern“ und der Liste der Sicherungen dort.
 - **Sicherung einspielen:** eine Sicherung prüfen und wiederherstellen, auch die einer CCU oder von OpenCCU.
 - **Angelernte Geräte übernehmen:** aus einer geprüften Sicherung einer CCU oder von OpenCCU nur die angelernten
-  Geräte mit ihren Schlüsseln, ohne den Rest wiederherzustellen; nur auf einem System ohne angelernte Geräte.
+  Geräte mit ihren Schlüsseln, ohne den Rest wiederherzustellen; nur auf einem System ohne angelernte Geräte. Eine
+  Aktion übernimmt alle drei: zuerst die Namen, Räume und Gewerke der ReGa-Datenbank der Sicherung, dann die Geräte mit
+  ihren Schlüsseln, dann der Neustart. Das Panel sagt vorher, wenn die HmIP-Identität der Sicherung zu einem anderen
+  Funkmodul gehört (hmipserver übernimmt sie beim Start auf das Modul dieses Systems; die Seite Schnittstellen zeigt
+  danach, wie es ausging) und wenn die Sicherung einen eigenen BidCos-Sicherheitsschlüssel hat (er kommt so mit, eine
+  Passphrase wird nicht abgefragt).
 - **Namen aus einer ReGa-Datenbank importieren:** Gerätenamen, Räume und Gewerke aus einer alten CCU-Datenbank oder
   einer Sicherung übernehmen.
 - **Werkseinstellungen:** alles löschen und neu mit der Einrichtungsseite beginnen.

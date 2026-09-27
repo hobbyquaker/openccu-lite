@@ -134,7 +134,7 @@ openccu-lite $V: a Homematic CCU firmware without ReGaHSS, built on OpenCCU $BAS
 
 *The maintainer edits this header before publishing.*
 
-**Download:** per board the \`.zip\` (image and update package; the x86 VM also as \`.ova\`, a CCU3 in place with \`-ccu3.tgz\`) and its \`.sha256\`; \`SHA256SUMS\` covers every file and is signed with minisign (\`SHA256SUMS.minisig\`). The SBOM of each image is its \`.cdx.json\`.
+**Download — which file for whom:** the \`.zip\` per board is the image and the update package for a system set up from an OpenCCU image (SD card, USB disk) and for the VM (\`x86_64-ova\`, also as \`.ova\` for a fresh import); a **CCU3** — or any card with the CCU3 layout, \`PRODUCT=ccu3\` in its \`/VERSION\` — takes \`openccu-lite-aarch64-rpi3-$V-ccu3.tgz\` through its own WebUI, not the zip (two recovery passes; see [switching.md](https://github.com/$GH_REPO/blob/$SHA/docs/switching.md)). The update needs 2.8 GB free on the userfs. Every file has its \`.sha256\`; \`SHA256SUMS\` covers all of them and is signed with minisign (\`SHA256SUMS.minisig\`). The SBOM of each image is its \`.cdx.json\`.
 
 **Sources:** the sources of the GPL/LGPL components of these images are available on request — open an issue.
 

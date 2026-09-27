@@ -29,7 +29,8 @@ sollte. Beides ist weg (2026-09-08).**
 
 **Die Kurzfassung für eine OpenCCU-VM (`ova`) oder ein SD-Karten-Produkt**: in der OpenCCU-WebUI
 unter Einstellungen → Systemsteuerung → Zentralen-Wartung → Software-Update durchführen die
-`openccu-lite-<produkt>-<version>.zip` hochladen, bestätigen, neu starten lassen. Das eigene
+`openccu-lite-<produkt>-<version>.zip` hochladen (**eine CCU3 nimmt stattdessen die `-ccu3.tgz`**,
+siehe *Welches Paket für welches System* unten), bestätigen, neu starten lassen. Das eigene
 Recovery-System von OpenCCU flasht das Image und behält `/usr/local`; das lite-System kommt mit den
 Anlernungen, Schlüsseln und Addons hoch, liest beim ersten Start die Namen, Räume und Gewerke aus
 der ReGa-Datenbank und fragt nach einem Administrator-Passwort. Die `.zip` wird angenommen, weil
@@ -39,6 +40,72 @@ mit der `OpenCCU-<version>-ova.zip` von upstream flashen, dann **das vor der Mig
 Backup einspielen**. Das Flashen allein ergibt ein funktionierendes OpenCCU mit den Anlernungen,
 Schlüsseln und Addons — `/usr/local` überlebt —, aber seine ReGa-Datenbank ist die vom Tag des
 Wechsels. Das Backup ist es, was das System wieder zu dem System macht, das es war.
+
+### Welches Paket für welches System
+
+Ein Release enthält pro Board mehr als eine Datei. Welche Ihr System nimmt, hängt davon ab, wie es
+eingerichtet wurde, nicht von der Hardware allein — `cat /VERSION` über SSH (`PRODUCT=…`) sagt
+Ihnen, welches Sie haben:
+
+| Ihr System | Paket | Was auf dem Weg passiert |
+| --- | --- | --- |
+| OpenCCU, von einem OpenCCU-Image auf SD-Karte oder USB-Datenträger geschrieben (`PRODUCT=rpi3`, `rpi4`, `rpi5`, …) | `openccu-lite-<produkt>-<version>.zip` | ein Durchlauf des Recovery-Systems: es entpackt das Image auf dem userfs, schreibt Boot- und Root-Partition, behält `/usr/local`, startet neu. Etwa drei Minuten. |
+| Die OpenCCU-VM (`PRODUCT=ova`) | `openccu-lite-x86_64-ova-<version>.zip` | dasselbe, ein Durchlauf. |
+| Eine CCU3 oder eine Karte, die aus dem CCU3-Image von eQ-3 oder einem CCU3-Backup-Image eingerichtet wurde (`PRODUCT=ccu3`: bootfs 256 MB, rootfs 1 GB, userfs) | `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` | die WebUI entpackt das Archiv, und das Recovery führt dessen `update_script` aus: es schreibt die neue Boot-Partition — mit dem Recovery-System von openccu-lite — und übergibt, weil die Root-Partition 1 GB groß ist und das Image 2 GB, den Rest an dieses neue Recovery. **Zwei Recovery-Durchläufe, zwei Neustarts:** der zweite vergrößert die Root-Partition auf 2 GB, verschiebt dafür die Benutzerpartition und schreibt das Root-Dateisystem. Rechnen Sie damit, dass das System zehn Minuten oder länger dunkel ist. |
+
+Die `.zip` ist für ein System mit CCU3-Layout das falsche Paket: ihr Image ist für eine SD-Karte
+aufgeteilt, und das Recovery bräuchte ohnehin die entpackten 2,4 GB auf dem userfs. Die `-ccu3.tgz`
+ist der für dieses Layout gebaute Weg (der Pfad CCU3 → OpenCCU von upstream, den openccu-lite
+weiterverwendet).
+
+### Der Platz, den das Update braucht
+
+Das Recovery entpackt das Update **auf dem userfs (`/usr/local`), bevor es irgendetwas schreibt**:
+das Image der `.zip` hat entpackt etwa 2,4 GB, das Root-Dateisystem der `-ccu3.tgz` 2 GB, jeweils
+zusätzlich zum Upload selbst. Prüfen Sie das vorher — die WebUI zeigt es auf der Seite
+*Zentralen-Wartung* unter *Software-Update durchführen* als *Verfügbarer Speicherplatz: X GB (> 2,8 GB
+erforderlich)*, und über SSH zeigt `df -h /usr/local` es in der Spalte *Avail*. **Unter 2,8 GB frei:
+nicht starten.** Alte Backups unter `/usr/local/tmp` und große Addon-Daten sind der übliche Grund;
+räumen Sie sie zuerst weg. Auf einer Karte mit CCU3-Layout, deren Benutzerpartition nicht bis zum
+Ende der Karte reicht, vergrößert das Recovery von openccu-lite sie — das hilft aber erst im zweiten
+Durchlauf, und nur, wenn der freie Platz hinter der Partition liegt, nicht, wenn die Partition voll
+ist.
+
+### Vor dem Wechsel prüfen
+
+- **Ein Backup angelegt und aufbewahrt** — die `.sbk` aus Einstellungen → Systemsteuerung →
+  Sicherheit → Backup erstellen (oder `createBackup.sh`), vom System heruntergeladen. Sie ist der
+  Weg zurück.
+- **Genug freier Platz** auf dem userfs (oben): mindestens 2,8 GB.
+- **Das richtige Paket** für die Form Ihres Systems (die Tabelle oben), seine `.sha256` geprüft.
+- **SSH oder physischer Zugang zur Hand.** Ein Wechsel, der auf halbem Weg stehen bleibt, lässt das
+  System in seinem Recovery-System zurück, das nur einfaches HTTP auf Port 80 spricht; auf einer CCU3
+  ist das Recovery-Blinkmuster der LED der Hinweis. Halten Sie die SD-Karte oder die Konsole der VM
+  erreichbar und notieren Sie die Adresse des Systems: ein fehlgeschlagenes Update kann mit einer
+  neuen DHCP-Adresse zurückkommen.
+- **Eine Stromversorgung, der Sie vertrauen**, für die ganze Dauer: der zweite Durchlauf schreibt
+  Partitionstabellen.
+
+### Ein Recovery, das in seinem Menü stehen bleibt
+
+Ein Recovery-System, das nach einem unbeaufsichtigten Update oben bleibt — eine dunkle WebUI, und
+`http://<system>/` zeigt das Menü des Recovery statt der Update-Ausgabe —, bedeutet: **das Update
+ist fehlgeschlagen, und das Recovery hat das normale System nicht gestartet.** Das CCU3-Recovery von
+eQ-3 aus dem Jahr 2018, das jede CCU3 vor ihrem ersten openccu-lite-Update ausführt, tut genau das:
+sein unbeaufsichtigtes Update bleibt bei jedem Fehler im Menü stehen, und der Grund steht nur so
+lange auf der Seite, wie die Ausgabe noch da ist (die Recovery-Seite zeigt die Ausgabe des laufenden
+Updates; ist es vorbei, das Menü). Die Recovery-Systeme von OpenCCU und openccu-lite starten nach
+einem fehlgeschlagenen unbeaufsichtigten Update stattdessen das normale System, und openccu-lite
+behält den Grund: die letzten Zeilen von `/usr/local/var/recovery/<zeit>.log`, die das Journal beim
+nächsten Start übernimmt.
+
+**Der Weg zurück aus dem Menü:** *Normal Reboot* auf der Recovery-Seite startet das System, das vorher
+da war (`/usr/local` und die Anlernungen unangetastet), und Sie können sich Platz, Paket und `.sbk`
+ansehen und von vorn beginnen. *Check storage* auf derselben Seite lässt `e2fsck` über die
+Partitionen laufen und zeigt, was es repariert hat — nützlich nach einem fehlgeschlagenen zweiten
+Durchlauf. Was Sie nicht tun sollten: dasselbe Paket aus dem Menü heraus noch einmal hochladen, ohne
+zu wissen, warum der erste Versuch fehlgeschlagen ist. Der Platz ist der übliche Grund, und er wächst
+nicht von selbst.
 
 1. **Backup** auf dem alten System (Einstellungen → Systemsteuerung → Sicherheit → Backup
    erstellen, oder `createBackup.sh`). Die `.sbk` aufbewahren.
@@ -53,6 +120,33 @@ Wechsels. Das Backup ist es, was das System wieder zu dem System macht, das es w
    Besuch wieder nach einem. Diese Reihenfolge ist Absicht: nichts vom alten System geht verloren,
    und nichts aus der Zeit vor dem Einspielen bleibt zurück. Die ReGa-Datenbank im Backup wird
    angenommen und einfach ignoriert.
+3a. **Angelernte Geräte aus der Sicherung statt eines Restores** (eine Neuinstallation, noch nichts
+   angelernt): Die Seite Sicherung liest die `.sbk` einmal, und *Angelernte Geräte importieren und neu
+   starten* übernimmt die Anlernungen der drei Funkarten mit ihrer Identität - BidCos-Adresse und
+   Schlüsselspeicher, die HmIP-Identität, die LAN-Gateways - und zuvor die Namen, Räume und Gewerke der
+   ReGa-Datenbank der Sicherung; dann startet das System neu. Zwei Dinge sagt Ihnen das Panel, bevor Sie
+   klicken:
+   - **Ein anderes Funkmodul.** Die HmIP-Identität einer Sicherung ist an das Funkmodul des Systems
+     gebunden, das sie angelegt hat. Betreibt dieses System HmIP-RF auf einem anderen Modul (eine andere
+     SGTIN), übernimmt hmipserver die Identität beim Start nach dem Import auf dieses Modul - der
+     *Adaptertausch*: offline, wenn die Sicherung von einem System im lokalen Schlüsselmodus stammt,
+     sonst über den Schlüsselserver von eQ-3, der eine Internetverbindung braucht und dieses Modul kennen
+     muss. Jedes HmIP-Gerät wird danach für das neue Modul umgeschlüsselt; ein Batteriegerät erst, wenn
+     es aufwacht - drücken Sie eine Taste daran, wenn es stumm bleibt, und rechnen Sie in Stunden, nicht
+     in Minuten. Die Seite Schnittstellen zeigt, wie die Übernahme ausging (offen, erledigt, abgelehnt),
+     und bietet einen neuen Versuch an - einen Neustart von HmIP-RF, das den Tausch bei jedem Start
+     versucht. Ein Modul, das der Schlüsselserver ablehnt, lässt HmIP-RF gestoppt; der Ausweg ist das
+     vorherige Modul oder ein Neubeginn mit diesem (jedes HmIP-Gerät neu anlernen). BidCos-RF braucht
+     keinen Tausch: rfd läuft mit der importierten Adresse und Seriennummer auf dem Modul, das es hat -
+     RPI-RF-MOD, HM-MOD-RPI-PCB, HmIP-RFUSB, HM-CFG-USB-2 oder LAN-Gateway gleichermaßen -, und die Seite
+     Schnittstellen sagt, ob es das tut.
+   - **Ein eigener BidCos-Sicherheitsschlüssel.** Der Schlüsselspeicher der Sicherung kommt so mit, wie
+     er ist - die damit angelernten BidCos-Geräte kennen diesen Schlüssel -, und Sie werden nicht nach
+     der Passphrase des anderen Systems gefragt (nichts auf diesem System braucht sie). Bewahren Sie
+     diese Passphrase trotzdem sicher auf: Sie brauchen sie, um den Schlüssel später zu ändern oder ein
+     Gerät anzulernen, das ihn noch trägt. Ein System, das schon einen eigenen Schlüssel hat, bestätigt,
+     dass der der Sicherung ihn ersetzt; ein System mit angelernten Geräten lehnt den Import ganz ab, so
+     dass kein angelerntes Gerät dadurch je umgeschlüsselt wird.
 4. **Namen, Räume und Gewerke**: solange die alte CCU noch erreichbar ist, holt *Namen → Von einer
    CCU importieren* sie über deren Remote-Script-Port (8181). Die Firewall der alten CCU muss das
    neue System zulassen (REGA: *Vollzugriff*, oder die neue Adresse in der Liste). Räume und Gewerke
@@ -228,7 +322,10 @@ zurück — nur nicht zu *seinem* OpenCCU.
    Backup von vor der Migration die Antwort und kein Nachgedanke.
 1. **Flashen / aktualisieren** auf OpenCCU: lite-Status-Seite → *Systemaktualisierung* → die
    `OpenCCU-<version>-<PRODUCT>.zip` von upstream → *Neu starten und installieren*. `/usr/local`
-   überlebt, also sind Anlernungen, Funkschlüssel und Addons schon da.
+   überlebt, also sind Anlernungen, Funkschlüssel und Addons schon da. Ein System mit CCU3-Layout
+   (`PRODUCT=ccu3`) hat nach dem Wechsel eine 2-GB-Root-Partition, was auch das aktuelle Layout von
+   upstream ist; sein Weg zurück ist die `OpenCCU-<version>-ccu3.tgz` von upstream — ein Weg, der
+   hier noch nicht gelaufen ist, behalten Sie also die `.sbk` und den Reflash-Ausweg unten im Blick.
 2. **Die `.sbk` von vor der Migration einspielen**, über die eigene WebUI von OpenCCU. Das ist der
    Schritt, der das System wieder zum eigenen macht.
 3. Die `meta.json` des Metadaten-Speichers bleibt in `/usr/local/etc/occulite/` und wird von all dem
