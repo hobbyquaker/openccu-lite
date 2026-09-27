@@ -280,3 +280,10 @@ fi
 # rebuilt from scratch has a new key that the module packages do not follow by themselves - an image
 # built so boots without its radio (1.0.0-dev.21). Rebuild those packages after a kernel dirclean.
 "$(cd "$(dirname "$0")/../../.." && pwd)/scripts/lite-module-sig-guard.sh" "${TARGET_DIR}"
+
+# And the binaries carry what the build flags promise: PIE, RELRO (full for lighttpd and its
+# modules, busybox, chronyd, sshd, systemd, the tclrega shim), a non-executable stack, the stack
+# protector and FORTIFY; occulited a static executable. A package rebuilt without them - a bump, a
+# copied recipe, a warm tree that was never reconfigured after lite-hardening.mk changed - fails
+# the build here rather than shipping.
+"$(cd "$(dirname "$0")/../../.." && pwd)/scripts/lite-hardening-guard.sh" "${TARGET_DIR}"

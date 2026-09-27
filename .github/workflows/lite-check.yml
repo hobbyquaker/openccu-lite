@@ -50,6 +50,8 @@ jobs:
           sh scripts/testcases/lite-recovery-log-test.sh
       - name: The out-of-tree modules carry the kernel's key
         run: sh scripts/testcases/lite-module-sig-guard-test.sh
+      - name: The binaries carry the build's hardening flags
+        run: sh scripts/testcases/lite-hardening-guard-test.sh
       - name: The boot order and the boot path
         run: |
           sh scripts/testcases/lite-unit-order-test.sh

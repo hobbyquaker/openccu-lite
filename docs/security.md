@@ -418,6 +418,26 @@ for two X25519 recipients (config.md has the files):
   `age -d` first (the kit says how). An encrypted upload there stops at its untar and leaves the file in
   `/usr/local/tmp` until the next boot — upstream's, not reported.
 
+## The binaries' hardening
+
+Every C program the image builds is a position-independent executable with the strong stack protector,
+`_FORTIFY_SOURCE` and RELRO (buildroot's flags in `buildroot-external/Buildroot.config`). **Full RELRO** — every
+symbol bound at start, the whole GOT read-only before the program's first line — is set for the programs that parse
+what the network sends or run as root at boot: lighttpd and its modules (the one LAN-facing daemon), busybox (udhcpc
+runs as root) and chronyd (NTP replies), beside sshd and systemd, which link so on their own
+(`buildroot-external/lite-hardening.mk`). eQ-3's prebuilt interface daemons (rfd, hs485d, multimacd, hmlangw) are
+PIE with partial RELRO as delivered and cannot be rebuilt.
+
+**occulited is a static executable and not a PIE.** Go without cgo (D-15: one static file per architecture, no libc)
+cannot produce a static PIE: `-buildmode=pie` gives a binary that needs glibc's loader, and the `-d` static PIE does
+not start. Go's own memory safety is what stands in for ASLR there; the privilege boundary is the helper's allowlist
+(above), not the address layout.
+
+`scripts/lite-hardening-guard.sh` reads the ELF headers of the image's binaries at the end of every build and stops
+it when one of them lost a flag: a non-PIE where a PIE is expected, a lower RELRO level, an executable stack, a
+missing stack protector or FORTIFY import, occulited turned dynamic. It also runs by hand against an unpacked root
+(`-v` prints the table).
+
 ## Outbound calls
 
 Every connection the system opens by itself - where to, when, which fields, and how to switch it off - is in

@@ -28,10 +28,17 @@ OCCULITED_BUILD_TARGETS = cmd/occulited
 OCCULITED_LDFLAGS = -s -w -X main.version=$(OCCULITED_VERSION)
 # a static binary, no cgo, ever (D-15)
 OCCULITED_GO_ENV = CGO_ENABLED=0
+# Not a PIE (task 261, measured with buildroot's Go 1.26): without cgo, `-buildmode=pie` gives a
+# PIE with PT_INTERP - no shared library, but glibc's loader must be at /lib64/ld-linux-x86-64.so.2
+# or /lib/ld-linux-aarch64.so.1 to run it - and refuses linux/arm outright; `-ldflags=-d` writes a
+# static PIE that segfaults at start (the Go runtime does not relocate itself); a real static PIE
+# takes external linking with cgo and glibc's start-up code, which D-15 rules out. So the binary is
+# static and not position-independent, and scripts/lite-hardening-guard.sh expects exactly that.
 
-# the tclrega shim: one C file against the target tcl.h
+# the tclrega shim: one C file against the target tcl.h; full RELRO like lighttpd's modules
+# (lite-hardening.mk), the wrapper adds -fPIE/-z relro, the stack protector and FORTIFY
 define OCCULITED_BUILD_TCLREGA
-	$(TARGET_CC) $(TARGET_CFLAGS) -fPIC -shared \
+	$(TARGET_CC) $(TARGET_CFLAGS) -fPIC -shared -Wl,-z,now \
 		-I$(STAGING_DIR)/usr/include \
 		-o $(@D)/deploy/tclrega/tclrega.so $(@D)/deploy/tclrega/tclrega.c
 endef

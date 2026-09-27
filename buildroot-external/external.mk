@@ -1,4 +1,5 @@
 include $(BR2_EXTERNAL_EQ3_PATH)/package/packages.mk
+include $(BR2_EXTERNAL_EQ3_PATH)/lite-hardening.mk
 
 .PHONY: linux-check-dotconfig
 linux-check-dotconfig: linux-check-configuration-done
