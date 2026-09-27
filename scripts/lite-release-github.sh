@@ -155,7 +155,7 @@ openccu-lite $V: a Homematic CCU firmware without ReGaHSS, built on OpenCCU $BAS
 **Known issues:** occulited does not verify the minisign signature of a system update yet; it checks the published sha256.
 EOF
 )
-  req=$(python3 -c 'import json,sys; print(json.dumps({"tag_name":sys.argv[1],"target_commitish":sys.argv[2],"name":"openccu-lite "+sys.argv[3],"body":sys.argv[4],"draft":True,"prerelease":sys.argv[5]=="true","generate_release_notes":True}))' "$TAG" "$SHA" "$V" "$body" "$PRE")
+  req=$(python3 -c 'import json,sys; print(json.dumps({"tag_name":sys.argv[1],"target_commitish":sys.argv[2],"name":sys.argv[1],"body":sys.argv[4],"draft":True,"prerelease":sys.argv[5]=="true","generate_release_notes":True}))' "$TAG" "$SHA" "$V" "$body" "$PRE")
   resp=$(api POST "/repos/$GH_REPO/releases" -H 'Content-Type: application/json' -d "$req") || fail "GitHub refused to create the draft $TAG (see its message above)"
   ID=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])' <<< "$resp")
   say "draft $TAG created: release $ID"
