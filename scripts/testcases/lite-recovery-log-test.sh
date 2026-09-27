@@ -61,16 +61,19 @@ out=$(run_fn); [ "$out" = "rc=0" ] && ok "unwritable target: exit 0 all the same
 rm -f "$T/userfs/var"
 
 # --- the call sites -------------------------------------------------------------------------------
+# both unattended paths (USB and staged update) end in finish_update(), which calls it once
+n=$(grep -c '^ *finish_update$' "$S90")
+[ "$n" -eq 2 ] && ok "finish_update is called twice (USB and staged update)" || bad "finish_update is called $n times, want 2"
 n=$(grep -c '^ *save_install_log$' "$S90")
-[ "$n" -eq 2 ] && ok "save_install_log is called twice (USB and staged update)" || bad "save_install_log is called $n times, want 2"
-# each call sits between the marker's removal and the userfs remount to read-only
+[ "$n" -eq 1 ] && ok "save_install_log is called once, in finish_update" || bad "save_install_log is called $n times, want 1"
+# the call sits between the markers' removal and the userfs remount to read-only
 awk '
   /rm -f \/usr\/local\/.firmwareUpdate$/ { want=1; next }
   want==1 && /^ *save_install_log$/ { want=2; next }
   want==2 && /mount -o ro,remount \/userfs/ { seq++; want=0; next }
   want && /mount -o ro,remount \/userfs/ { want=0 }
   END { print seq+0 }' "$S90" >"$T/seq"
-[ "$(cat "$T/seq")" -eq 2 ] && ok "both calls sit between the marker removal and the ro remount" || bad "call sites out of place: $(cat "$T/seq") in sequence"
+[ "$(cat "$T/seq")" -eq 1 ] && ok "the call sits between the marker removal and the ro remount" || bad "call site out of place: $(cat "$T/seq") in sequence"
 grep -q 'mount -o rw,remount /userfs' "$S90" && ok "the userfs is read-write there" || bad "no rw remount in S90AutoUpdate"
 # what the function uses is in the recovery's busybox
 BB=$(ls "$EXT"/package/recovery-system/external/board/*/busybox.config "$EXT"/package/recovery-system/external/package/*/busybox*.config 2>/dev/null | head -1)

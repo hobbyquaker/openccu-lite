@@ -82,3 +82,5 @@ jobs:
         run: |
           sh scripts/testcases/lite-overlay-prune-test.sh
           sh scripts/testcases/lite-smartd-test.sh
+      - name: The recovery grows the userfs (a loop device in a privileged container)
+        run: sh scripts/testcases/lite-userfs-grow-test.sh
