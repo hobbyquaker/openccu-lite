@@ -13,7 +13,7 @@
 openccu-lite ist ein Fork des [OpenCCU-Projekts](https://github.com/OpenCCU/OpenCCU), der einige alte Softwareteile entfernt,
 die für Anwender, die ihre Automation anderswo (z. B. in Home Assistant, ioBroker, Node-RED, ...) betreiben, nicht notwendig sind:
 **Es gibt in openccu-lite keine ReGaHSS, keine WebUI-Programme und keine Homematic-Scripte.**
-Die alte CCU-WebUI wurde durch eine neu entwickelte Oberfläche ersetzt, der neue Daemon ["occulited"](https://github.com/hobbyquaker/occulited)
+Die alte CCU-WebUI wurde durch eine [neu entwickelte Oberfläche](docs/walkthrough/README.md) ersetzt, der neue Daemon ["occulited"](https://github.com/hobbyquaker/occulited)
 übernimmt die Aufgaben der Systemverwaltung. Systeminterna wie das Init-System, das Logging, die Funkmodulerkennung u. Ä. wurden von Grund auf neu
 gestaltet, viele neue Security-Features wurden implementiert.
 
@@ -36,7 +36,8 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
 
 ## Dokumentation
 
-Englisch, in [`docs/`](docs/) dieses Repositorys: der Wechsel von und zu OpenCCU
+Ein Rundgang mit Bildern durch jede Seite der Weboberfläche: [docs/walkthrough](docs/walkthrough/README.md).
+Weiteres, meist auf Englisch, in [`docs/`](docs/) dieses Repositorys: der Wechsel von und zu OpenCCU
 ([switching.de.md](docs/switching.de.md), auf Deutsch), der Proxmox-Container ([install-lxc.md](docs/install-lxc.md)),
 Addons ([addons.md](docs/addons.md)), Sicherheit ([security.md](docs/security.md),
 [threat-model.md](docs/threat-model.md)), Datenschutz – was das System nach außen sendet
