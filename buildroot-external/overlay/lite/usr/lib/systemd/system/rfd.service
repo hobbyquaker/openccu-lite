@@ -58,6 +58,11 @@ ProtectSystem=strict
 # is made by the prep step, which cannot run while a missing path fails the namespace setup
 ReadWritePaths=/var/status -/usr/local/etc/config/rfd
 ReadWritePaths=-/usr/local/etc/config/keys -/var/RFD.handlers
+# the address file (rfd.conf's Address File): when it carries no address, rfd writes the one it
+# uses into it, in place (after a factory reset, a first boot, with a module that has no address of
+# its own). The prep step makes the file, empty, and gives it to rfd, as it does keys: a missing
+# path is skipped here, and rfd could not create it in /etc/config.
+ReadWritePaths=-/usr/local/etc/config/ids
 # /var/etc: the prep step renders rfd.conf there from /etc/config at every start,
 # so a changed setting takes effect with a restart and needs no reboot.
 # It runs inside this namespace - the "+" prefix gives it privileges, not a way out of the mount
