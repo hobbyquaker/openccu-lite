@@ -12,6 +12,7 @@
 /release/*.sha256
 /release/*.mf
 /release/*.gz
+/release/*.xz
 helm/openccu/charts/
 helm/openccu/Chart.lock
 __pycache__
