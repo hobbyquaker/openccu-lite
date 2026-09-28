@@ -28,6 +28,10 @@
 # have the shapes the gate accepts since occulited task 125 (D-77): a session id is 26 characters
 # of base32 and is taken from a cookie or ?sid=; the legacy alias is ten alphanumerics, lives in
 # the legacy-sessions mirror and is taken from ?sid= under /addons/ alone, never from a cookie.
+# The cookie the gate reads is the gate cookie occulite_gate / __Secure-occulite_gate at
+# Path=/addons/ (openccu-lite task 259, D-78); the API's occulite_session is scoped to /api and is
+# no credential at the gate - checked below. (The shell's Content-Security-Policy is occulited's
+# own header, internal/ui/csp.txt, not lighttpd's; the echo stand-in here does not send it.)
 #
 # Usage: scripts/lite-lighttpd-redirect-test.sh [occulited checkout]     (default: ../occulited)
 #        ALPINE_IMAGE=alpine:3.22 is the default image.
@@ -483,8 +487,13 @@ reached() { wc -l </tmp/echo.log | tr -d ' '; }
 
 WS="-H Connection:Upgrade -H Upgrade:websocket -H Sec-WebSocket-Version:13 -H Sec-WebSocket-Key:dGhlIHNhbXBsZSBub25jZQ=="
 FORGED="-H X-Occulite-Session:FORGED0000 -H x-occulite-session:FORGED1111 -H X_Occulite_Session:FORGED2222 -H x.occulite.session:FORGED3333"
-HC="Cookie: occulite_session=$SID"
-SC="Cookie: theme=dark; __Secure-occulite_session=@$SID@"
+# the cookie the gate reads: occulite_gate since occulited task 259 (the API's occulite_session is
+# scoped to /api then), occulite_session before - the checks below follow the checkout's gate, as the
+# CI runs this against the pinned occulited until the pin moves
+if grep -q 'occulite_gate' /etc/lighttpd/occulite-gate.lua; then GC=occulite_gate; else GC=occulite_session; fi
+echo "the gate's cookie in this checkout: $GC"
+HC="Cookie: $GC=$SID"
+SC="Cookie: theme=dark; __Secure-$GC=@$SID@"
 
 if grep -q 'X-Occulite-Session' /etc/lighttpd/occulite-gate.lua; then
 # shellcheck disable=SC2086
@@ -493,20 +502,26 @@ echoed "an addon, HTTP cookie: the validated id" 200 $SID $R -H "$HC" http://ccu
 echoed "an addon, HTTPS cookie over HTTP/2: the validated id" 200 $SID $R --http2 -H "$SC" $S/addons/echo/
 echoed "an addon, ?sid=@..@ with the legacy alias: the validated alias" 200 $ALIAS $R "$S/addons/echo/?sid=@$ALIAS@"
 echoed "an addon, ?sid=@..@ with the session id: the validated id" 200 $SID $R "$S/addons/echo/?sid=@$SID@"
-echoed "an addon, the legacy alias in a cookie: 401 (an alias is taken from ?sid= alone)" 401 none $R -H "Cookie: occulite_session=$ALIAS" $S/addons/echo/
+echoed "an addon, the legacy alias in a cookie: 401 (an alias is taken from ?sid= alone)" 401 none $R -H "Cookie: $GC=$ALIAS" $S/addons/echo/
+if [ "$GC" = occulite_gate ]; then
+echoed "an addon, a live id under the API's cookie name: 401 (task 259: the gate reads the gate cookie alone)" 401 none $R -H "Cookie: occulite_session=$SID" $S/addons/echo/
+echoed "an addon, a live id under the API's HTTPS cookie name: 401" 401 none $R -H "Cookie: __Secure-occulite_session=$SID" $S/addons/echo/
+else
+  echo "skip  the API's cookie name at the gate: this occulited's gate still reads it (before task 259)"
+fi
 echoed "an addon, a live cookie and four forged headers: only the validated id" 200 $SID $R -H "$HC" $FORGED $S/addons/echo/
 echoed "an addon, ?sid= and forged headers over HTTP/2: only the validated id" 200 $SID $R --http2 $FORGED "$S/addons/echo/x?a=1&sid=$SID"
 echoed "an addon, a live cookie and an empty forged header" 200 $SID $R -H "$HC" -H "X-Occulite-Session;" $S/addons/echo/
 before=$(reached)
 echoed "an addon, forged headers, no session: 401, not passed on" 401 none $R $FORGED $S/addons/echo/
-echoed "an addon, forged headers, a stale cookie: 401" 401 none $R -H "Cookie: occulite_session=$STALE" $FORGED $S/addons/echo/
+echoed "an addon, forged headers, a stale cookie: 401" 401 none $R -H "Cookie: $GC=$STALE" $FORGED $S/addons/echo/
 echoed "an addon, forged headers, a browser without a session: the login" 302 none $R -H "Accept: text/html" $FORGED $S/addons/echo/
 echoed "a WebSocket upgrade, forged headers, no session: 401" 401 none $R --http1.1 $WS $FORGED http://ccu/addons/echo/ws
 h2ws "an HTTP/2 WebSocket, forged headers, no session: 401" "401 none" /addons/echo/ws "x-occulite-session: FORGED0000" "x_occulite_session: FORGED2222"
 if [ "$(reached)" = "$before" ]; then ok "the rejected requests never reached the addon"; else bad "the rejected requests reached the addon:"; tail -n +$((before + 1)) /tmp/echo.log; fi
 echoed "a WebSocket upgrade over HTTP/1.1, cookie and forged headers: the validated id" 101 $SID $R --http1.1 -H "$HC" $WS $FORGED http://ccu/addons/echo/ws
 echoed "a WebSocket upgrade over TLS HTTP/1.1, cookie and forged headers" 101 $SID $R --http1.1 -H "$SC" $WS $FORGED $S/addons/echo/ws
-h2ws "an HTTP/2 WebSocket (extended CONNECT), cookie and forged headers: the validated id" "200 $SID" /addons/echo/ws "cookie: __Secure-occulite_session=$SID" "x-occulite-session: FORGED0000" "x_occulite_session: FORGED2222" "x.occulite.session: FORGED3333"
+h2ws "an HTTP/2 WebSocket (extended CONNECT), cookie and forged headers: the validated id" "200 $SID" /addons/echo/ws "cookie: __Secure-$GC=$SID" "x-occulite-session: FORGED0000" "x_occulite_session: FORGED2222" "x.occulite.session: FORGED3333"
 h2ws "an HTTP/2 WebSocket with ?sid= and the legacy alias: the validated alias" "200 $ALIAS" "/addons/echo/ws?sid=@$ALIAS@" "x-occulite-session: FORGED0000"
 echoed "a CGI through occulited, cookie and forged headers: the validated id" 200 $SID $R -H "$HC" $FORGED http://ccu/addons/cgi/settings.cgi
 echoed "a CGI through occulited, ?sid= with the legacy alias over HTTP/2" 200 $ALIAS $R --http2 $FORGED "$S/addons/cgi/settings.cgi?sid=@$ALIAS@"
@@ -522,11 +537,11 @@ if grep -q 'lighty.c.md' /etc/lighttpd/occulite-gate.lua; then
   # digest itself is no credential; this lighttpd's lighty.c.md computes it
   RAW=RAWSESSION2345A2B3C4D5E6FG
   echo admin >"/var/run/occulite/sessions/$RAW"
-  echoed "an addon, a file named by the id itself (the old mirror): 401" 401 none $R -H "Cookie: occulite_session=$RAW" $S/addons/echo/
+  echoed "an addon, a file named by the id itself (the old mirror): 401" 401 none $R -H "Cookie: $GC=$RAW" $S/addons/echo/
   echoed "an addon, ?sid= of a file named by the id itself: 401" 401 none $R "$S/addons/echo/?sid=@$RAW@"
   rm -f "/var/run/occulite/sessions/$RAW"
-  echoed "an addon, a live session's digest as the cookie: 401" 401 none $R -H "Cookie: occulite_session=$(session_file $SID)" $S/addons/echo/
-  echoed "an addon, a forged id: 401" 401 none $R -H "Cookie: occulite_session=FORGED0000" $FORGED $S/addons/echo/
+  echoed "an addon, a live session's digest as the cookie: 401" 401 none $R -H "Cookie: $GC=$(session_file $SID)" $S/addons/echo/
+  echoed "an addon, a forged id: 401" 401 none $R -H "Cookie: $GC=FORGED0000" $FORGED $S/addons/echo/
 fi
 }
 else

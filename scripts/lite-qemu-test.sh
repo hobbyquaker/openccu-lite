@@ -350,7 +350,7 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
       say "addons: $id info"; guest "/usr/local/etc/config/rc.d/$id info 2>&1 | head -4"
       code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Accept: text/html' "$BASE/addons/$id/"); say "addons: /addons/$id/ without a session -> $code"
       [ "$code" = 302 ] || fail "the gate let a browser without a session at /addons/$id/ ($code)"
-      code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -H 'Accept: text/html' -b "occulite_session=$SID" "$BASE/addons/$id/"); say "addons: /addons/$id/ with the session -> $code"
+      code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -H 'Accept: text/html' -b "occulite_gate=$SID" "$BASE/addons/$id/"); say "addons: /addons/$id/ with the session (the gate cookie, task 259) -> $code"
       case "$code" in 302|401|403) fail "the gate refused the session at /addons/$id/ ($code)";; esac
       say "addons: uninstalling $id"
       code=$(curl -s -o "$WORK/uninstall.json" -w '%{http_code}' --max-time 300 -X POST -H "$AUTH" "$BASE/api/system/v1/addons/$id/uninstall")
