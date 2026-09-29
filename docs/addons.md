@@ -274,6 +274,27 @@ puts the script back by hand.
 
 Addon authors need not change anything.
 
+## `init` prepares, `start` starts
+
+Upstream calls every rc.d script twice at boot: `init` early, before the Homematic services, and
+`start` at the end. Some addons start their daemon in `init` and answer `start` with a hint such
+as *use init to start*. On openccu-lite **the daemon belongs in `start`**:
+
+- **A root addon's `init`** still runs at boot as root, in `occu-init-addons.service`. A daemon
+  started there lives in that unit, not in `addon-<id>.service`: the addon's unit runs `start`,
+  finds nothing to do and is `active (exited)`; `systemctl stop addon-<id>` does not stop the
+  daemon, a restart from the settings page starts a second one, and the unit's journal has
+  nothing of it. The Services page shows such a process as *outside its unit*; its *Restart*
+  moves it into the unit, which repairs it until the next boot.
+- **A confined addon's `init`** runs inside its unit, as its user, right before `start` (the
+  generated `30-addon-init.conf`, an `ExecStartPre`); the boot pass skips it. A daemon started
+  there is still running when `ExecStart` begins, and systemd logs *Found left-over process … in
+  control group while starting unit* at every start.
+
+openccu-lite does not change how `init` runs to make up for it (decided 2026-09-29): `init` only
+prepares - directories, generated configuration. An addon that must keep the CCU behaviour can
+branch on whether it runs inside its unit (`/proc/self/cgroup` names `addon-<id>.service`).
+
 ## No unit files of its own
 
 **Every addon runs in the generated unit.** It is built from the addon's rc.d script, its stored
