@@ -19,9 +19,14 @@ NETCONFIG=${OCCU_NETCONFIG:-/etc/config/netconfig}
 RUNDIR=${OCCU_RUNDIR:-/var/run}
 UDHCPC=${OCCU_UDHCPC:-/sbin/udhcpc}
 DHCP_SCRIPT=${OCCU_DHCP_SCRIPT:-/bin/dhcp.script}
+VENDOR_FILE=${OCCU_DHCP_VENDOR_FILE:-/etc/dhcp-vendor-class}
 
 HOSTNAME=
 MODE=
+# the DHCP vendor class (option 60) eQ3StartNetwork sends: openccu-lite's own
+DHCP_VENDOR_ID=openccu-lite
+# shellcheck disable=SC1090
+[ -r "$VENDOR_FILE" ] && . "$VENDOR_FILE"
 # shellcheck disable=SC1090
 [ -r "$NETCONFIG" ] && . "$NETCONFIG"
 if [ -z "$HOSTNAME" ]; then
@@ -49,7 +54,7 @@ for pidfile in "$RUNDIR"/udhcpc_*.pid; do
     done
   fi
   rm -f "$pidfile"
-  if "$UDHCPC" -b -t 20 -T 3 -S -x "hostname:$HOSTNAME" -i "$iface" -F "$HOSTNAME" -V eQ3-CCU3 -s "$DHCP_SCRIPT" -p "$pidfile" >/dev/null 2>&1; then
+  if "$UDHCPC" -b -t 20 -T 3 -S -x "hostname:$HOSTNAME" -i "$iface" -F "$HOSTNAME" -V "$DHCP_VENDOR_ID" -s "$DHCP_SCRIPT" -p "$pidfile" >/dev/null 2>&1; then
     echo "$iface: DHCP client restarted as $HOSTNAME"
     renewed=$((renewed + 1))
   else

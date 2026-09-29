@@ -3,10 +3,14 @@
 
 IFACE=${1}
 
+# the DHCP vendor class (option 60): a CCU3's, unless the product names its own
+DHCP_VENDOR_ID=eQ3-CCU3
+[ -r /etc/dhcp-vendor-class ] && . /etc/dhcp-vendor-class
+
 while true; do
   sleep 10
   killall -q udhcpc
-  /sbin/udhcpc -b -t 20 -T 3 -S -x "hostname:${HOSTNAME}" -i "${IFACE}" -F "${HOSTNAME}" -V eQ3-CCU3 -s /bin/dhcp.script -p "/var/run/udhcpc_${IFACE}.pid"
+  /sbin/udhcpc -b -t 20 -T 3 -S -x "hostname:${HOSTNAME}" -i "${IFACE}" -F "${HOSTNAME}" -V "${DHCP_VENDOR_ID}" -s /bin/dhcp.script -p "/var/run/udhcpc_${IFACE}.pid"
   if [[ -f "/var/run/udhcpc_${IFACE}.pid" ]]; then
     exit 0
   fi

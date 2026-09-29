@@ -10,6 +10,10 @@ umask 0002
 # source in the network config
 [[ -r /etc/config/netconfig ]] && . /etc/config/netconfig
 
+# the DHCP vendor class (option 60): a CCU3's, unless the product names its own
+DHCP_VENDOR_ID=eQ3-CCU3
+[[ -r /etc/dhcp-vendor-class ]] && . /etc/dhcp-vendor-class
+
 # signal that we are about to setup the network
 # connection using a slow blinking blue LED
 # (openccu-lite: only with an RPI-RF-MOD, whose RX8130 S02InitRTC found - the overlay gives every
@@ -203,7 +207,7 @@ case "${MODE}" in
   DHCP)
     echo -n "dhcp, "
 
-    /sbin/udhcpc -b -t 20 -T 3 -S -x "hostname:${HOSTNAME}" -i "${IFACE}" -F "${HOSTNAME}" -V eQ3-CCU3 -s /bin/dhcp.script -p "/var/run/udhcpc_${IFACE}.pid" 2>/dev/null >/dev/null
+    /sbin/udhcpc -b -t 20 -T 3 -S -x "hostname:${HOSTNAME}" -i "${IFACE}" -F "${HOSTNAME}" -V "${DHCP_VENDOR_ID}" -s /bin/dhcp.script -p "/var/run/udhcpc_${IFACE}.pid" 2>/dev/null >/dev/null
     if [[ ! -f "/var/run/udhcpc_${IFACE}.pid" ]]; then
       killall -q checkDHCP
       /bin/checkDHCP "${IFACE}" &

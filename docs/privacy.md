@@ -194,7 +194,7 @@ is then an internet connection you chose.
 
 | Connection | What goes out | When | Switch |
 | --- | --- | --- | --- |
-| DHCP (IPv4) | the host name (default `openccu`), the vendor class `eQ3-CCU3` on Ethernet (a CCU3's; question B-243), the MAC address as any DHCP client | at boot and at each lease renewal | Network page: static address |
+| DHCP (IPv4) | the host name (default `openccu`), the vendor class `openccu-lite` on Ethernet (option 60; a CCU3 sends `eQ3-CCU3` there), the MAC address as any DHCP client | at boot and at each lease renewal | Network page: static address |
 | DHCPv6 | the MAC-derived client id, as any DHCPv6 client | when IPv6 is set to DHCPv6 | Network page |
 | SSDP (UPnP) | `NOTIFY` at start (twice, a minute apart) and every 30 minutes, and answers to `M-SEARCH`: `SERVER: Linux UPnP/1.0 openccu-lite/<version>`, the description URL, the board serial or SGTIN as the UUID and serial (the first announcement waits up to 15 s for it; the host name when none is known, taken back with a `byebye` once the serial is), the friendly name `openccu-lite - <host name>`; the description names the web UI as `http://<name the certificate covers>/` | always | firewall |
 | eQ-3 discovery (UDP 43439) | answers to a CCU finder's probe: the type, the serial or SGTIN, the version | always, only when asked | firewall |
@@ -217,7 +217,7 @@ What reaches the system **from** the LAN (the web UI, the XML-RPC ports, SSH) is
 ## The recovery system
 
 The recovery system (Raspberry Pi and OVA) runs only for an update from a file or a rescue. While it runs it:
-- asks DHCP with the vendor class `eQ3-CCU3` and no host name;
+- asks DHCP with the vendor class `openccu-lite` and no host name;
 - sets the clock with `ntpdate` against the default gateway, then `0-3.de.pool.ntp.org` - it does not read your NTP
   setting;
 - announces itself over SSDP and answers eQ-3's discovery, with the board serial, as a CCU3's recovery system does;

@@ -47,15 +47,20 @@ echo "PRODUCT=${LITE_PRODUCT}" >>"${TARGET_DIR}/VERSION"
 echo "PLATFORM=${LITE_PLATFORM}" >>"${TARGET_DIR}/VERSION"
 
 # Define parameters with default values
-DHCP_VENDOR_ID=eQ3-CCU3
+# (openccu-lite: its own DHCP vendor class, as the system's /etc/dhcp-vendor-class - B-243)
+DHCP_VENDOR_ID=openccu-lite
  
 # Load product specific parameters
 if [ -r "${TARGET_DIR}/etc/product" ]; then
   . "${TARGET_DIR}/etc/product"
-
-  # Replace vendor ID in interfaces
-  sed -i "s/eQ3-CCU3/${DHCP_VENDOR_ID}/g" "${TARGET_DIR}/etc/network/interfaces"
 fi
+
+# Replace vendor ID in interfaces
+sed -i "s/eQ3-CCU3/${DHCP_VENDOR_ID}/g" "${TARGET_DIR}/etc/network/interfaces"
+grep -q -- "-V ${DHCP_VENDOR_ID}\$" "${TARGET_DIR}/etc/network/interfaces" || {
+	echo "recovery post-build: ERROR: the DHCP vendor class ${DHCP_VENDOR_ID} is not in etc/network/interfaces" >&2
+	exit 1
+}
 
 # rename some stuff buildroot introduced but we need differently
 [ -e "${TARGET_DIR}/etc/init.d/S10udevd" ] && mv -f "${TARGET_DIR}/etc/init.d/S10udevd" "${TARGET_DIR}/etc/init.d/S00udevd"

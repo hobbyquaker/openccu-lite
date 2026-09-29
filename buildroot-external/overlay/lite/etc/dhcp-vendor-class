@@ -1,0 +1,3 @@
+# openccu-lite: the DHCP vendor class (option 60) the Ethernet DHCP client sends.
+# Read by eQ3StartNetwork, checkDHCP and lite-network-reload; a CCU3 sends eQ3-CCU3 here.
+DHCP_VENDOR_ID=openccu-lite
