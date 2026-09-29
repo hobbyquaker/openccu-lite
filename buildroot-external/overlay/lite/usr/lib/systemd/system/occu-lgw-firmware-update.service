@@ -4,7 +4,8 @@
 # update fails the unit with its reason in the journal - the script exited 0 whatever happened.
 # A gateway that does not answer a ping is not a failed update: the check is skipped with the
 # address in the journal and runs again at the next start, so an unplugged gateway neither holds
-# the boot in eq3configcmd's timeouts nor fails the unit.
+# the boot in eq3configcmd's timeouts nor fails the unit. No network at all (no default route, or
+# its gateway silent) is the same skip: nothing could reach a gateway then either.
 [Unit]
 Description=LAN gateway firmware update
 # It updates the LAN gateways named in rfd.conf and hs485d.conf, so it needs an address and

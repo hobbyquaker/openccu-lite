@@ -1,0 +1,96 @@
+#!/bin/sh
+# openccu-lite: is an addon's program there? The ExecCondition= of every generated addon unit
+# (ExecCondition=+/usr/libexec/occu/lite-addon-payload <name>, the occu-addons generator).
+#
+# A backup keeps what a CCU backup keeps: /usr/local whole, except the contents of every directory
+# tagged .nobackup (createBackup.sh's tar --exclude-tag=.nobackup keeps the directory and the tag).
+# That is where the addons keep their program - Mosquitto's bin/, lib/, www/, Homematic Manager's
+# app/, bin/, www/, RedMatic's bin/, lib/, ... unless its settings say "full" - so after a restore
+# such an addon is back by its rc.d entry, settings and data alone, and its start fails ("wrapper
+# without its script"). This check keeps the unit from starting then: an ExecCondition= that exits
+# 1 leaves the unit inactive and skipped, not failed, and occulited's Addons page and Status name the
+# addon with "installed before the restore; reinstall it". Nothing is reinstalled automatically
+# (maintainer, 2026-09-28).
+#
+# The program is missing when
+#   - the addon-rc wrapper's <name>.script is not there, or is a link to nothing (RedMatic and
+#     Mosquitto link it into their bin/), or
+#   - the addon has tagged program directories (depth 1 and 2 under /usr/local/addons/<name>, as
+#     occulited looks; tmp/, cache/ and what is under var/ are caches and state, not the program)
+#     and every one of them holds nothing but its tag.
+# Exit 1 then, with one line for the journal; 0 in every other case - a check that cannot decide
+# must never keep an addon from starting.
+set -u
+NAME=${1:-}
+RCD=${OCCU_ADDON_RCD:-/usr/local/etc/config/rc.d}          # overridable for tests
+ADDONS=${OCCU_ADDONS_DIR:-/usr/local/addons}
+MARK='openccu-lite addon-rc wrapper'
+
+case "${NAME}" in
+  ''|.*|*[!A-Za-z0-9_.-]*) exit 0 ;;
+esac
+
+missing() {
+  echo "addon ${NAME}: its program files are missing ($1) - a backup keeps no .nobackup directory; not started, reinstall it (Addons page)" >&2
+  exit 1
+}
+
+# the wrapper without its script
+if [ -f "${RCD}/${NAME}" ] && grep -q "${MARK}" "${RCD}/${NAME}" 2>/dev/null; then
+  if [ ! -e "${RCD}/${NAME}.script" ]; then
+    if [ -L "${RCD}/${NAME}.script" ]; then
+      missing "rc.d/${NAME}.script points to $(readlink "${RCD}/${NAME}.script" 2>/dev/null)"
+    fi
+    missing "rc.d/${NAME}.script"
+  fi
+fi
+
+A="${ADDONS}/${NAME}"
+[ -d "${A}" ] || exit 0
+
+# program: a tagged directory that is not a cache or state
+program() {
+  case "$1" in
+    tmp|cache|var|var/*|*/tmp|*/cache) return 1 ;;
+  esac
+  return 0
+}
+
+# only_tag: the directory holds exactly the tag
+only_tag() {
+  [ "$(ls -A "$1" 2>/dev/null)" = ".nobackup" ]
+}
+
+tagged=0
+emptied=0
+list=
+check() { # $1 relative path
+  program "$1" || return 0
+  tagged=$((tagged + 1))
+  if only_tag "${A}/$1"; then
+    emptied=$((emptied + 1))
+    list="${list:+${list}, }$1"
+  fi
+}
+
+if [ -f "${A}/.nobackup" ]; then
+  check .
+else
+  for d in "${A}"/* "${A}"/.[!.]*; do
+    [ -d "${d}" ] && [ ! -L "${d}" ] || continue
+    rel=${d#"${A}"/}
+    if [ -f "${d}/.nobackup" ]; then
+      check "${rel}"
+      continue
+    fi
+    for e in "${d}"/* "${d}"/.[!.]*; do
+      [ -d "${e}" ] && [ ! -L "${e}" ] && [ -f "${e}/.nobackup" ] || continue
+      check "${e#"${A}"/}"
+    done
+  done
+fi
+
+if [ "${tagged}" -gt 0 ] && [ "${emptied}" = "${tagged}" ]; then
+  missing "${list} hold only .nobackup"
+fi
+exit 0

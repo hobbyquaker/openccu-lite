@@ -265,8 +265,8 @@ else
 fi
 # every Exec line with a "+" or "!" prefix (systemd's run-with-full-privileges markers) in the output
 plus=$(grep -rhs -e '^Exec[A-Za-z]*=[-+!@:]*[+!]' "$EL" | sort)
-want=$(for n in clean dangling dropin planted; do echo "ExecStartPre=+-/usr/libexec/occu/lite-addon-own $n"; done)
-[ "$plus" = "$want" ] && ok "planted: the only commands run as root are the ownership steps" || bad "planted: privileged commands: $plus"
+want=$( (for n in clean dangling dropin planted; do echo "ExecCondition=+/usr/libexec/occu/lite-addon-payload $n"; echo "ExecStartPre=+-/usr/libexec/occu/lite-addon-own $n"; done) | sort)
+[ "$plus" = "$want" ] && ok "planted: the only commands run as root are the program check (B-267) and the ownership steps" || bad "planted: privileged commands: $plus"
 [ "$(ls "$EL/addon-planted.service.d" 2>/dev/null | tr '\n' ' ')" = "10-policy.conf 20-addon-own.conf 30-addon-init.conf " ] \
   && ok "planted: only the policy, the ownership step and the init step as drop-ins" || bad "planted: drop-ins $(ls "$EL/addon-planted.service.d" 2>&1)"
 if find "$EL" -type l ! -path "$EL/addons.target.wants/*" | grep -q .; then

@@ -7,6 +7,13 @@ with the firmware's own `/bin/install_addon`, exactly as OpenCCU's `cp_software.
 `/usr/local` survives a switch in either direction, so an addon installed on a stock CCU3 or
 on OpenCCU simply comes along.
 
+> **`/bin/install_addon` on the command line** (`/usr/local/tmp/new_addon.tar.gz`, as on a CCU) and
+> from an addon's own updater hands the archive to the system's install, the same one as an upload
+> on the Addons page: the addon's manifest, its policy and its unit apply, and the addon is started
+> in its unit as its own user — not by its update script as the caller, root and unconfined. The
+> output of that install is printed, and the exit code is the installer's. When the system's
+> service does not answer, the script installs on its own as before.
+
 > **Where the declarations live:** an addon describes itself in its own manifest, `openccu-lite.json`
 > at the root of its archive ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)): its `ui` facts and its `runtime`
 > block. The system reads it at every install and update; the catalogue only says where an addon's
@@ -33,6 +40,22 @@ that bit (through the privilege helper — the script is root's) and then start 
 
 Two checks disable an addon by themselves, both on the first boot after a switch from OpenCCU, and
 both reversible by the user:
+
+## After a backup restore
+
+A backup is what a CCU backup is: all of `/usr/local`, except the contents of every directory that
+holds a `.nobackup` file (the directory and the file are kept). Most addons put that file into their
+program directories — Mosquitto into `bin`, `lib`, `www`; Homematic Manager into `app`, `bin`, `www`;
+RedMatic into `bin`, `lib`, `www` and more, unless its settings ask for a full backup — so a restore
+brings such an addon back with its settings and data but without its program, exactly as on a CCU.
+
+Such an addon is **not started** after the restore: every addon unit's `ExecCondition=` runs
+`lite-addon-payload <id>`, which finds the addon-rc wrapper's script missing (or linked to nothing),
+or every tagged program directory holding nothing but its tag (`tmp`, `cache` and what is under
+`var` are caches and do not count). The unit is then *skipped*, never *failed*, with one journal
+line. The Addons page and Status name the addon — "installed before the restore; reinstall it" —
+with a *Reinstall* button where the catalogue has it; the settings stay. Nothing is reinstalled
+automatically. An addon that wants its program in every backup leaves its directories untagged.
 
 ## Addons that need the ReGa
 

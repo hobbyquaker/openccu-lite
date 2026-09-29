@@ -1,0 +1,147 @@
+#!/bin/sh
+# shellcheck shell=dash disable=SC2169
+#
+# openccu-lite: overlay/base/bin/install_addon with one step in front (openccu-lite B-274).
+# Everything below the hand-over is the base copy unchanged; review it against that file on
+# every rebase.
+#
+# An install started outside occulited - on the command line, or by an addon's own updater - is
+# handed to occulited's install (POST /api/system/v1/addons/install/local, the install token as
+# credential), so it is the same job as an upload on the Addons page: the manifest applied, the
+# policy written, the addon-rc wrapper put back in front of the addon's script, and the unit
+# stopped and started by systemd. Run here directly, an update script that copied its own rc.d
+# script over the wrapper and then called `rc.d/<id> start` left the addon running as its caller -
+# root, unconfined, in the caller's cgroup - while systemd believed the unit stopped.
+#
+# The install runs here itself, as it always did:
+#  - inside occulited's own install scope (occulite-addon-*.scope): occulited called this script;
+#  - without an install token (occulited has not started since the boot, or is older than the
+#    route), without curl, or when occulited does not take the archive (not listening, 401, 404).
+# While another install runs (409), or when the connection broke after the archive went out (the
+# install may be running), nothing is installed here: exit 1.
+
+LITE_TMP=${OCCU_INSTALL_TMP:-/usr/local/tmp}                       # overridable for tests
+LITE_TOKEN=${OCCU_INSTALL_TOKEN_FILE:-/run/occulite/install-token}   # (scripts/testcases/
+LITE_CGROUP=${OCCU_INSTALL_CGROUP:-/proc/self/cgroup}               #  lite-install-addon-test.sh)
+LITE_API=${OCCU_INSTALL_API:-http://127.0.0.1:8183/api/system/v1/addons/install/local}
+
+# in_occulited_install: the own cgroup is occulited's install scope (cgroup v2 has the one line
+# "0::<path>"; on v1 every controller line carries the same path)
+in_occulited_install() {
+  [ -r "${LITE_CGROUP}" ] || return 1
+  while IFS=: read -r _id _ctl path; do
+    case "${path}" in
+      */occulite-addon-*.scope|*/occulite-addon-*.scope/*) return 0 ;;
+    esac
+  done < "${LITE_CGROUP}"
+  return 1
+}
+
+# hand_over: returns only when the install is to run here; exits with the installer's code otherwise
+hand_over() {
+  [ -f "${LITE_TMP}/new_addon.tar.gz" ] || return 0
+  [ -r "${LITE_TOKEN}" ] || return 0
+  command -v curl >/dev/null 2>&1 || return 0
+  in_occulited_install && return 0
+  token=$(cat "${LITE_TOKEN}" 2>/dev/null)
+  [ -n "${token}" ] || return 0
+  work=$(mktemp -d -p "${LITE_TMP}") || return 0
+  if ! mv "${LITE_TMP}/new_addon.tar.gz" "${work}/addon.tar.gz"; then
+    rm -rf "${work}"
+    return 0
+  fi
+  curl -sS -o "${work}/out" -D "${work}/headers" -X POST \
+    -H "Authorization: Bearer ${token}" -H 'Content-Type: application/gzip' \
+    -T "${work}/addon.tar.gz" "${LITE_API}"
+  rc=$?
+  status=$(sed -n 's/^HTTP\/[0-9.]* \([0-9]*\).*/\1/p' "${work}/headers" 2>/dev/null | tail -n 1)
+  code=$(tr -d '\r' < "${work}/headers" 2>/dev/null | sed -n 's/^[Xx]-[Oo]cculite-[Aa]ddon-[Ee]xit: *\([0-9][0-9]*\)$/\1/p' | tail -n 1)
+  if [ ${rc} -eq 0 ] && [ -n "${code}" ]; then
+    cat "${work}/out"
+    rm -rf "${work}"
+    exit "${code}"
+  fi
+  if [ ${rc} -eq 7 ] || { [ ${rc} -eq 0 ] && { [ "${status}" = 401 ] || [ "${status}" = 404 ]; }; }; then
+    echo "install_addon: occulited did not take the archive (curl ${rc}, HTTP ${status:-none}); installing without it" >&2
+    mv "${work}/addon.tar.gz" "${LITE_TMP}/new_addon.tar.gz"
+    rm -rf "${work}"
+    return 0
+  fi
+  if [ "${status}" = 409 ]; then
+    echo "install_addon: another addon install is running; try again when it has finished" >&2
+  else
+    echo "install_addon: the hand-over to occulited failed (curl ${rc}, HTTP ${status:-none}); the install may still be running there: see journalctl -t addon-install" >&2
+    cat "${work}/out" >&2 2>/dev/null
+  fi
+  rm -rf "${work}"
+  exit 1
+}
+
+hand_over
+# the test stops here, before the base install would touch /usr/local/tmp of the machine it runs on
+[ -n "${OCCU_INSTALL_TEST_STOP:-}" ] && exit "${OCCU_INSTALL_TEST_STOP}"
+
+# ---- overlay/base/bin/install_addon from here on ----
+#
+# simple install_addon script that will install CCU addons
+# and return either codes >= 10 to signal errors or lower
+# numbers to signal success.
+#
+# check if we have an update archive
+if [[ ! -f /usr/local/tmp/new_addon.tar.gz ]]; then
+  exit 101
+fi
+
+# create temp update directory
+UPDATEDIR=$(mktemp -d -p /usr/local/tmp)
+
+# unarchive addon archive
+umask 022
+if ! /bin/tar -C "${UPDATEDIR}" --warning=no-timestamp --no-same-owner --no-same-permissions -xf /usr/local/tmp/new_addon.tar.gz; then
+  exit 102
+fi
+
+# remove addon archive after unarchiving
+if ! rm -f /usr/local/tmp/new_addon.tar.gz; then
+  exit 103
+fi
+
+# check that the update archive contains
+# and executable 'update_script' file
+if [[ ! -x ${UPDATEDIR}/update_script ]]; then
+  exit 104
+fi
+
+# if there are any *.sha256 files we verify
+# the integrity of the archive via the included SHA256 checksums
+(cd "${UPDATEDIR}";
+  for chk_file in "${UPDATEDIR}"/*.sha256; do
+    [ -f "${chk_file}" ] || break
+    if ! /usr/bin/sha256sum -sc "${chk_file}"; then
+      exit 106
+    fi
+  done
+) || exit 105
+
+# perform addon install by executing the 'update_script' script
+(cd "${UPDATEDIR}" && ./update_script HM-RASPBERRYMATIC 2>/dev/null >/dev/null)
+RESULT=$?
+
+# make sure rootfs and bootfs are read-only
+mount -o ro,remount /
+mount -o ro,remount /boot
+
+# cleanup UPDATEDIR
+rm -rf "${UPDATEDIR}"
+
+# run ldconfig if present because an addon
+# could have installed a new shared library
+if [[ -x /sbin/ldconfig ]]; then
+  /sbin/ldconfig -C /var/cache/ld.so.cache
+fi
+
+# make sure all data is written to disk
+sync
+
+# exit with supplied EXIT code of update_script
+exit ${RESULT}

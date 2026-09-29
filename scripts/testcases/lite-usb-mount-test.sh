@@ -1,7 +1,7 @@
 #!/bin/sh
 # openccu-lite (task 161): USB sticks mounted in the host's namespace - lite-usb-mount (udev's facts
 # handed to usbmount without eval), the udev rule, the template unit, the usbmount.conf options and
-# the post-build removal of usbmount.rules.
+# the post-build removal of usbmount.rules; the usbstorage group (B-259).
 #
 # Usage: sh scripts/testcases/lite-usb-mount-test.sh    (from the fork's checkout)
 set -u
@@ -55,15 +55,23 @@ for n in "" "../sda" "sda1;x" "sd a"; do
 done
 sh "$TOOL" format sda1 2>/dev/null; [ $? = 2 ] && ok "unknown action refused" || bad "unknown action"
 
-# usbmount.conf: nosuid, and the occulite group on FAT, exFAT and NTFS
-printf 'root:x:0:\nocculite:x:8100:\n' > "$T/group"
+# usbmount.conf: nosuid, and the usbstorage group (B-259) on FAT, exFAT and NTFS, read and write
+printf 'root:x:0:\nocculite:x:8100:\ncerts:x:8101:\nusbstorage:x:8102:occulite\n' > "$T/group"
 out=$(LITE_GROUP_FILE="$T/group" sh -c ". '$CONF'; echo \"\$MOUNTOPTIONS|\$FS_MOUNTOPTIONS\"")
 case "$out" in *nosuid*) ok "nosuid" ;; *) bad "no nosuid: $out" ;; esac
 for fs in vfat exfat ntfs-3g fuseblk; do
-  case " ${out#*|} " in *" -fstype=${fs},"*"uid=0,gid=8100,umask=0027"*) ok "$fs: root, the occulite group" ;; *) bad "$fs: $out" ;; esac
+  case " ${out#*|} " in *" -fstype=${fs},"*"uid=0,gid=8102,umask=0007 "*) ok "$fs: root, the usbstorage group" ;; *) bad "$fs: $out" ;; esac
 done
+# an image without the group: the occulite group, read only, as before B-259; without either, root's
+printf 'root:x:0:\nocculite:x:8100:\n' > "$T/group-old"
+out=$(LITE_GROUP_FILE="$T/group-old" sh -c ". '$CONF'; echo \"\$FS_MOUNTOPTIONS\"")
+case " $out " in *" -fstype=exfat,uid=0,gid=8100,umask=0027 "*) ok "no usbstorage group: occulite's, read only" ;; *) bad "fallback: $out" ;; esac
 out=$(LITE_GROUP_FILE="$T/none" sh -c ". '$CONF'; echo \"\$FS_MOUNTOPTIONS\"")
-case "$out" in *gid=0,*) ok "no occulite group: root's" ;; *) bad "fallback: $out" ;; esac
+case "$out" in *gid=0,*) ok "no group at all: root's" ;; *) bad "fallback: $out" ;; esac
+# the image's accounts: the group pinned at 8102, occulite its member
+MK="$HERE/buildroot-external/package/occulited/occulited.mk"
+grep -qE '^[[:space:]]+- -1 usbstorage 8102 \* - - - ' "$MK" && ok "occulited.mk: usbstorage 8102" || bad "occulited.mk: no usbstorage group"
+grep -qE '^[[:space:]]+occulite 8100 occulite 8100 \* /usr/local/etc/occulite - usbstorage ' "$MK" && ok "occulited.mk: occulite in usbstorage" || bad "occulited.mk: occulite not in usbstorage"
 
 # the rule: the system's own partitions left alone, the unit wanted for a filesystem
 grep -q 'ENV{SYSTEMD_WANTS}+="occu-usb-mount@%k.service"' "$RULE" && grep -q '^TAG+="systemd"' "$RULE" && ok "rule: wants the unit" || bad "rule: SYSTEMD_WANTS"

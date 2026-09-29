@@ -80,7 +80,9 @@ jobs:
           sh scripts/testcases/lite-network-reload-test.sh
           sh scripts/testcases/occu-addons-generator-test.sh
           sh scripts/testcases/lite-addon-own-test.sh
+          sh scripts/testcases/lite-addon-payload-test.sh
           sh scripts/testcases/addon-rc-wrapper-test.sh
+          sh scripts/testcases/lite-install-addon-test.sh
           sh scripts/testcases/lite-addon-rc-test.sh
           sh scripts/testcases/lite-init-addons-test.sh
           sh scripts/testcases/lite-initscripts-test.sh

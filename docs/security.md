@@ -148,6 +148,12 @@ that names the port.
     is logged and the scope left out. An addon without a declaration has the local token alone.
   - The daemon's own update check of an addon rides on a `system:read` token it mints for
     itself at start, not on the local token.
+  - **The install token** `/run/occulite/install-token` (`0600`, root; minted at every start, in
+    memory only, never in `users.json`) opens exactly one route, `POST /api/system/v1/addons/install/local`,
+    and only from the system itself: `/bin/install_addon` hands an install started outside the
+    system's service (the command line, an addon's own updater) to the service's install with it, so
+    the addon ends up in its unit and under its policy (openccu-lite B-274). It grants root nothing
+    root does not have — root runs `/bin/install_addon` anyway — and a confined addon cannot read it.
   - **The scope `led`** (the role, which no account can have): the status LED's state, its
     own override and locate (`GET /api/system/v1/led/state`, `POST`/`DELETE /led/override[/{id}]`,
     `POST`/`DELETE /led/locate`) and nothing else — every other route, addon pages included,
@@ -174,6 +180,16 @@ confined addon runs with `SupplementaryGroups=certs`, so a broker (mosquitto's `
 or a web server behind its own user offers TLS with the system's certificate instead of dying on
 a permission error. The group is a trust boundary: whoever is in it can impersonate the
 system on TLS. Root addons read the file anyway; nothing else is in the group.
+
+**The `usbstorage` group (B-259).** USB sticks with FAT, exFAT or NTFS carry no owner or mode of
+their own, so the mount gives every file the same: root the owner, `usbstorage` the group, umask
+0007 (`usbmount.conf`). `occulite` is a member (the backups on a stick are listed and restored by
+occulited); a confined addon joins only when its manifest declares the group, and writes only when
+it declares `/media` among its paths as well. Unlike `certs` it is not granted to every confined
+addon: a stick may hold the system's backups, and a backup made without encryption carries the
+radio keys, so an addon that declares the group can read them - the addon's manifest says so, and
+the user decides whether to install it. ext4 and the other Unix filesystems keep the owners and
+modes on the stick.
 
 **The certificate itself.** The live file can come from an ACME CA now — Let's
 Encrypt, ZeroSSL, or a LAN CA such as step-ca — issued and renewed by occulited with lego as a

@@ -97,6 +97,12 @@ endef
 # D-46: the certs group may read /etc/config/server.pem (root:certs 0640, set by lite-cert-perms
 # after every lighttpd start and reload); occulited puts every confined addon into it. The gid is
 # pinned like the occulite uid, for the same reason (B-34).
+# B-259: the usbstorage group reads and writes USB sticks with FAT, exFAT or NTFS, which carry no
+# owner of their own: usbmount mounts them root:usbstorage with umask 0007
+# (overlay/lite/etc/usbmount/usbmount.conf). occulite is its member (it lists and restores the
+# backups there) - through /etc/group rather than the unit, so an occulited unit never names a group
+# an older image lacks; a confined addon joins by declaring it in its manifest. The gid is pinned
+# (B-34).
 # D-55 (task 67): the interface daemons run as users of their own - rfd, hmipserver, multimacd,
 # hs485d and hmlangw, 8110-8114, each in a group of its own name - and the device nodes carry
 # resource groups (raw-uart, eq3loop, mmd-bidcos, mmd-hmip, 990-993) that udev and the
@@ -111,8 +117,9 @@ endef
 # crRFD and eshlight, hs485d's device files) keep these numeric owners across an update, and no
 # upstream account, auto-allocated from 100, can inherit them on a box that goes back to OpenCCU.
 define OCCULITED_USERS
-	occulite 8100 occulite 8100 * /usr/local/etc/occulite - - openccu-lite system service
+	occulite 8100 occulite 8100 * /usr/local/etc/occulite - usbstorage openccu-lite system service
 	- -1 certs 8101 * - - - TLS certificate readers (D-46)
+	- -1 usbstorage 8102 * - - - USB stick readers and writers (B-259)
 	rfd 8110 rfd 8110 * - - - BidCos-RF interface daemon (D-55)
 	hmipserver 8111 hmipserver 8111 * - - - HmIP interface server (D-55)
 	multimacd 8112 multimacd 8112 * - - - radio module multiplexer (D-55)

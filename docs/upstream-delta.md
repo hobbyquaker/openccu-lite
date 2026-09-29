@@ -318,7 +318,9 @@ a script changes the unit's behaviour with it. A rebase that **adds, renames or 
 `qemu-guest-agent`) carry their script's `start()` inline because the packages
 install the script for busybox init only; diff them against `package/*/S*` as well. Three files
 override buildroot's own units by name (`chrony.service`, `lighttpd.service`, `sshd.service`) and
-one overlay file shadows an upstream script (`bin/setclock`).
+two overlay files shadow upstream scripts (`bin/setclock`; `bin/install_addon`, whose body below the
+hand-over to occulited is the base copy unchanged — `scripts/testcases/lite-install-addon-test.sh` fails when they
+differ).
 
 No upstream file is edited for this beyond one D-4-shaped touch:
 `buildroot-external/package/recovery-system/external/board/post-build.sh` carries the same D-31

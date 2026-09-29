@@ -47,7 +47,7 @@ done
 for row in "raw-uart 990" "eq3loop 991" "mmd-bidcos 992" "mmd-hmip 993"; do
   if grep -qE "^[[:space:]]+- -1 $row \\* - - - " "$MK"; then ok "users table: group $row"; else bad "users table must carry the group '$row'"; fi
 done
-if [ "$(sed -n '/^define OCCULITED_USERS/,/^endef/p' "$MK" | grep -cE '^[[:space:]]+[a-z0-9-]+ (8[0-9]{3}|-1) [a-z0-9-]+ (8[0-9]{3}|99[0-3]) ')" -eq 11 ]; then ok "users table: eleven pinned rows"; else bad "users table: eleven pinned rows expected"; fi
+if [ "$(sed -n '/^define OCCULITED_USERS/,/^endef/p' "$MK" | grep -cE '^[[:space:]]+[a-z0-9-]+ (8[0-9]{3}|-1) [a-z0-9-]+ (8[0-9]{3}|99[0-3]) ')" -eq 12 ]; then ok "users table: twelve pinned rows"; else bad "users table: twelve pinned rows expected"; fi
 # udev deprecates GROUP= on a device node for a group above systemd's SYS_GID_MAX (999): every group
 # the radio rules name is a system group, pinned at the top of the range automatic allocation fills last
 for g in $(sed -n 's/.*GROUP="\([^"]*\)".*/\1/p' "$EXT/overlay/lite/usr/lib/udev/rules.d/60-openccu-lite-radio.rules" "$EXT/overlay/lite/usr/lib/udev/rules.d/61-openccu-lite-radio-hotplug.rules" 2>/dev/null | sort -u); do

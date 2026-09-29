@@ -44,6 +44,12 @@
 # after the network, the web server, occulited and occu-addons only, and Wants= its interface units
 # (its needs, or rfd and hmipserver when it declares none) without After= on them. A missing file or
 # any other content keeps the ordering above.
+#
+# An addon whose program a backup restore did not bring back (openccu-lite B-267: the addons keep
+# it in .nobackup directories, as on a CCU) is not started: ExecCondition=lite-addon-payload exits 1
+# for it, and the unit stays inactive, skipped - never failed. occulited's Addons page and Status
+# name it with a reinstall button; nothing reinstalls it automatically. "+": the check reads the
+# addon's directories as root, whatever User= the policy sets.
 
 ROOT=${OCCU_ADDONS_ROOT:-}
 EARLY_DIR=${2:?generator early dir}
@@ -154,6 +160,7 @@ Before=addons.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+ExecCondition=+/usr/libexec/occu/lite-addon-payload ${name}
 ExecStart=/bin/sh -c '. /etc/profile; exec ${real} start'
 ExecStop=/bin/sh -c '. /etc/profile; exec ${real} stop'
 KillMode=control-group

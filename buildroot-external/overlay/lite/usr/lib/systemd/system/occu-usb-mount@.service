@@ -3,7 +3,8 @@
 # /usr/libexec/occu/lite-usb-mount runs upstream's usbmount with udev's facts about the partition,
 # here in the host's mount namespace: /media/usb1…8, the first stick linked as /media/usb0 (the
 # backup's default directory), nosuid, nodev, noexec, noatime; FAT, exFAT and NTFS owned by root
-# and readable by the occulite group (overlay/lite/etc/usbmount/usbmount.conf).
+# and read and written by the usbstorage group - occulited and the addons that declare it
+# (overlay/lite/etc/usbmount/usbmount.conf).
 #
 # BindsTo= the device: pulling the stick stops the unit, and the stop unmounts (lazily - the
 # device is gone) and runs usbmount's umount.d hooks. A shutdown stops it the same way.
