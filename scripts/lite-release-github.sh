@@ -13,6 +13,8 @@
 #   - takes per product the update zip, the .ova (x86_64-ova) or the in-place -ccu3.tgz
 #     (aarch64-rpi3), the image's SBOM, each with its .sha256; never the raw .img (over GitHub's
 #     2 GiB per asset, and inside the zip);
+#   - takes the pinned occulited's API documents (OpenAPI, AsyncAPI, lite-rpc's method catalogue)
+#     from its source in the build tree, with their versions set, each with its .sha256;
 #   - writes SHA256SUMS over all of them;
 #   - creates the draft release v<version> on the commit (a prerelease while the version has one),
 #     its body a short header plus GitHub's generated notes, and uploads every file: an asset of the
@@ -94,6 +96,41 @@ PY
   done
   printf '%s\n%s\n' "$STAGE/openccu-lite-$P-$V.cdx.json" "$STAGE/openccu-lite-$P-$V.cdx.json.sha256" >> "$STAGE/assets"
 done
+
+# ---- occulited's API documents (task 298): from the pinned occulited's source in the build tree ----
+# docs/openapi.json, docs/asyncapi.json and docs/lite-rpc-methods.json are generated in occulited's
+# repository and checked by its CI; the release carries the pinned commit's, with the version the
+# system serves (occulited's version is its commit) and the release's.
+set -- $PRODUCTS
+OSRC="$TREE/build-$1/build/occulited-$PIN/docs"
+DOCS="openapi asyncapi lite-rpc-methods"
+if [ ! -f "$OSRC/openapi.json" ]; then
+  # a pin from before occulited had them: the release goes out without
+  [ -d "$OSRC" ] || fail "occulited $PIN's source is not in $TREE/build-$1/build"
+  say "occulited $PIN has no API documents (older than task 298): none attached"
+  DOCS=""
+fi
+for d in $DOCS; do
+  [ -f "$OSRC/$d.json" ] || fail "occulited $PIN has no docs/$d.json in $OSRC"
+  python3 - "$OSRC/$d.json" "$STAGE/occulited-$d-$V.json" "$PIN" "$V" <<'PY' || fail "occulited's docs/$d.json is not a document"
+import json, sys
+src, dst, pin, v = sys.argv[1:5]
+d = json.load(open(src))
+if "info" in d:  # OpenAPI, AsyncAPI
+    assert d["info"]["version"] == "dev", d["info"]["version"]
+    d["info"]["version"] = pin
+    d["info"]["x-openccu-lite"] = v
+else:  # the method catalogue
+    assert "methods" in d and "tiers" in d
+    d["occulited"] = pin
+    d["openccu-lite"] = v
+with open(dst, "w") as f:
+    json.dump(d, f, indent=2, sort_keys=True, ensure_ascii=False)
+    f.write("\n")
+PY
+  (cd "$STAGE" && sha256sum "occulited-$d-$V.json" > "occulited-$d-$V.json.sha256")
+  printf '%s\n%s\n' "$STAGE/occulited-$d-$V.json" "$STAGE/occulited-$d-$V.json.sha256" >> "$STAGE/assets"
+done
 while read -r f; do (cd "$(dirname "$f")" && sha256sum "$(basename "$f")"); done < "$STAGE/assets" > "$STAGE/SHA256SUMS"
 echo "$STAGE/SHA256SUMS" >> "$STAGE/assets"
 say "$(wc -l < "$STAGE/assets") assets, $(tr '\n' '\0' < "$STAGE/assets" | du -chL --files0-from=- | tail -1 | cut -f1) in total:"
@@ -149,6 +186,8 @@ openccu-lite $V: a Homematic CCU firmware without ReGaHSS, built on OpenCCU $BAS
 *The maintainer edits this header before publishing.*
 
 **Download — which file for whom:** the \`.zip\` per board is the image and the update package for a system set up from an OpenCCU image (SD card, USB disk) and for the VM (\`x86_64-ova\`, also as \`.ova\` for a fresh import); a **CCU3** — or any card with the CCU3 layout, \`PRODUCT=ccu3\` in its \`/VERSION\` — takes \`openccu-lite-aarch64-rpi3-$V-ccu3.tgz\` through its own WebUI, not the zip (two recovery passes; see [switching.md](https://github.com/$GH_REPO/blob/$SHA/docs/switching.md)). The update needs 2.8 GB free on the userfs. Every file has its \`.sha256\`; \`SHA256SUMS\` covers all of them and is signed with minisign (\`SHA256SUMS.minisig\`). The SBOM of each image is its \`.cdx.json\`.
+
+**API:** occulited's OpenAPI 3.1 document (\`occulited-openapi-$V.json\`, also served by the system as \`GET /api/openapi.json\` with \`system:read\`), the AsyncAPI 3.0 document of its event streams and lite-rpc's method catalogue are attached.
 
 **Sources:** the sources of the GPL/LGPL components of these images are available on request — open an issue.
 
