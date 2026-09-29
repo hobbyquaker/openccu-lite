@@ -29,7 +29,7 @@ of `/var/log/messages`). Grep the addon for `dom.GetObject`, `rega_script`, `:81
 
 `occulited` from the openccu-lite repository runs anywhere: `go build ./cmd/occulited`, then
 `occulited --root <empty dir with a VERSION file: VERSION=3.89.8.20260719 PRODUCT=ova
-PLATFORM=ova VARIANT=lite> --state-dir <dir> --session-dir <dir> --listen 127.0.0.1:2121 --log stderr`.
+PLATFORM=ova VARIANT=lite> --state-dir <dir> --session-dir <dir> --listen 127.0.0.1:8183 --log stderr`.
 `POST /api/auth/v1/setup {"username","password"}` creates the administrator and answers a `sid`
 that works as `Authorization: Bearer <sid>`; `PUT /api/meta/v1/import` with a document from
 `fixtures/store/` fills the store (the API normalises documents: default `enums`/`meta` appear
@@ -213,7 +213,7 @@ user-readable "does this user exist" probe; a session your addon issued is your 
    cannot honour a per-request "ignore invalid certificate" option without a new dependency, and
    Node has no global `EventSource`). Keep the dependency footprint as it is.
 8. **Port**: probe `http://<box>/` on 80 (443 when your project already speaks TLS to the system);
-   offer an optional port override for a locally run `occulited` (it listens on 2121 by default).
+   offer an optional port override for a locally run `occulited` (it listens on 8183 by default).
 9. **Rooms and functions, flattened**: a channel in `room/eg/wohnzimmer` is reported with its
    ancestors included, most specific first — `["Wohnzimmer", "EG"]` — so a single-valued field
    (`msg.room`) is the leaf and a filter on the parent still matches. Every port uses this order;

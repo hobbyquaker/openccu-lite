@@ -287,7 +287,7 @@ there, held to its level and to the origin rule of lite-rpc, and to nothing else
 address (`X-Forwarded-For`: lighttpd's element, the last one — a client-sent header is removed before lighttpd adds
 its own, B-230) and the protocol (`X-Forwarded-Proto`).
 
-**Checked by:** occulited listening on `127.0.0.1:2121` only; the gate script, which validates the session
+**Checked by:** occulited listening on `127.0.0.1:8183` only; the gate script, which validates the session
 before an addon page is served and **removes a client-sent session header** before it sets its own; occulited
 trusting the forwarded headers only because nothing else can reach the port.
 
@@ -404,7 +404,7 @@ and its tooling have to confirm, and is the list that becomes findings.
 
 | | Here that would be | In the way today | To check |
 | --- | --- | --- | --- |
-| **S**poofing | A client sending `X-Occulite-Session` itself, or faking `X-Forwarded-For` to dodge the lockout | The gate removes a client-sent header before setting its own; the global magnet removes it everywhere the gate does not run; both remove a client-sent `X-Forwarded-For`, `-Proto`, `-Host` and `Forwarded` too, and occulited takes only the last element of `X-Forwarded-For` (lighttpd's), and only from the loopback (B-230); only lighttpd reaches 2121 | That both removals are still in place after any lighttpd config change — this is the bug class; that nothing but the loopback can reach 2121 |
+| **S**poofing | A client sending `X-Occulite-Session` itself, or faking `X-Forwarded-For` to dodge the lockout | The gate removes a client-sent header before setting its own; the global magnet removes it everywhere the gate does not run; both remove a client-sent `X-Forwarded-For`, `-Proto`, `-Host` and `Forwarded` too, and occulited takes only the last element of `X-Forwarded-For` (lighttpd's), and only from the loopback (B-230); only lighttpd reaches 8183 | That both removals are still in place after any lighttpd config change — this is the bug class; that nothing but the loopback can reach 2121 |
 | **T**ampering | Changing the proxied body or the path | The loopback; lighttpd is the only writer | The path rewriting rules: what `/addons/<id>/…` can become before occulited sees it |
 | **R**epudiation | — | The request log names the address the gate forwarded | Whether the log's address is the forwarded one and not lighttpd's |
 | **I**nformation disclosure | An answer meant for one session served to another | No shared cache; `Cache-Control: private, no-cache`; the session decides the answer | Any route that answers the same bytes to everyone and is cached by lighttpd |
@@ -531,13 +531,21 @@ Sessions live in a cookie; a compromised browser or a malicious extension has th
 here defends against that, and the confirmations (the password again for the key sheet, an
 SSH key, root's password) are the one place where a stolen session alone is not enough.
 
+What is defended is the browser against *other sites* (D-78's measures, tasks 213 and 259): the cookie is
+`SameSite=Lax`, a state-changing request on it must come from this origin (`Sec-Fetch-Site`, else
+`Origin`/`Referer`) **and** carry the custom header `X-Occulite-Request`, which no form post or link from
+elsewhere can send; the API's cookie is scoped to `/api` and a separate gate cookie to `/addons/`; and the shell
+runs under a Content-Security-Policy that allows no inline or foreign script, so an injection into the shell,
+should one appear, has less to work with. The addon pages under `/addons/` are outside that policy
+(security.md → *The shell's response headers*).
+
 ## Residual risks
 
 Known, accepted for now, and written down so that nobody has to rediscover them. Each names what would remove it.
 
 | # | Risk | Why it is accepted | What would remove it |
 | --- | --- | --- | --- |
-| R1 | **A same-origin addon frame can read the parent page** and act with the administrator's rights (F-1) | Separate origins would break the addon ABI every CCU addon relies on; defence in depth was chosen instead | Addons on an origin of their own, which is a break with the CCU convention |
+| R1 | **A same-origin addon frame can read the parent page** and act with the administrator's rights (F-1) | Separate origins would break the addon ABI every CCU addon relies on; defence in depth was chosen instead — all four measures of D-78 are built (tasks 213, 259): the `Origin`/`Sec-Fetch-Site` check, the API cookie kept away from `/addons/` (a gate cookie of its own), the header credential on state-changing calls, the shell's CSP. Against a *malicious* addon page on the origin they add nothing — it can read the parent, send the header and call the API with the browser's cookie or with the session id the gate hands its server as `X-Occulite-Session`. What they take away: an addon that forwards or logs its requests' cookies no longer holds the API's; a form post or link from another site is stopped twice; a script injected into the shell has no inline execution | Addons on an origin of their own, which is a break with the CCU convention |
 | R2 | **An addon reaches the devices over the loopback**, whatever its confinement | The interface processes have no authentication and are eQ-3's (T3) | A proxy in front of the interface processes that knows callers — a large change, and it would break addons that talk to 2001 directly |
 | R3 | **A release is only as trustworthy as its host** (F-7) | Signing is decided but not built | The phase 7: minisign, the public key in the image |
 | R4 | **The eQ-3 processes run as root** | They are black systems; confining them is still to come and needs care with the radio | |
@@ -551,6 +559,13 @@ Known, accepted for now, and written down so that nobody has to rediscover them.
 
 The "to check" rows that were checked, and what became of them. One entry per slice of the audit.
 
+**2026-09-28 — B1/B5, the browser measures of D-78** (task 259; occulited `5aa18b6`): the session cookie scoped to
+`/api` with a gate cookie for `/addons/`, `X-Occulite-Request` on state-changing calls with the cookie alone, the
+shell's Content-Security-Policy and Permissions-Policy from occulited's own handler. Checked with occulited's Go and
+Playwright suites (every page under the policy, no violation; the stub refuses every browser write without the
+header), the gate's Lua test and the fork's lighttpd container test (the API's cookie name is no credential at the
+gate, HSTS untouched). R1 and T6 reworded; the ASVS rows V3.3, V3.4, V3.5 and V7.5 updated.
+
 **2026-09-26 — B1 and B2, the authentication, session and access-control slice** (occulited `00fda6e`, image
 `1.0.0-dev.25`; the checklist is [security-asvs.md](security-asvs.md), the product baseline
 [security-en303645.md](security-en303645.md)):
@@ -562,7 +577,7 @@ The "to check" rows that were checked, and what became of them. One entry per sl
 | B1 *Repudiation* — which changes are logged with who and from where | password logins, refusals and lockouts are at debug → **B-231** — **fixed** 2026-09-26 (occulited `ea5aafd`): logins at Info, refusals and the start of a lockout at Warn, with name, method, address and reason, flood-limited; the older system routes logged the action without the caller → **task 269** — **fixed** 2026-09-26 (occulited `60dcc0e`): every change names `user` and `remote` at Info, the handler's own line or the middleware's `api: change` (method, route, status), and an attempt refused with 403 is `api: change refused` at Info (`562327f`); the RPC proxy and the metadata stay out of Info |
 | B1 *Information disclosure* — the list of open routes | `open()` in `internal/httpapi/auth.go` is the one list: health, version, the auth flow, the ACME challenge, the pairing request, `addonctl` (own token), `homematic.cgi` (loopback only — the loopback was decided on the forged address, **B-230**, fixed 2026-09-26), the SBOM. Each answers nothing a session would guard, except that one |
 | B1 *Denial of service* — unauthenticated work | the login's argon2 runs one at a time; eight authenticated JSON routes read bodies without a cap, no idle timeout → **B-232** — **fixed** 2026-09-26 (occulited `6d46161`): every JSON body has a limit (413), a guard test keeps it so, idle keep-alive connections close after 120 s |
-| B1 *Elevation* — every route's scope, mechanically | `TestRouteTable` walks the mux; the default is deny; pass |
+| B1 *Elevation* — every route's scope, mechanically | `TestRouteTable` walks the mux; the default is deny; no finding |
 | B2 *Spoofing* — a faked `X-Forwarded-For` | lighttpd appends the real address to a client-sent header and occulited takes the first element → **B-230** — **fixed** 2026-09-26: occulited takes the last element, and only from the loopback; the fork's global magnet and the gate remove the client's header (`lite-lighttpd-redirect-test.sh` checks it on a real lighttpd) |
 | B2 *Repudiation* — the log's address | the forwarded one, and therefore the client's choice → **B-230** — **fixed** 2026-09-26: lighttpd's element |
 | — (V6.3) | the login skips argon2 for an unknown account: a timing oracle for names → **B-233** — **fixed** 2026-09-26 (occulited `e9ff8d6`): a dummy hash is verified instead, both refusals take the same time |
@@ -575,24 +590,24 @@ The "to check" rows that were checked, and what became of them. One entry per sl
 
 | row | outcome |
 | --- | --- |
-| B1 *Denial of service* — lighttpd's own limits, the upload's size cap | upstream's idle limits and no request-size limit → **B-254**; the reverse proxy buffered a body without `Content-Length` whole, into RAM, before the backend saw it → **B-239** (fixed: every body streams, the overflow directory is on the userfs, small caps on the routes that take no upload); the system-update upload has no cap → **B-256** (low); the regadom import stages into RAM → **B-255**. Every other upload: a cap, the staging directory on the userfs, a name the system chooses — pass |
-| B1 *Information disclosure* — error texts with a path or version | `apiError` codes; the X-Sendfile path never in an answer; lighttpd's `Server` header empty and its error pages the starting page — pass |
-| B2 *Tampering* — the path rewriting rules | none on lite: `/api/`, `/addons/` and the rest are proxied as they are; the gate reads `uri.path` after lighttpd's normalisation and `url-path-2f-decode` stays off, so `%2F` cannot fold a path — pass |
-| B2 *Information disclosure* — a route cached by lighttpd | no cache module; `Cache-Control: private, no-cache` on everything but images — pass |
-| B2 *Elevation* — no route trusts the gate alone | the API's `Middleware` checks the session on every `/api/*` call; the gate's header is for the addon CGIs — pass |
+| B1 *Denial of service* — lighttpd's own limits, the upload's size cap | upstream's idle limits and no request-size limit → **B-254**; the reverse proxy buffered a body without `Content-Length` whole, into RAM, before the backend saw it → **B-239** (fixed: every body streams, the overflow directory is on the userfs, small caps on the routes that take no upload); the system-update upload has no cap → **B-256** (low); the regadom import stages into RAM → **B-255**. Every other upload: a cap, the staging directory on the userfs, a name the system chooses — no finding |
+| B1 *Information disclosure* — error texts with a path or version | `apiError` codes; the X-Sendfile path never in an answer; lighttpd's `Server` header empty and its error pages the starting page — no finding |
+| B2 *Tampering* — the path rewriting rules | none on lite: `/api/`, `/addons/` and the rest are proxied as they are; the gate reads `uri.path` after lighttpd's normalisation and `url-path-2f-decode` stays off, so `%2F` cannot fold a path — no finding |
+| B2 *Information disclosure* — a route cached by lighttpd | no cache module; `Cache-Control: private, no-cache` on everything but images — no finding |
+| B2 *Elevation* — no route trusts the gate alone | the API's `Middleware` checks the session on every `/api/*` call; the gate's header is for the addon CGIs — no finding |
 | B3 *Spoofing* — who is in the `occulite` group | measured: nobody (`occulite:x:8100:`); but a manifest may put a confined addon there → **B-251** |
-| B3 *Tampering* — the older operations refuse the fields they do not use | one argument shape per program since B-234; `read` takes a path alone, `write`/`rename`/`chown`/`chmod` their path fields; a request with an unknown operation is refused and logged — pass |
-| B3 *Information disclosure* — each read path against the page's need | seven exact files (`ReadPaths`); the daemon strips the gateway keys from `rfd.conf`/`hs485d.conf`, lists SSIDs from `wpa_supplicant.conf`, shows the user from `classic-rpc.htpasswd`, answers a device key from `sgtin.map` only after the confirmation of task 154 — pass, the list is in the checklist (V14.3) |
-| B3 *Denial of service* — the timeouts on the long operations | each connection in its own goroutine with the caller's deadline; smartctl 60 s, the firewall's input 15 s, the radio-module flash 120–240 s, `RuntimeMaxSec` on every transient unit — pass |
-| B4 *Information disclosure* — each operation's answer field by field | `read` answers a whole file, by design, for the seven paths; the certificate operation returns the blocks and the marker, never the key; the log listing names and sizes; the SSH operations the keys' public lines — pass |
-| B4 *Denial of service* — one caller starving the others | concurrent connections, per-operation timeouts — pass |
-| B5 *Tampering* — every path an addon can write that another component reads | measured as three addon users: none of the shared directories is writable (`/usr/local/etc/config`, `rc.d`, `addon-policy`, `addons`, `lighttpd`, `/usr/local/tmp`, `/usr/local/addons`, `/etc/config`, `/firmware/rftypes`); the fence is the directories' `root:root` modes — pass today, and **B-251** notes that the policy's `paths` field relies on that fence |
+| B3 *Tampering* — the older operations refuse the fields they do not use | one argument shape per program since B-234; `read` takes a path alone, `write`/`rename`/`chown`/`chmod` their path fields; a request with an unknown operation is refused and logged — no finding |
+| B3 *Information disclosure* — each read path against the page's need | seven exact files (`ReadPaths`); the daemon strips the gateway keys from `rfd.conf`/`hs485d.conf`, lists SSIDs from `wpa_supplicant.conf`, shows the user from `classic-rpc.htpasswd`, answers a device key from `sgtin.map` only after the confirmation of task 154 — no finding, the list is in the checklist (V14.3) |
+| B3 *Denial of service* — the timeouts on the long operations | each connection in its own goroutine with the caller's deadline; smartctl 60 s, the firewall's input 15 s, the radio-module flash 120–240 s, `RuntimeMaxSec` on every transient unit — no finding |
+| B4 *Information disclosure* — each operation's answer field by field | `read` answers a whole file, by design, for the seven paths; the certificate operation returns the blocks and the marker, never the key; the log listing names and sizes; the SSH operations the keys' public lines — no finding |
+| B4 *Denial of service* — one caller starving the others | concurrent connections, per-operation timeouts — no finding |
+| B5 *Tampering* — every path an addon can write that another component reads | measured as three addon users: none of the shared directories is writable (`/usr/local/etc/config`, `rc.d`, `addon-policy`, `addons`, `lighttpd`, `/usr/local/tmp`, `/usr/local/addons`, `/etc/config`, `/firmware/rftypes`); the fence is the directories' `root:root` modes — no finding today, and **B-251** notes that the policy's `paths` field relies on that fence |
 | B5 *Information disclosure* — what an addon user can read, measured | the keys, occulited's state and the other addons' tokens are unreadable; every addon's tree was readable (`0755`, files `0644`/`0664`) → **B-252** (fixed: the ownership step closes the tree, 0751 directories and 0640 files, the www tree left world-readable); hmipserver's data files were `0664` in a `0775` directory → **B-253** (fixed: 0700/0600, the unit's `UMask=0077`, tightened at every start); `server.pem` readable through `certs` — D-46, the decision stands; `local-token` `0644` — the design (a `meta:read` token for every addon) |
 | B5 *Elevation* — what an unconfined addon means; what a confined one may declare | a confined addon's manifest may declare root-equivalent capabilities and groups, applied as declared (D-119) → **B-251** |
-| B7 *Spoofing* — the trust store, no plain-HTTP fallback | every outbound `tls.Config` has `RootCAs` from the stores and `MinVersion` 1.2; the destinations are HTTPS constants; one `InsecureSkipVerify` shows a chain for comparison and trusts nothing — pass |
-| B7 *Denial of service* — response size limits | the catalogue 1 MiB / 4 MiB (releases) / 400 MiB (a package), the feed 8 MiB, the firmware index 8 MiB and a bundle 64 MiB, OIDC 1 MiB, the checksum line 4 KiB — pass |
-| B7 *Elevation* — the parsers of what the sources answer | Go's JSON with its nesting limit, the manifest by regex, the bundle's `info` as key=value, `update_script` runs only when the administrator installs — pass; the fuzz tests are task 265 |
-| B8 *Spoofing*, *Tampering* — a file's own claim; the sum checked again at install | the kind is read from the content (`detectUpdateKind`), the board from the name and shown; the sum is checked at staging; the recovery checks kind, board and space again; a signature is task 263 (R3) — pass, with R3 |
+| B7 *Spoofing* — the trust store, no plain-HTTP fallback | every outbound `tls.Config` has `RootCAs` from the stores and `MinVersion` 1.2; the destinations are HTTPS constants; one `InsecureSkipVerify` shows a chain for comparison and trusts nothing — no finding |
+| B7 *Denial of service* — response size limits | the catalogue 1 MiB / 4 MiB (releases) / 400 MiB (a package), the feed 8 MiB, the firmware index 8 MiB and a bundle 64 MiB, OIDC 1 MiB, the checksum line 4 KiB — no finding |
+| B7 *Elevation* — the parsers of what the sources answer | Go's JSON with its nesting limit, the manifest by regex, the bundle's `info` as key=value, `update_script` runs only when the administrator installs — no finding; the fuzz tests are task 265 |
+| B8 *Spoofing*, *Tampering* — a file's own claim; the sum checked again at install | the kind is read from the content (`detectUpdateKind`), the board from the name and shown; the sum is checked at staging; the recovery checks kind, board and space again; a signature is task 263 (R3) — no finding beyond R3 |
 
 ## How this document is kept
 

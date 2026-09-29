@@ -12,12 +12,12 @@ Written 2026-09-06 for the busybox-init step; the move to systemd changed the la
 | | bound to | reached by |
 | --- | --- | --- |
 | lighttpd | the LAN, 80/443 | browsers, addon clients |
-| `occulited` | `127.0.0.1:2121` only — refuses any other `listen` | lighttpd (proxy), programs on the system |
+| `occulited` | `127.0.0.1:8183` only (2121 until 2026-09-22) — refuses any other `listen` | lighttpd (proxy), programs on the system |
 | `rfd`, `hs485d`, `hmipserver` | the loopback: `Listen IP = 127.0.0.1` in `rfd.conf`, `Legacy.BindAddress=127.0.0.1` in `crRFD.conf` — both verified on a running system; the fork ships them in its config templates | `occulited`, addons on the system |
 | sshd | the LAN, 22, only while the SSH switch is on; the firewall opens the port for local networks only | the administrator |
 
 The CCU's XML-RPC proxies on 2001/2000/2010/9292 exist only when the user switches them on (task
-143, below); the ReGa ports 1999/8181/8183 do not exist at all. Without the switch, an integration
+143, below); the ReGa ports 1999 and 8181 do not exist at all, and 8183 is occulited's own port on the loopback. Without the switch, an integration
 that ran *off* the system and talked to those must run *on* the system or use the metadata API.
 
 **Classic RPC, the way out** (System → Remote access, off by default). Two
@@ -39,7 +39,8 @@ configuration right after a change (milliseconds), and keeps a listening socket 
 configuration dropped — so a switch change restarts lighttpd instead.
 
 **Verified from another machine on the LAN** (2026-09-07, against a test system): 22, 80 and 443
-answer; 2000, 2001, 2010, 2121, 8181, 9292, 32001, 32010 and 39292 all refuse. Holds for
+answer; 2000, 2001, 2010, 2121 (occulited's port then; 8183 since 2026-09-22, as loopback-only), 8181, 9292, 32001, 32010
+and 39292 all refuse. Holds for
 everything openccu-lite runs — with classic RPC off; switched on, lighttpd answers on its ports.
 
 **The bare host name redirected to its full name** (System → Certificate, off by default).
@@ -55,6 +56,21 @@ live certificate covers it — occulited refuses to switch the redirect on other
 warning: after a rename or a new domain it waits for a certificate for the new name. The match is
 lighttpd's `$HTTP["host"]`, case-insensitive, with or without a port; checked with curl against
 lighttpd in a container (`scripts/lite-lighttpd-redirect-test.sh` in the fork).
+
+**The shell's response headers.** lighttpd adds upstream's set to every answer (`conf.d/setenv.conf`:
+`X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+`Cache-Control: private, no-cache`, an emptied `Server`; `X-XSS-Protection` is upstream's and inert in every
+current browser) and HSTS where it is switched on. **The shell's own answers** — the page, its assets, the
+client-side routes — carry a **Content-Security-Policy** and a **Permissions-Policy** set by occulited itself
+(task 259, F-5; `internal/ui/csp.txt` in occulited): `default-src 'self'; script-src 'self'; style-src 'self'
+'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self';
+form-action 'self'; base-uri 'self'; object-src 'none'` and `camera=(self), microphone=(), geolocation=()`.
+Scripts are never inline or evaluated; `'unsafe-inline'` is for **styles alone** (Svelte writes `style=""`
+attributes into its templates); the camera is the shell's own for the QR scanner of the device keys. The
+policy is set by occulited and not by lighttpd's fragment on purpose: the addon pages under `/addons/` keep
+the CCU's conventions (inline scripts) and get none, and a path an addon's drop-in claims outside `/addons/`
+(RedMatic's `/description.xml`) must not get the shell's policy either. occulited's UI suite opens every page
+under exactly this policy and fails on a violation (`ui/test/e2e/csp.spec.ts`).
 
 **The firewall is one list of INPUT rules** (libfirewall is out of the image).
 The policy is `DROP` in both families — the `RESTRICTIVE`, now stated as what iptables does — and
@@ -94,9 +110,40 @@ that names the port.
   `user`. `user` reads everything and changes only its own password; every mutation is `admin`.
   Failed logins lock the name and the remote address for a while. An account may have no password: it then signs in through the identity provider only, and `POST /login` fails for it
   like a wrong password — the login page tells no names apart.
-- **Sessions**: a 10-character id (uniformly random alphanumerics, 59.5 bits), 30 days from the
-  login, 24 h idle timeout; cookie (`HttpOnly`, `Secure` behind TLS, `SameSite=Lax`), bearer
-  header, or `?sid=` — the CCU convention addon pages rely on. **Sessions survive a restart of
+- **Security keys and passkeys** (task 262, ASVS 5.0 V6.5): each user may register WebAuthn credentials for their
+  own account (Account → *Security keys and passkeys*; a FIDO2 key, or a passkey on the phone or the laptop). With
+  a key registered **the password alone opens no session**: the login asks for the password and then the key, and
+  a failed key step counts towards the lockout like a wrong password. A key made as a discoverable credential with
+  user verification (PIN or biometrics) also **signs in alone** — the passkey button on the login page, and the
+  browser's offer in the name field where it has one. Adding and removing a key asks for the password again (or
+  a fresh login at the identity provider). The key is bound to the **system's full name** (`<host>.<domain>`): it is
+  made and used on that name over a certificate the browser trusts, never on an address or the bare host name,
+  and a rename of host or domain orphans every key — the Network page warns before one. **The way back** without
+  the key: an administrator removes another account's keys on System → Users (that ends the account's sessions),
+  and on the console `occulited webauthn list <user>` and `occulited webauthn remove <user> <id>|--all` do the
+  same for a locked-out administrator, next to `occulited passwd`. `users.json` holds per key the public key, the
+  sign count (one that goes backwards refuses the login — a cloned key), the flags, the name and the times; at most
+  ten per account. No TOTP (task 289), and no check against breached passwords (security-asvs.md V6.2 says why).
+- **Sessions**: a 26-character id (base32, 130 bits; task 125), **12 hours from the login, 30 minutes idle**
+  (the defaults since task 262 — ASVS Level 2's numbers; configurable on System → Users → Authentication →
+  Sessions within 1 h–90 d and 5 min–30 d, `auth.session_idle`/`auth.session_max` in `occulited.json`, in force
+  at once for running sessions too; 24 h and 30 days before); cookie (`HttpOnly`, `Secure` behind TLS,
+  `SameSite=Lax`, `Max-Age` the lifetime), bearer
+  header, or `?sid=` — the CCU convention addon pages rely on.
+  - *Two cookies per scheme* (task 259, D-78): the session cookie `occulite_session` /
+    `__Secure-occulite_session` is scoped to **`Path=/api`** and reaches the API alone; the gate cookie
+    `occulite_gate` / `__Secure-occulite_gate` carries the same id at **`Path=/addons/`**, opens the addon
+    pages at lighttpd's gate and at occulited's guard of the addon CGIs, and is no credential on the API. So
+    no request to an addon's page, CGI or proxy carries the API's cookie — what an addon's server side gets
+    of the session is the gate's `X-Occulite-Session` header, as before (R1 in the threat model says what
+    that means). A browser from before the change is moved to the two cookies by the shell's first
+    `GET /api/auth/v1/state`; a logout deletes every cookie at every path it may sit at.
+  - *The header credential* (task 259): a state-changing API call whose only credential is a cookie must
+    carry `X-Occulite-Request` (any value) — a custom header no form post or link from another site can
+    send — or is refused with `403 request-header`. The shell sends it on every call; a Bearer, a token,
+    `?sid=`, a read and the open routes need none, nor does a program on a system with authentication
+    off (it sends no cookie). `curl` with the cookie: `-H 'X-Occulite-Request: 1'`. Together with the
+    `Origin`/`Sec-Fetch-Site` check of task 213 this is what stands between another site and the API. **Sessions survive a restart of
   occulited and a reboot**, and **no session id is written anywhere**: occulited
   keeps each session under the SHA-256 of its id — in memory, in the session store and in the
   gate's mirror — and hashes the id a request carries to find it.

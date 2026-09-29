@@ -30,11 +30,12 @@ Every other endpoint needs a credential — the same one addon pages already kno
 
 | you have | send |
 | --- | --- |
-| the user's session (a settings page opened with `?sid=@xxxxxxxxxx@`) | `?sid=xxxxxxxxxx` or `Authorization: Bearer xxxxxxxxxx` |
-| nothing — you are a daemon on the system | the **local token**: read `/usr/local/etc/occulite/local-token` (one line, `olt_…`, root-readable) and send it as `Authorization: Bearer olt_…`. Role `user`: read everything, write nothing. |
-| nothing — you run elsewhere (Home Assistant, a PC) | an **API token** the administrator creates on the system's *Users* page (`olt_…`, role `user` or `admin`), stored in your configuration like a password |
+| the user's session (a settings page opened by the shell) | the session header `X-Occulite-Session` the gate hands the page (manifest `ui.session_header`), sent on as `Authorization: Bearer <session id>`. The `?sid=@xxxxxxxxxx@` a page opens with is the **legacy alias**: addon pages and their CGIs accept it, **the API never does** — neither as `?sid=` nor as a Bearer value. |
+| nothing — you are a daemon on the system | the **local token**: read `/usr/local/etc/occulite/local-token` (one line, `olt_…`, root-readable) and send it as `Authorization: Bearer olt_…`. It holds **`meta:read` only**: names, rooms and functions, nothing of the system API and no writes. For more, the addon declares its own token's scopes in its manifest (`runtime.api_scopes`). |
+| nothing — you run elsewhere (Home Assistant, a PC) | an **API token** the administrator creates on the system's *Users* page (`olt_…`, with the scopes it needs), stored in your configuration like a password |
 
-Tokens never expire; the administrator revokes them. A `401` means the token is gone: fall back
+A token may carry an expiry and allowed address ranges, and can be rotated (`POST /api/auth/v1/tokens/self/rotate`);
+the administrator can revoke it at any time. A `401` means the token is gone or expired: fall back
 to "no names" and log it, do not crash.
 
 ## Mapping `homematic-rega` to the metadata API
@@ -101,7 +102,9 @@ Be blunt in your README about this; it saves everyone a round trip.
   (`tclrega.so` shim, [occulited/deploy/tclrega](https://github.com/hobbyquaker/occulited/tree/master/deploy/tclrega/)): it answers exactly that call and
   errors on anything else. Do not build on the shim for more than the session check.
 - **ReGa ids** (`dom.GetObject(1234)`): there are none. Refs are the identity.
-- **Service messages / alarms** (variables 40 and 41): interface-level state only.
+- **Service messages / alarms** (variables 40 and 41): no ReGa variables; the system collects the service
+  messages itself — `GET /api/system/v1/service-messages` and its stream `/service-messages/stream`
+  (`system:read`).
 - **The CCU WebUI's JSON-RPC API** (`/api/homematic.cgi`, `Session.login`, `Device.listAll`,
   `Interface.*`): not present. `Interface.*` calls map to XML-RPC on the interface; names come
   from the metadata API; the rest has no replacement.
@@ -112,8 +115,10 @@ Be blunt in your README about this; it saves everyone a round trip.
   `hm_addons.cfg`, exit codes, reboot flag. An addon package built for the CCU installs unchanged.
 - The interfaces: `rfd` (BidCos-RF, BIN-RPC 32001), `hs485d` (32000), `hmipserver` (XML-RPC
   32010), their `InterfacesList.xml` — **but on the loopback only**. An integration running
-  *off* the system must go through the system's XML-RPC proxy on the LAN port or, better, subscribe from
-  the system. An addon *on* the system sees no difference.
+  *off* the system uses **lite-rpc**: the interfaces' XML-RPC (and JSON-RPC) over the web port with a
+  token, and their events as a stream instead of a callback server (`/api/rpc/v1`, occulited's
+  `docs/system-api.md`). The CCU's classic XML-RPC ports exist only when the administrator switches
+  them on (Remote access; off by default). An addon *on* the system sees no difference.
 - Session ids, `?sid=@…@`, the `Config-Url` menu entry, the login redirect — with one addition:
   lighttpd itself redirects unauthenticated `/addons/` requests to the login page, so a
   settings page that forgot its own check is no longer open to the LAN.

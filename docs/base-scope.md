@@ -45,7 +45,7 @@ with `/usr/local` as a volume:
   hardware.
 - **RSS at idle**: `occulited` 6.5 MB, `lighttpd` 6.7 MB. (`ReGaHss` on a comparable OpenCCU holds
   the whole DOM; a CCU3 measurement is still to be taken.)
-- **Listening sockets**: `lighttpd` on 80 and 443, `occulited` on `127.0.0.1:2121`, hmipserver on
+- **Listening sockets**: `lighttpd` on 80 and 443, `occulited` on `127.0.0.1:8183` (2121 until 2026-09-22), hmipserver on
   `:::39292`. Nothing on 8181, 1999, 2000, 2001, 2010 or any of their TLS twins — the XML-RPC
   proxies are gone.
 - `/VERSION` carries upstream's `PRODUCT` and `PLATFORM` names (`oci_amd64`, `oci`) plus
