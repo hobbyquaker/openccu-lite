@@ -119,7 +119,18 @@ nicht von selbst.
    vor dem Einspielen angelegte Administrator ist also weg, und das System fragt beim nächsten
    Besuch wieder nach einem. Diese Reihenfolge ist Absicht: nichts vom alten System geht verloren,
    und nichts aus der Zeit vor dem Einspielen bleibt zurück. Die ReGa-Datenbank im Backup wird
-   angenommen und einfach ignoriert.
+   angenommen und einfach ignoriert. **Eine Sicherung mit eigenem BidCos-Sicherheitsschlüssel** (dem
+   System-Sicherheitsschlüssel der alten CCU): die Seite Sicherung fragt nach seiner Passphrase -
+   nur, um zu prüfen, ob die Ihre die richtige ist; sie wird mit der Signatur der Sicherung
+   verglichen und nie gespeichert. *Überspringen - ich kenne sie nicht* gibt es immer, und eine
+   falsche oder übersprungene Passphrase hält das Einspielen nie auf: nach einer deutlichen Warnung
+   und Ihrer Bestätigung geht es weiter. Das Einspielen selbst schlüsselt kein Gerät um - der
+   Schlüssel kommt unverändert zurück, die BidCos-Geräte arbeiten weiter -, aber die Passphrase
+   brauchen Sie später, um den Schlüssel zu ändern, die Geräte umzuschlüsseln (Umzug auf ein anderes
+   System, Schlüssel neu setzen), sie an einer anderen Zentrale anzulernen oder auf einem System mit
+   einem anderen Schlüssel wiederherzustellen. Ohne sie bleibt nur, jedes dieser Geräte auf
+   Werkseinstellungen zurückzusetzen und neu anzulernen - suchen Sie sie also, solange die alte CCU
+   noch greifbar ist.
 3a. **Angelernte Geräte aus der Sicherung statt eines Restores** (eine Neuinstallation, noch nichts
    angelernt): Die Seite Sicherung liest die `.sbk` einmal, und *Angelernte Geräte importieren und neu
    starten* übernimmt die Anlernungen der drei Funkarten mit ihrer Identität - BidCos-Adresse und
@@ -141,10 +152,12 @@ nicht von selbst.
      RPI-RF-MOD, HM-MOD-RPI-PCB, HmIP-RFUSB, HM-CFG-USB-2 oder LAN-Gateway gleichermaßen -, und die Seite
      Schnittstellen sagt, ob es das tut.
    - **Ein eigener BidCos-Sicherheitsschlüssel.** Der Schlüsselspeicher der Sicherung kommt so mit, wie
-     er ist - die damit angelernten BidCos-Geräte kennen diesen Schlüssel -, und Sie werden nicht nach
-     der Passphrase des anderen Systems gefragt (nichts auf diesem System braucht sie). Bewahren Sie
-     diese Passphrase trotzdem sicher auf: Sie brauchen sie, um den Schlüssel später zu ändern oder ein
-     Gerät anzulernen, das ihn noch trägt. Ein System, das schon einen eigenen Schlüssel hat, bestätigt,
+     er ist - die damit angelernten BidCos-Geräte kennen diesen Schlüssel -, und der Import kommt ohne
+     die Passphrase des anderen Systems aus. Das Panel fragt trotzdem danach, als Prüfung, ob die Ihre
+     die richtige ist (das Einspielen oben ebenso, mit derselben Warnung, wenn sie nicht passt oder Sie
+     überspringen); der Import geht so oder so weiter. Bewahren Sie die Passphrase sicher auf: Sie
+     brauchen sie, um den Schlüssel später zu ändern, diese Geräte umzuschlüsseln oder neu anzulernen
+     oder auf einem System mit einem anderen Schlüssel wiederherzustellen. Ein System, das schon einen eigenen Schlüssel hat, bestätigt,
      dass der der Sicherung ihn ersetzt; ein System mit angelernten Geräten lehnt den Import ganz ab, so
      dass kein angelerntes Gerät dadurch je umgeschlüsselt wird.
 4. **Namen, Räume und Gewerke**: solange die alte CCU noch erreichbar ist, holt *Namen → Von einer

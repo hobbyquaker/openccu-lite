@@ -30,8 +30,8 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
 - **Neuinstallation als VM:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.); den LXC-Container beschreibt
   [install-lxc.md](docs/install-lxc.md).
 - eine Neuinstallation kann (solange noch keine Geräte angelernt sind) angelernte Geräte, Schlüssel, Namen und Räume aus einem
-  (Open)CCU-Backup in einem Schritt importieren. Der BidCos-Sicherheitsschlüssel der Sicherung kommt so mit, wie er ist (eine
-  Passphrase wird nicht abgefragt; die Passphrase des alten Systems für spätere Schlüsseländerungen aufbewahren); eine
+  (Open)CCU-Backup in einem Schritt importieren. Der BidCos-Sicherheitsschlüssel der Sicherung kommt so mit, wie er ist (seine
+  Passphrase wird nur als Prüfung abgefragt, nie als Hürde; sie wird für spätere Schlüsseländerungen gebraucht); eine
   HmIP-Identität, die an ein anderes Funkmodul gebunden ist, übernimmt hmipserver auf das Modul dieses Systems, und die
   Seite Schnittstellen zeigt, wie das ausging ([switching.de.md](docs/switching.de.md)).
 - **Geräte anlernen und konfigurieren, Direktverknüpfungen verwalten:** dafür den

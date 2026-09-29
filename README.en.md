@@ -30,8 +30,8 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
 - **New install as a VM:** import the `.ova` (Proxmox, VMware, VirtualBox and so on); the LXC container is described
   in [install-lxc.md](docs/install-lxc.md).
 - a new install can (as long as no devices are paired yet) import paired devices, keys, names and rooms from an
-  (Open)CCU backup in one step. The backup's BidCos security key comes along as it is (no passphrase is asked; keep
-  the old system's passphrase for later key changes); an HmIP identity bound to another radio module is taken over
+  (Open)CCU backup in one step. The backup's BidCos security key comes along as it is (its passphrase is asked as a
+  check only, never as a gate; later key changes need it); an HmIP identity bound to another radio module is taken over
   by hmipserver onto this system's module, and the Interfaces page shows how that went
   ([switching.md](docs/switching.md)).
 - **Pairing and configuring devices, managing direct links:** install

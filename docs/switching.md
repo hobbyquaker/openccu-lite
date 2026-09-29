@@ -101,7 +101,16 @@ it does not grow by itself.
    `occulited`'s own state — so the administrator you created before the restore is gone and the
    system asks for one again on the next visit. That order is deliberate: nothing from the old system
    is lost, and nothing from before the restore lingers. The ReGa database inside the backup is
-   accepted and simply ignored.
+   accepted and simply ignored. **A backup with a non-default BidCos security key** (the old CCU's
+   *System-Sicherheitsschlüssel*): the Backup page asks for its passphrase - only to check that the
+   one you have is right; it is compared with the backup's signature and never stored. *Skip - I do
+   not know it* is always there, and a wrong or skipped passphrase never stops the restore: after a
+   clear warning and your confirmation it goes on. The restore itself re-keys no device - the key
+   comes back as it is and the BidCos devices keep working - but the passphrase is what you need
+   later to change the key, to re-key the devices (moving them to another system, setting the key
+   again), to pair them with another central, or to restore onto a system with a different key.
+   Without it, the only way back is a factory reset of every such device and pairing it again, so
+   find it while the old CCU is still at hand.
 3a. **Paired devices from the backup instead of a restore** (a new install, nothing paired yet): the
    Backup page reads the `.sbk` once and *Import the paired devices and reboot* takes the three radios'
    pairings with their identity - the BidCos address and key store, the HmIP identity, the LAN
@@ -121,9 +130,11 @@ it does not grow by itself.
      whatever module it has - an RPI-RF-MOD, an HM-MOD-RPI-PCB, an HmIP-RFUSB, an HM-CFG-USB-2 or a
      LAN gateway alike - and the Interfaces page says whether it does.
    - **A non-default BidCos security key.** The backup's key store comes along as it is - the BidCos
-     devices paired with it know that key - and you are not asked for the other system's passphrase
-     (nothing on this system needs it). Keep that passphrase safe all the same: you need it to
-     change the key later, or to pair a device that still holds it. A system that already has a key
+     devices paired with it know that key - and the import works without the other system's
+     passphrase. The panel asks for it all the same, as a check that the one you have is right (the
+     restore above does the same, with the same warning when it does not match or you skip it); the
+     import goes on either way. Keep that passphrase safe: you need it to change the key later, to
+     re-key or re-pair these devices, or to restore onto a system with another key. A system that already has a key
      of its own confirms that the backup's replaces it; a system with devices paired refuses the
      import altogether, so no paired device is ever re-keyed by it.
 4. **Names, rooms and functions**: while the old CCU is still reachable, *Names → Import from a
