@@ -119,6 +119,11 @@ jobs:
         # lite-lan-reset (B-249): a Pi 3 B whose hub is missing after a warm reboot gets LAN_RUN
         # pulsed and its USB host port re-powered; other boards and a present hub are left alone
         run: sh scripts/testcases/lite-lan-reset-test.sh
+      - name: The web server's certificate on a system without an address
+        # S50lighttpd's check_certificate (B-261): without an IPv4 route the self-signed certificate
+        # names the host name alone instead of an empty IP: that openssl refused, and the one made
+        # that way is made again once an address exists; a user's own or a managed one is left alone
+        run: sh scripts/testcases/lite-lighttpd-cert-test.sh
       - name: A file that leaves an overlay leaves the target
         # the merged-overlay step on an incremental build: removed from the target, and a package
         # that installs the same path is marked for reinstall

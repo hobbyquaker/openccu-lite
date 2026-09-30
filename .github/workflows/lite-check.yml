@@ -81,6 +81,8 @@ jobs:
           sh scripts/testcases/lite-boot-screen-test.sh
           sh scripts/testcases/lite-board-leds-test.sh
           sh scripts/testcases/lite-lan-reset-test.sh
+      - name: The web server's certificate on a system without an address
+        run: sh scripts/testcases/lite-lighttpd-cert-test.sh
       - name: The overlays and the products
         run: |
           sh scripts/testcases/lite-overlay-prune-test.sh

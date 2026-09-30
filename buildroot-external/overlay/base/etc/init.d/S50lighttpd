@@ -12,26 +12,51 @@ PIDFILE_ANGEL=/var/run/lighttpd-angel.pid
 # skip this startup if not in normal mode
 [[ "${HM_MODE}" != "NORMAL" ]] && exit 0
 
+create_certificate() {
+  # a new self-signed certificate for this host; the one before is kept aside
+  [[ -f /etc/config/server.pem ]] && mv -f /etc/config/server.pem "/etc/config/server.pem_$(date +%Y%m%d)"
+  echo -n "creating new SSL cert... "
+  # the address only when there is one: without a route (no lease yet at a first start) openssl
+  # refuses an empty "IP:" and writes nothing, and the web server does not start (openccu-lite
+  # B-261). A certificate made without it is made again once an address exists, see check_certificate.
+  SAN="DNS:$(hostname)"
+  [[ -n "${IP}" ]] && SAN="${SAN},IP:${IP}"
+  # openssl's own complaint stays visible (the console, the journal), so a refusal is not silent
+  /usr/bin/openssl req -new -x509 -nodes -newkey ec:<(openssl ecparam -name secp384r1) \
+                                         -keyout /etc/config/server.pem \
+                                         -out /etc/config/server.pem \
+                                         -days 3650 \
+                                         -addext "subjectAltName = ${SAN}" \
+                                         -addext "keyUsage = keyCertSign,digitalSignature,keyEncipherment" \
+                                         -addext "extendedKeyUsage = serverAuth" \
+                                         -addext "nsCertType = server,sslCA" \
+                                         -subj "/C=DE/O=HomeMatic/OU=$(cat /var/board_serial)/CN=$(hostname)" >/dev/null
+}
+
+certificate_without_address() {
+  # openccu-lite (B-261): our own self-signed certificate (the issuer as create_certificate writes
+  # it) that names no address at all - the one a first start without a lease makes. A user's own
+  # certificate, or one that names an address, even an old one, is not touched: its fingerprint
+  # is what browsers have accepted.
+  /usr/bin/openssl x509 -noout -issuer -nameopt RFC2253 -in /etc/config/server.pem 2>/dev/null | grep -q ',O=HomeMatic,C=DE$' || return 1
+  ! /usr/bin/openssl x509 -noout -ext subjectAltName -in /etc/config/server.pem 2>/dev/null | grep -q 'IP Address:'
+}
+
 check_certificate() {
   # openccu-lite (task 35, D-48): an ACME-managed certificate - occulited wrote the marker beside
   # it - is occulited's to renew and is never regenerated here; a LAN CA's 24-hour certificate
   # would otherwise fail the one-day check on the very reload that installs it.
   [[ -f /etc/config/server.pem.managed || -f /etc/config/server.pem.acme ]] && return 0
+  # the address the certificate names; empty while the system has no IPv4 route
+  IP=$(ip -4 route get 1 2>/dev/null | head -1 | cut -d' ' -f8 | tr -d '\n')
   # check if a valid/non-expired SSL cert exists and if
   # not we regenerate it.
   if ! /usr/bin/openssl x509 -checkend 86400 -noout -in /etc/config/server.pem 2>/dev/null >/dev/null; then
-    [[ -f /etc/config/server.pem ]] && mv -f /etc/config/server.pem "/etc/config/server.pem_$(date +%Y%m%d)"
-    echo -n "creating new SSL cert... "
-    IP=$(ip -4 route get 1 | head -1 | cut -d' ' -f8 | tr -d '\n')
-    /usr/bin/openssl req -new -x509 -nodes -newkey ec:<(openssl ecparam -name secp384r1) \
-                                           -keyout /etc/config/server.pem \
-                                           -out /etc/config/server.pem \
-                                           -days 3650 \
-                                           -addext "subjectAltName = DNS:$(hostname),IP:${IP}" \
-                                           -addext "keyUsage = keyCertSign,digitalSignature,keyEncipherment" \
-                                           -addext "extendedKeyUsage = serverAuth" \
-                                           -addext "nsCertType = server,sslCA" \
-                                           -subj "/C=DE/O=HomeMatic/OU=$(cat /var/board_serial)/CN=$(hostname)" 2>/dev/null >/dev/null
+    create_certificate
+  elif [[ -n "${IP}" ]] && certificate_without_address; then
+    # openccu-lite (B-261): the one repair - a certificate from a start without an address, made
+    # again now that there is one
+    create_certificate
   fi
 }
 
