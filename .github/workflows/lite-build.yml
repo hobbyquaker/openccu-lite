@@ -115,6 +115,10 @@ jobs:
         # after the radio detection: the MODE2 and MODE1 triggers, disableOnboardLED, the RPI-RF-MOD
         # only in HM-LGW mode, and nothing written on a box without the LEDs
         run: sh scripts/testcases/lite-board-leds-test.sh
+      - name: The LAN9514 reset before the network
+        # lite-lan-reset (B-249): a Pi 3 B whose hub is missing after a warm reboot gets LAN_RUN
+        # pulsed and its USB host port re-powered; other boards and a present hub are left alone
+        run: sh scripts/testcases/lite-lan-reset-test.sh
       - name: A file that leaves an overlay leaves the target
         # the merged-overlay step on an incremental build: removed from the target, and a package
         # that installs the same path is marked for reinstall

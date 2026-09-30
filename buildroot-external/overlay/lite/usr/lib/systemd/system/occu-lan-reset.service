@@ -1,0 +1,23 @@
+# openccu-lite: a Raspberry Pi 3 B whose LAN9514 (USB hub and Ethernet in one chip) did
+# not come up after a warm reboot is reset before the network starts: LAN_RUN pulsed, the USB host
+# port re-powered, the outcome in the journal and in /run/lite-lan-reset. The script does nothing
+# on other boards or when the hub is there (see lite-lan-reset).
+#
+# Before occu-network.service, which gives up at once without eth0. The condition keeps it off the
+# boards without a device tree (x86_64, LXC); the script checks the model.
+[Unit]
+Description=LAN9514 reset when it is missing after a warm reboot
+ConditionPathExists=/proc/device-tree/model
+Before=occu-network.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-lan-reset
+SyslogIdentifier=lite-lan-reset
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

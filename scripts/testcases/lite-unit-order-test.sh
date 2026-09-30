@@ -467,6 +467,13 @@ else
   bad "occu-board-leds comes after: $late"
 fi
 rm -f "$early" "$early.new"
+# B-249: the LAN9514 reset runs before the network start, which gives up at once without eth0
+if before occu-lan-reset.service | grep -qx occu-network.service; then
+  ok "occu-lan-reset before occu-network"
+else
+  bad "occu-lan-reset must order before occu-network.service"
+fi
+never occu-lan-reset.service occu-network.service network.target network-online.target
 if tsort "$edges" >/dev/null 2>"$edges.err"; then
   ok "no ordering cycle ($(wc -l < "$edges") edges)"
 else
