@@ -51,5 +51,10 @@ grep -q '<AppenderRef ref="SYSLOG"/>' "$T/out.xml" && grep -q 'host="192.0.2.10"
 run "$BASE" "LOGLEVEL_HMIP=ERROR" ""
 grep -q 'SYSLOG"/>' "$T/out.xml" && fail "upstream without LOGHOST: a SYSLOG reference" || ok "upstream without LOGHOST: no SYSLOG reference"
 
+# openccu-lite task 299: the lite template carries the security-counter logger at info with the
+# marker occulited's render honours (S62HMServer's sed does not run on lite; the render does)
+grep -q '<Logger name="de.eq3.cbcs.server.local.base.internal.HMIPTRXInitialResponseListener" level="info"/><!-- occulite:fixed-level -->' "$LITE" && ok "lite: the security-counter logger is fixed at info" || fail "lite: no fixed security-counter logger"
+grep -c 'occulite:fixed-level' "$LITE" | grep -qx 2 && ok "lite: the marker on the logger line and in its comment only" || fail "lite: marker count $(grep -c 'occulite:fixed-level' "$LITE")"
+
 [ "$fails" -eq 0 ] && echo "hmipserver-log4j2-test: all passed" || echo "hmipserver-log4j2-test: $fails failed"
 [ "$fails" -eq 0 ]

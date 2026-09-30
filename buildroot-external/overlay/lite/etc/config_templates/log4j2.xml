@@ -27,6 +27,12 @@
 		</Console>
 	</Appenders>
 	<Loggers>
+		<!-- openccu-lite: the logger that writes the HmIP security counter lines at every start
+		     ("Current Security Counter", "Update security counter to calculation") stays at info
+		     whatever LOGLEVEL_HMIP says - occulited's render leaves a line marked
+		     occulite:fixed-level alone - so the two lines are in the journal at the warn default
+		     and occulited can judge the counter (eq-3/occu#134). -->
+		<Logger name="de.eq3.cbcs.server.local.base.internal.HMIPTRXInitialResponseListener" level="info"/><!-- occulite:fixed-level -->
 		<Logger name="de.eq3" level="info"/>
 		<Logger name="org" level="error"/>
 		<Logger name="com" level="error"/>

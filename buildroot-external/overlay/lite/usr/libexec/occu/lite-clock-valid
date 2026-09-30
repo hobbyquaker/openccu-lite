@@ -12,6 +12,17 @@
 #      its radio - with a warning in the journal.
 # /run/occulite/clock-state says which of the three: rtc, ntp or timeout.
 #
+# A clock is trusted only within the window this image can vouch for: from its build (/VERSION's
+# modification time) to 15 years after it - systemd's own cap for a clock advanced from its
+# built-in epoch (openccu-lite task 299). A real-time clock outside it (a dead battery, a bogus
+# time) is not taken, and the gate waits for NTP as if there were none; its time goes into
+# /run/occulite/clock-rtc-implausible for the Status page. A time server whose time lies outside
+# the window is not taken either. Both end in an untrusted state after the timeout:
+# rtc-implausible (the real-time clock refused, no time server answered) or ntp-implausible (the
+# time server's time refused). Why: hmipserver derives the HmIP security counter from the wall
+# clock, and a clock far ahead pushes it past 2^32 for good - after which every HmIP device drops
+# the system's frames (eq-3/occu#134); occulited holds hmipserver back while the clock is untrusted.
+#
 # The unit is not ordered after chrony (which comes after the network), so on a board without a
 # real-time clock chronyd may not run yet when this starts. The timeout counts from chronyd's first
 # answer, so the network's own start does not eat into NTP's time; if chronyd does not answer at all,
@@ -26,29 +37,52 @@ HM_MODE_FILE=${CLOCK_HM_MODE:-/var/hm_mode}
 VERSION_FILE=${CLOCK_VERSION_FILE:-/VERSION}
 CHRONYC=${CLOCK_CHRONYC:-/usr/bin/chronyc}
 UPTIME_FILE=${CLOCK_UPTIME:-/proc/uptime}
+DATE=${CLOCK_DATE:-date}
+WINDOW_YEARS=15
 
 state() {
   mkdir -p "$STATE_DIR" && echo "$1" > "$STATE_DIR/clock-state.tmp" && mv -f "$STATE_DIR/clock-state.tmp" "$STATE_DIR/clock-state"
 }
 uptime_s() { cut -d. -f1 "$UPTIME_FILE"; }
+now_s() { "$DATE" +%s; }
 
 rtc=
 [ -r "$HM_MODE_FILE" ] && rtc=$(sed -n "s/^HM_RTC='\(.*\)'\$/\1/p" "$HM_MODE_FILE")
 built=$(stat -c %Y "$VERSION_FILE" 2>/dev/null || echo 0)
-if [ -n "$rtc" ] && [ "$(date +%s)" -ge "$built" ]; then
-  state rtc
-  echo "the clock comes from the real-time clock ($rtc)"
-  exit 0
+# the window: the build to 15 years after it (leap days included); without a build time no window
+window_end=$(( built + WINDOW_YEARS * 365 * 86400 + 4 * 86400 ))
+plausible() { [ "$built" -eq 0 ] || { [ "$1" -ge "$built" ] && [ "$1" -le "$window_end" ]; }; }
+iso() { "$DATE" -u -d "@$1" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo "$1"; }
+
+rtc_bad=
+if [ -n "$rtc" ]; then
+  wall=$(now_s)
+  if plausible "$wall"; then
+    state rtc
+    echo "the clock comes from the real-time clock ($rtc)"
+    exit 0
+  fi
+  rtc_bad=1
+  mkdir -p "$STATE_DIR" && iso "$wall" > "$STATE_DIR/clock-rtc-implausible"
+  echo "<4>the real-time clock ($rtc) says $(iso "$wall"), outside the $WINDOW_YEARS years from this image's build ($(iso "$built")); not trusted, waiting for NTP"
 fi
 
 start=$(uptime_s)
 answered=
+ntp_bad=
 while :; do
   if tracking=$("$CHRONYC" -n tracking 2>/dev/null); then
     if printf '%s\n' "$tracking" | grep -q '^Leap status *: Normal'; then
-      state ntp
-      echo "the clock is synchronised by NTP ($(( $(uptime_s) - start )) s)"
-      exit 0
+      wall=$(now_s)
+      if plausible "$wall"; then
+        state ntp
+        echo "the clock is synchronised by NTP ($(( $(uptime_s) - start )) s)"
+        exit 0
+      fi
+      if [ -z "$ntp_bad" ]; then
+        ntp_bad=1
+        echo "<4>the time server's time $(iso "$wall") is outside the $WINDOW_YEARS years from this image's build ($(iso "$built")); not trusted"
+      fi
     fi
     [ -n "$answered" ] || answered=$(uptime_s)
   fi
@@ -59,9 +93,17 @@ while :; do
     waited=$(( now - start )); limit=$(( TIMEOUT + CHRONYD_WAIT )); what="$limit s, and chronyd does not answer"
   fi
   if [ "$waited" -ge "$limit" ]; then
-    state timeout
     # <4>: journald stores the line as a warning
-    echo "<4>the clock is not synchronised $what, and there is no real-time clock; starting without a trusted time"
+    if [ -n "$ntp_bad" ]; then
+      state ntp-implausible
+      echo "<4>the clock is not trusted: the time server's time lies outside the window this image trusts ($what); starting without a trusted time"
+    elif [ -n "$rtc_bad" ]; then
+      state rtc-implausible
+      echo "<4>the clock is not trusted: the real-time clock's time lies outside the window this image trusts and NTP did not synchronise $what; starting without a trusted time"
+    else
+      state timeout
+      echo "<4>the clock is not synchronised $what, and there is no real-time clock; starting without a trusted time"
+    fi
     exit 0
   fi
   sleep 0.5
