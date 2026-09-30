@@ -212,6 +212,23 @@ settle_snippet() {
   printf 'u=%s; n=0; s=$(systemctl is-active $u); while [ "$s" = activating ] && [ $n -lt %d ]; do sleep 2; n=$((n+2)); s=$(systemctl is-active $u); done; echo "$s after ${n}s, result $(systemctl show -p Result --value $u)"' "$1" "$2"
 }
 
+# page_wait <url> <cookie> <seconds>: the host-side wait for an addon's page behind the gate. An
+# addon's unit is active once its rc.d start has returned (Type=oneshot, RemainAfterExit), while a
+# Node.js server behind lighttpd's proxy listens some seconds later, and the proxy answers 503
+# (502 for a refused connection) until then - hmm's did in dev.34's run, probed 2 s after its
+# install, where the green runs had probed 8 s after (B-287). Polls every 2 s while the answer is
+# 502 or 503, up to <seconds>, and prints the code and the seconds waited: "200 after 4s". Read
+# with ${R%% *}. lite-qemu-settle-test.sh runs it against a stub curl.
+page_wait() {
+  pw_n=0
+  pw_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -H 'Accept: text/html' -b "$2" "$1")
+  while { [ "$pw_code" = 503 ] || [ "$pw_code" = 502 ]; } && [ "$pw_n" -lt "$3" ]; do
+    sleep 2; pw_n=$((pw_n+2))
+    pw_code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -H 'Accept: text/html' -b "$2" "$1")
+  done
+  echo "$pw_code after ${pw_n}s"
+}
+
 guest() {
   guest_open
   printf '%s\n' "$1" >&8
@@ -361,8 +378,12 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
       say "addons: $id info"; guest "/usr/local/etc/config/rc.d/$id info 2>&1 | head -4"
       code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Accept: text/html' "$BASE/addons/$id/"); say "addons: /addons/$id/ without a session -> $code"
       [ "$code" = 302 ] || fail "the gate let a browser without a session at /addons/$id/ ($code)"
-      code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 -H 'Accept: text/html' -b "occulite_gate=$SID" "$BASE/addons/$id/"); say "addons: /addons/$id/ with the session (the gate cookie, task 259) -> $code"
-      case "$code" in 302|401|403) fail "the gate refused the session at /addons/$id/ ($code)";; esac
+      # the page behind the gate, once the addon's own server answers (B-287: hmm's proxy said 503
+      # when probed 2 s after the install; the wait is page_wait's, up to 60 s)
+      R=$(page_wait "$BASE/addons/$id/" "occulite_gate=$SID" 60); code=${R%% *}; say "addons: /addons/$id/ with the session (the gate cookie, task 259) -> $R"
+      case "$code" in 302|401|403) fail "the gate refused the session at /addons/$id/ ($code)";; 502|503) fail "the web of $id did not answer behind the gate within 60 s ($code)";; esac
+      # hmm and hm2mqtt serve a page at their root: 200, not the gate's 404 for an addon without one
+      case "$id" in hmm|hm2mqtt) [ "$code" = 200 ] || fail "/addons/$id/ answered $code, want 200";; esac
       say "addons: uninstalling $id"
       code=$(curl -s -o "$WORK/uninstall.json" -w '%{http_code}' --max-time 300 -X POST -H "$AUTH" "$BASE/api/system/v1/addons/$id/uninstall")
       [ "$code" = 200 ] || fail "uninstall of $id answered $code: $(cat "$WORK/uninstall.json" | cut -c1-300)"
