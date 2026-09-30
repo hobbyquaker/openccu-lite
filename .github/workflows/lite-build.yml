@@ -124,6 +124,10 @@ jobs:
         # names the host name alone instead of an empty IP: that openssl refused, and the one made
         # that way is made again once an address exists; a user's own or a managed one is left alone
         run: sh scripts/testcases/lite-lighttpd-cert-test.sh
+      - name: The QEMU test waits for an addon that is still activating
+        # settle_snippet (B-279): the guest-side poll the addon install check uses instead of a fixed
+        # sleep - active at once, activating then active, a failure at once, the bound
+        run: sh scripts/testcases/lite-qemu-settle-test.sh
       - name: A file that leaves an overlay leaves the target
         # the merged-overlay step on an incremental build: removed from the target, and a package
         # that installs the same path is marked for reinstall

@@ -203,6 +203,15 @@ guest_close() {
   GUEST_PID=
 }
 
+# settle_snippet <unit> <seconds>: the guest-side one-liner that waits, up to <seconds>, for <unit>
+# to leave "activating", then prints its state, the seconds waited and its Result - one guest call,
+# so a start that takes longer than a fixed sleep (hm2mqtt's, still activating 8 s after its
+# install on two build rounds, B-279) is judged when it is over, and a failure is still seen at
+# once. Read with: case in *'| active after'*) ok. lite-qemu-settle-test.sh runs it against a stub.
+settle_snippet() {
+  printf 'u=%s; n=0; s=$(systemctl is-active $u); while [ "$s" = activating ] && [ $n -lt %d ]; do sleep 2; n=$((n+2)); s=$(systemctl is-active $u); done; echo "$s after ${n}s, result $(systemctl show -p Result --value $u)"' "$1" "$2"
+}
+
 guest() {
   guest_open
   printf '%s\n' "$1" >&8
@@ -346,7 +355,9 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
       case "$P" in *'"phase":"done"'*) ;; *) fail "$id did not install: $(printf '%s' "$P" | cut -c1-400)"; continue;; esac
       A=$(curl -s --max-time 30 -H "$AUTH" "$BASE/api/system/v1/addons")
       case "$A" in *"\"id\":\"$id\""*) ;; *) fail "$id is not in the addon list after the install";; esac
-      R=$(guest "sleep 5; systemctl is-active addon-$id.service; systemctl show -p Result --value addon-$id.service"); case "$R" in *'| active'*) ;; *) fail "addon-$id.service is not active after the install: $R";; esac
+      # the unit may still be activating (a Node.js addon on an emulated CPU): wait for it to settle, up to 60 s
+      R=$(guest "$(settle_snippet "addon-$id.service" 60)"); say "addons: addon-$id.service $(printf '%s\n' "$R" | grep -o '[a-z-]* after [0-9]*s, result .*' | tail -n 1)"
+      case "$R" in *'| active after'*) ;; *) fail "addon-$id.service is not active after the install: $R";; esac
       say "addons: $id info"; guest "/usr/local/etc/config/rc.d/$id info 2>&1 | head -4"
       code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H 'Accept: text/html' "$BASE/addons/$id/"); say "addons: /addons/$id/ without a session -> $code"
       [ "$code" = 302 ] || fail "the gate let a browser without a session at /addons/$id/ ($code)"
