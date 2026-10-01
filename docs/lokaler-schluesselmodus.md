@@ -62,9 +62,9 @@ Das heißt:
   ihn nicht, sagt nichts zu seiner Zukunft und kann sein Verhalten mit einer neuen Version der
   HmIP-Software ändern oder ihn entfernen.
 - openccu-lite prüft den Modus mit jedem Update der HmIP-Software von eQ-3 erneut. Eine Garantie,
-  dass er bleibt, gibt es nicht. Das bedeutet man wird - im Falle das eQ-3 den lokale Schlüsselmodus 
+  dass er bleibt, gibt es nicht. Das bedeutet man wird - im Falle, dass eQ-3 den lokalen Schlüsselmodus 
   entfernt - einen alten Softwarestand weiternutzen müssen, dem dann eventuell die Unterstützung für neue 
-  Gerätetypen oder Sicherheitsupdates fehlen.
+  Gerätetypen, Bugfixes und Sicherheitsupdates fehlen.
 
 ## Was er bringt
 
