@@ -9,7 +9,7 @@ ausschaltet.
 
 ## Kurz
 
-- **Was:** Der Netzschlüssel des HmIP-Netzes liegt auf dem System selbst, statt dass er im
+- **Was:** Der Netzwerkschlüssel des HmIP-Netzes liegt auf dem System selbst, statt dass er im
   Funkmodul verschlossen ist und nur über den Schlüsselserver von eQ-3 auf ein anderes Modul
   kommt.
 - **Gewinn:** HmIP funktioniert ohne Internet und ohne Schlüsselserver. Ein Tausch des Funkmoduls
@@ -23,15 +23,15 @@ ausschaltet.
 
 ## Was der lokale Schlüsselmodus ist
 
-Alle HmIP-Geräte eines Systems teilen sich einen **Netzschlüssel**; dazu kommt ein
-**Backbone-Schlüssel** für HmIP-Wired und die Access Points (HAP, DRAP).
+Alle HmIP-Geräte eines Systems teilen sich einen **Netzwerkschlüssel**; dazu kommt ein
+**Backbone-Schlüssel** für die Access Points (HAP, DRAP).
 
 **Normalerweise** – auf einer CCU3, auf OpenCCU und auf openccu-lite, solange man nichts ändert –
 erzeugt das Funkmodul diese Schlüssel beim ersten Start selbst und gibt sie nie im Klartext heraus.
 Das System speichert nur eine verschlüsselte Fassung, die allein dieses Modul lesen kann. Das HmIP-Netz
 ist damit an genau dieses Funkmodul gebunden. Soll es auf ein anderes Modul umziehen, übersetzt der
 Schlüsselserver von eQ-3 (`secgtw.homematic.com`) den Schlüssel für das neue Modul – der
-*Adaptertausch*. Das System selbst kennt den Netzschlüssel nicht.
+*Adaptertausch*. Das System selbst kennt den Netzwerkschlüssel nicht.
 
 **Im lokalen Schlüsselmodus** gehören die beiden Schlüssel dem System. Sie stehen in
 `/etc/config/crRFD/hmip_user.conf` (`Network.Key`, `Backbone.Key`), und der HmIP-Dienst (hmipserver)
@@ -55,23 +55,16 @@ Software“ zu setzen, ausgebaut werden soll. Die Antwort, die er am 10.10.2023
 > Leider können wir zu dieser Funktion keine Auskunft geben, da es sich hier um eine Besonderheit
 > für den Entwickler und in dessen Testumgebung handelt und nicht für Endkunden bestimmt und damit
 > dokumentiert ist.
->
-> Für den Wechsel eines Funkmoduls bzw. das Einspielen eines Backup in einer anderen CCU3 ist
-> unabhängig davon, immer eine Internetverbindung und Austausch über den Keyserver nötig.
 
 Das heißt:
 
 - **Der lokale Schlüsselmodus ist kein offiziell unterstützter Modus von eQ-3.** eQ-3 dokumentiert
   ihn nicht, sagt nichts zu seiner Zukunft und kann sein Verhalten mit einer neuen Version der
   HmIP-Software ändern oder ihn entfernen.
-- Den zweiten Absatz hat hce
-  [gleich danach widersprochen](https://homematic-forum.de/forum/viewtopic.php?p=780108#p780108):
-  in seinen Tests – und in denen anderer Forumsnutzer – liefen Modultausch und das Einspielen einer
-  Sicherung auf einer zweiten CCU3 im lokalen Schlüsselmodus ohne Schlüsselserver. Das deckt sich
-  mit dem, was openccu-lite beobachtet: ein Funkmodultausch im lokalen Schlüsselmodus lief ohne
-  Verbindung zu eQ-3, und die Geräte arbeiteten weiter.
 - openccu-lite prüft den Modus mit jedem Update der HmIP-Software von eQ-3 erneut. Eine Garantie,
-  dass er bleibt, gibt es nicht.
+  dass er bleibt, gibt es nicht. Das bedeutet man wird - im Falle das eQ-3 den lokale Schlüsselmodus 
+  entfernt - einen alten Softwarestand weiternutzen müssen, dem dann eventuell die Unterstützung für neue 
+  Gerätetypen oder Sicherheitsupdates fehlen.
 
 ## Was er bringt
 
@@ -93,7 +86,7 @@ Das heißt:
 ### Neuinstallation: nichts
 
 Ist noch kein HmIP-Gerät angelernt, kostet der lokale Schlüssel nichts. Der Willkommensassistent
-bietet ihn dann im Schritt *Der HmIP-Netzschlüssel* an: **Jetzt einen lokalen Schlüssel erzeugen**
+bietet ihn dann im Schritt *Der HmIP-Netzwerkschlüssel* an: **Jetzt einen lokalen Schlüssel erzeugen**
 oder **Beim Schlüsselserver von eQ-3 bleiben**. Nichts ist vorausgewählt; beides lässt sich später
 auf der Seite Schlüssel ändern. Wer sich hier für den lokalen Schlüssel entscheidet, lernt alle Geräte
 gleich unter ihm an.
@@ -101,12 +94,12 @@ gleich unter ihm an.
 ### Bestehende Installation: jedes HmIP-Gerät neu anlernen
 
 Ein HmIP-Netz, das über den Schlüsselserver von eQ-3 entstanden ist – also praktisch jede bestehende
-CCU3-, OpenCCU- oder openccu-lite-Installation –, hat einen Netzschlüssel, den nur das Funkmodul
+CCU3-, OpenCCU- oder openccu-lite-Installation –, hat einen Netzwerkschlüssel, den nur das Funkmodul
 kennt. Das System kann ihn nicht auslesen, und er steht auch auf keinem Aufkleber (den Schlüssel vom
-Aufkleber des Funkmoduls als Netzschlüssel einzutragen, hilft nicht; im Forum ausprobiert,
+Aufkleber des Funkmoduls als Netzwerkschlüssel einzutragen, hilft nicht; im Forum ausprobiert,
 [t=79986](https://homematic-forum.de/forum/viewtopic.php?t=79986)).
 
-Beim Umstieg erzeugt das System deshalb einen **neuen** Netzschlüssel. Alle bisher angelernten
+Beim Umstieg erzeugt das System deshalb einen **neuen** Netzwerkschlüssel. Alle bisher angelernten
 HmIP-Geräte kennen nur den alten und **antworten nicht mehr, bis sie neu angelernt sind**:
 
 - **Jedes HmIP-Gerät wird einmal neu angelernt**, eines nach dem anderen, am Gerät selbst (Anlernmodus
@@ -115,7 +108,7 @@ HmIP-Geräte kennen nur den alten und **antworten nicht mehr, bis sie neu angele
   lässt, wird auf Werkseinstellungen zurückgesetzt und dann angelernt.
 - **Das gilt auch für HmIP-Access-Points** (HAP, DRAP) und HmIP-Wired: beim Erzeugen bekommt auch der
   Backbone-Schlüssel einen neuen Wert.
-- **Direktverknüpfungen und Geräteeinstellungen** danach prüfen. Ein Gerät, das zurückgesetzt wurde,
+- **Direktverknüpfungen und Geräteeinstellungen** danach wiederherstellen. Ein Gerät, das zurückgesetzt wurde,
   hat sie verloren und braucht sie neu.
 - **BidCos-Geräte** (Homematic „classic“) sind nicht betroffen; ihr Schlüssel ist ein anderer.
 
@@ -136,27 +129,22 @@ HmIP-Geräte kennen nur den alten und **antworten nicht mehr, bis sie neu angele
 6. **Einen Zeitpunkt wählen**, an dem HmIP eine Weile ausfallen darf: vom Umschalten bis zum letzten
    neu angelernten Gerät arbeiten die übrigen nicht.
 
-Es gibt einen Sonderfall: **wer den echten Netzschlüssel seines Netzes kennt**, kann ihn eintragen
-(*Den Schlüssel des Netzes eingeben*). Dann arbeiten alle Geräte weiter, und nichts wird neu
-angelernt. Für ein Netz, das über den Schlüsselserver von eQ-3 entstanden ist, liegt dieser Schlüssel
-aber nirgends vor; der Fall betrifft vor allem ein Netz, das schon auf einem anderen System im
-lokalen Schlüsselmodus lief.
-
 ## Risiken und Pflichten
 
 - **Die Schlüssel liegen im Klartext** in `/etc/config/crRFD/hmip_user.conf` und **in jeder
-  Sicherung**. Wer eine Sicherung hat, hat den Netzschlüssel und kann dem HmIP-Netz beitreten.
+  Sicherung**. Wer eine Sicherung hat, hat den Netzwerkschlüssel und kann dem HmIP-Netz beitreten.
   Sicherungen deshalb verschlüsselt anlegen (Seite Sicherung, *Verschlüsselung*), sicher aufbewahren
   und nicht weitergeben.
 - **Die Sicherung ist der Schlüssel.** Geht das System verloren (defekte SD-Karte, defekte Platte)
-  und gibt es keine Sicherung, ist der Netzschlüssel weg, und jedes HmIP-Gerät muss neu angelernt
+  und gibt es keine Sicherung, ist der Netzwerkschlüssel weg, und jedes HmIP-Gerät muss neu angelernt
   werden. Ohne lokalen Schlüssel gilt das übrigens genauso – nur hängt dort zusätzlich alles am
   Funkmodul und am Schlüsselserver.
 - **Anlernen und erneutes Anmelden brauchen den Geräteschlüssel.** Ohne Schlüsselserver nimmt das
   System ein Gerät nur mit dessen Schlüssel (QR-Code/KEY vom Aufkleber) an. Das betrifft auch ein
   Gerät, das sich nach einem Firmware-Update neu an der Zentrale anmeldet: dafür braucht das System
   den Geräteschlüssel unter *HmIP-Geräteschlüssel* oder, ausnahmsweise, den Schlüsselserver. Am
-  einfachsten erfasst man die Schlüssel aller Geräte einmal auf der Seite Schlüssel.
+  einfachsten erfasst man die Schlüssel aller Geräte einmal auf der Seite Schlüssel. Das geht komfortabel
+  mit dem eingebauten QR-Code Scanner.
 - **eQ-3 kann das Verhalten ändern** (siehe [oben](#was-eq-3-dazu-sagt)). Ein Update der
   HmIP-Software könnte den lokalen Schlüsselmodus einschränken oder entfernen.
 
@@ -169,8 +157,8 @@ lokalen Schlüsselmodus lief.
    - **Einen neuen Schlüssel erzeugen** – der Normalfall. Das System erzeugt Netz- und
      Backbone-Schlüssel aus Zufallszahlen. Jedes bereits angelernte HmIP-Gerät muss danach einmal neu
      angelernt werden (siehe oben).
-   - **Den Schlüssel des Netzes eingeben** – nur, wer den echten Netzschlüssel kennt
-     (*Netzschlüssel*, 32 Hex-Ziffern; *Backbone-Schlüssel (optional)*). Dann wird nichts neu
+   - **Den Schlüssel des Netzes eingeben** – nur, wer den echten Netzwerkschlüssel kennt
+     (*Netzwerkschlüssel*, 32 Hex-Ziffern; *Backbone-Schlüssel (optional)*). Dann wird nichts neu
      angelernt.
 3. **Auf lokalen Schlüssel umschalten** bestätigen. HmIP-RF startet sofort neu; der Funk ist etwa
    eine Minute nicht verfügbar.
@@ -201,7 +189,7 @@ Was dabei geschieht:
 - Das System legt die beim Einschalten aufbewahrte Identität des Funkmoduls zurück, nimmt die
   Schlüsselzeilen aus `hmip_user.conf` und startet HmIP-RF neu. Danach gehört das HmIP-Netz wieder dem
   Funkmodul, und die Geräte, die **vor** dem Umschalten angelernt waren, arbeiten wieder wie zuvor.
-- **Geräte, die seit dem Umschalten unter dem lokalen Schlüssel angelernt wurden, müssen erneut
+- **Geräte, die seit dem Umschalten unter dem lokalen Schlüssel neu angelernt wurden, müssen erneut
   angelernt werden** – auch die, die man beim Umstieg schon neu angelernt hatte.
 - Das geht **nur mit dem Funkmodul, von dem die aufbewahrte Identität stammt**. Steckt ein anderes,
   ist die Schaltfläche gesperrt und sagt warum. Wurde die aufbewahrte Identität verworfen, gibt es
