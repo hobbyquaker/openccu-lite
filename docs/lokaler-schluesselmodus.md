@@ -209,7 +209,7 @@ kein Schlüsselserver beteiligt ist.
 **Ohne lokalen Schlüssel** ist ein Modultausch ein *Adaptertausch* über den Schlüsselserver von eQ-3:
 beim Wechsel der Verbindung, nach dem Import angelernter Geräte aus einer Sicherung eines anderen
 Systems oder nach dem Einspielen einer Sicherung. Wie das in openccu-lite abläuft, beschreibt
-[switching.de.md](switching.de.md) (Schritt 3a). Dabei gilt:
+[Geräte in eine Neuinstallation übernehmen](switching.de.md#geräte-in-eine-neuinstallation-übernehmen) in switching.de.md. Dabei gilt:
 
 - Der Tausch braucht eine Internetverbindung, und **der Schlüsselserver kann ihn ablehnen**, auch für
   ein Funkmodul, das er schon kennt. Einen Grund nennt die Meldung nicht.
