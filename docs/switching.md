@@ -120,7 +120,8 @@ it does not grow by itself.
      that made it. When this system runs HmIP-RF on another module (a different SGTIN), hmipserver
      takes the identity over onto this module when it starts after the import - the *adapter
      exchange*: offline when the backup came from a system in local key mode, otherwise through
-     eQ-3's key server, which needs an internet connection and has to know this module. Every HmIP
+     eQ-3's key server, which needs an internet connection and may refuse the exchange (local key mode:
+     [lokaler-schluesselmodus.md](lokaler-schluesselmodus.md), in German). Every HmIP
      device is then re-keyed for the new module; a battery device only when it wakes up, so press a
      button on it if it stays silent, and give it hours rather than minutes. The Interfaces page
      shows how the move went (pending, done, rejected) and offers a retry - a restart of HmIP-RF,

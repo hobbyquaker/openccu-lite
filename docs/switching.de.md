@@ -141,8 +141,8 @@ nicht von selbst.
      gebunden, das sie angelegt hat. Betreibt dieses System HmIP-RF auf einem anderen Modul (eine andere
      SGTIN), übernimmt hmipserver die Identität beim Start nach dem Import auf dieses Modul - der
      *Adaptertausch*: offline, wenn die Sicherung von einem System im lokalen Schlüsselmodus stammt,
-     sonst über den Schlüsselserver von eQ-3, der eine Internetverbindung braucht und dieses Modul kennen
-     muss. Jedes HmIP-Gerät wird danach für das neue Modul umgeschlüsselt; ein Batteriegerät erst, wenn
+     sonst über den Schlüsselserver von eQ-3, der eine Internetverbindung braucht und den Tausch ablehnen
+     kann ([lokaler-schluesselmodus.md](lokaler-schluesselmodus.md)). Jedes HmIP-Gerät wird danach für das neue Modul umgeschlüsselt; ein Batteriegerät erst, wenn
      es aufwacht - drücken Sie eine Taste daran, wenn es stumm bleibt, und rechnen Sie in Stunden, nicht
      in Minuten. Die Seite Schnittstellen zeigt, wie die Übernahme ausging (offen, erledigt, abgelehnt),
      und bietet einen neuen Versuch an - einen Neustart von HmIP-RF, das den Tausch bei jedem Start

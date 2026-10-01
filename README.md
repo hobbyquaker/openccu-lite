@@ -41,7 +41,9 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
 
 Ein Rundgang mit Bildern durch jede Seite der Weboberfläche: [docs/walkthrough](docs/walkthrough/README.md).
 Weiteres, meist auf Englisch, in [`docs/`](docs/) dieses Repositorys: der Wechsel von und zu OpenCCU
-([switching.de.md](docs/switching.de.md), auf Deutsch), der Proxmox-Container ([install-lxc.md](docs/install-lxc.md)),
+([switching.de.md](docs/switching.de.md), auf Deutsch), der lokale Schlüsselmodus für HmIP – offline-fähig,
+Funkmodultausch ohne Schlüsselserver von eQ-3 ([lokaler-schluesselmodus.md](docs/lokaler-schluesselmodus.md), auf
+Deutsch), der Proxmox-Container ([install-lxc.md](docs/install-lxc.md)),
 Addons ([addons.md](docs/addons.md)), Sicherheit ([security.md](docs/security.md),
 [threat-model.md](docs/threat-model.md)), Datenschutz – was das System nach außen sendet
 ([privacy.md](docs/privacy.md)), Zertifikate ([tls-acme.md](docs/tls-acme.md)) und das
