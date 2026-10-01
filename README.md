@@ -40,7 +40,8 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
 
 Ein Rundgang mit Bildern durch jede Seite der Weboberfläche: [docs/walkthrough](docs/walkthrough/README.md).
 Weiteres, meist auf Englisch, in [`docs/`](docs/) dieses Repositorys: der Wechsel von und zu OpenCCU
-([switching.de.md](docs/switching.de.md), auf Deutsch), der lokale Schlüsselmodus für HmIP – offline-fähig,
+([switching.de.md](docs/switching.de.md), auf Deutsch), bekannte Probleme und was das System dagegen tut
+([bekannte-probleme.md](docs/bekannte-probleme.md), auf Deutsch), der lokale Schlüsselmodus für HmIP – offline-fähig,
 Funkmodultausch ohne Schlüsselserver von eQ-3 ([lokaler-schluesselmodus.md](docs/lokaler-schluesselmodus.md), auf
 Deutsch), Addons ([addons.md](docs/addons.md)), Sicherheit ([security.md](docs/security.md),
 [threat-model.md](docs/threat-model.md)), Datenschutz – was das System nach außen sendet

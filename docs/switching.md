@@ -83,6 +83,9 @@ hmipserver moves it across when it starts (the *adapter exchange*):
 - After the exchange every HmIP device is re-keyed for the new module. A battery device only follows when it wakes up:
   press a button on it, and allow hours rather than minutes.
 
+Before a restore or an import the Backup page also judges the backup's HmIP security counter; see
+[known-issues.md](known-issues.md#hmip-devices-unreachable-after-a-reboot-the-security-counter).
+
 ### What changes on the first start
 
 - **Names, rooms and functions** are read from the ReGa database. The CCU's built-in rooms and functions get their
@@ -120,22 +123,6 @@ Backup page, or decrypt it on a PC: `age -d -i key.txt -o backup.sbk backup.sbk.
 browser you use**, before installing OpenCCU. Uploading OpenCCU's package switches HSTS off by itself, and the
 Status page then lists the names to open. A browser that missed this refuses the recovery's plain HTTP page and
 OpenCCU's own certificate under that name for up to seven days. `http://<IP address>/` always works.
-
-## HmIP devices unreachable after a reboot: the security counter
-
-**Symptom:** after a reboot or an update no HmIP device answers, not even when operated locally, while BidCos-RF
-keeps working, and further reboots do not help. **Cause** (eq-3/occu#134, OpenCCU/OpenCCU#4274): HmIP devices only
-accept a rising security counter. hmipserver derives it from the clock, and on an older access point the value has
-run past 2³². A start with a wrong clock (no real-time clock, no time server) can then set the counter below what the
-devices have already seen, and they drop everything as a replay.
-
-**openccu-lite's protection:** the clock never starts at 1970 and is only trusted within a plausible range. On an
-access point at risk, HmIP-RF waits until the time is trusted (a time server answers, or the time is set on the
-Network page). The Status page warns about the counter (*near*, *wrapped*, *backwards*), and the Backup page judges a
-backup's access point before an import or a restore.
-
-**When it has happened** (*backwards*, or every HmIP device silent): rebooting the system does not help.
-**Power-cycle the devices** (battery out and in, the fuse off and on) or pair them again.
 
 ## The reflash fallback
 

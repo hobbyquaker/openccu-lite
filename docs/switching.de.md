@@ -86,6 +86,9 @@ HmIP-Identität ist dagegen an das Funkmodul des Systems gebunden, das das Backu
 - Nach dem Tausch wird jedes HmIP-Gerät für das neue Modul umgeschlüsselt. Ein Batteriegerät erst, wenn es aufwacht:
   eine Taste daran drücken und in Stunden rechnen, nicht in Minuten.
 
+Vor einem Einspielen oder Import beurteilt die Seite Sicherung außerdem den HmIP-Sicherheitszähler der Sicherung;
+siehe [bekannte-probleme.md](bekannte-probleme.md#hmip-geräte-nach-einem-neustart-unerreichbar-der-sicherheitszähler).
+
 ### Was sich beim ersten Start ändert
 
 - **Namen, Räume und Gewerke** werden aus der ReGa-Datenbank gelesen. Die vordefinierten Räume und Gewerke der CCU
@@ -126,24 +129,6 @@ Browser einmal unter seinem Namen öffnen**, bevor OpenCCU installiert wird. Das
 HSTS von selbst aus, und die Status-Seite nennt dann die zu öffnenden Namen. Ein Browser, der das verpasst hat,
 verweigert unter diesem Namen bis zu sieben Tage lang die HTTP-Seite des Recovery und das Zertifikat von OpenCCU.
 `http://<IP-Adresse>/` funktioniert immer.
-
-## HmIP-Geräte nach einem Neustart unerreichbar: der Sicherheitszähler
-
-**Symptom:** nach einem Neustart oder Update antwortet kein HmIP-Gerät mehr, auch nicht bei Bedienung vor Ort,
-während BidCos-RF weiterläuft, und weitere Neustarts helfen nicht. **Ursache** (eq-3/occu#134,
-OpenCCU/OpenCCU#4274): HmIP-Geräte akzeptieren den Sicherheitszähler nur aufsteigend. hmipserver leitet ihn aus der
-Uhrzeit ab, und auf einem älteren Access Point ist der Wert über 2³² gelaufen. Ein Start mit falscher Uhr (keine
-Echtzeituhr, kein Zeitserver) kann den Zähler dann unter das setzen, was die Geräte schon gesehen haben, und sie
-verwerfen alles als Wiederholung.
-
-**Der Schutz in openccu-lite:** die Uhr startet nie im Jahr 1970 und gilt nur in einem plausiblen Bereich als
-vertrauenswürdig. Auf einem gefährdeten Access Point wartet HmIP-RF, bis die Zeit vertrauenswürdig ist (ein
-Zeitserver antwortet, oder die Zeit wird auf der Seite Netzwerk gestellt). Die Status-Seite warnt vor dem Zähler
-(*near*, *wrapped*, *backwards*), und die Seite Sicherung beurteilt den Access Point einer Sicherung vor Import oder
-Restore.
-
-**Wenn es passiert ist** (*backwards*, oder jedes HmIP-Gerät schweigt): ein Neustart des Systems hilft nicht. **Die
-Geräte stromlos machen** (Batterie raus und rein, Sicherung aus und ein) oder neu anlernen.
 
 ## Der Ausweg über das Neuflashen
 
