@@ -364,10 +364,16 @@ import http.server, socketserver, sys
 class H(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     def do_GET(self):
-        seen = [v for k, v in self.headers.items() if "".join(c if c.isalnum() else "_" for c in k.upper()) == "X_OCCULITE_SESSION" and v != ""]
+        def cgi(name):
+            return "".join(c if c.isalnum() else "_" for c in name.upper())
+        seen = [v for k, v in self.headers.items() if cgi(k) == "X_OCCULITE_SESSION" and v != ""]
         seen = " | ".join(seen) or "-"
         h = self.headers
         fwd = "for=%s;proto=%s;host=%s;fwd=%s" % (h.get("X-Forwarded-For", "-"), h.get("X-Forwarded-Proto", "-"), h.get("X-Forwarded-Host", "-"), h.get("Forwarded", "-"))
+        # the identity headers of the addon ingress token (occulited's gate): what reached the addon, any spelling
+        auth = " | ".join(v for k, v in self.headers.items() if cgi(k) == "X_OCCULITE_AUTH" and v != "") or "-"
+        tok = " | ".join(v for k, v in self.headers.items() if cgi(k) == "X_OCCULITE_TOKEN" and v != "") or "-"
+        ident = "auth=%s;token=%s" % (auth, tok)
         with open("/tmp/echo.log", "a") as log:
             log.write(self.path + " " + seen + "\n")
         if self.headers.get("Upgrade", "").lower() == "websocket":
@@ -381,6 +387,7 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("X-Echo-Session", seen)
         self.send_header("X-Echo-Forwarded", fwd)
+        self.send_header("X-Echo-Identity", ident)
         self.send_header("Content-Length", "5")
         self.end_headers()
         self.wfile.write(b"echo\n")
@@ -543,6 +550,57 @@ if grep -q 'lighty.c.md' /etc/lighttpd/occulite-gate.lua; then
   echoed "an addon, a live session's digest as the cookie: 401" 401 none $R -H "Cookie: $GC=$(session_file $SID)" $S/addons/echo/
   echoed "an addon, a forged id: 401" 401 none $R -H "Cookie: $GC=FORGED0000" $FORGED $S/addons/echo/
 fi
+if grep -q 'gate-tokens' /etc/lighttpd/occulite-gate.lua; then
+  echo "---- an API token at the gate (the addon ingress scope addon:<id>, GitHub issue openccu-lite#3)"
+  # occulited mirrors every stored token into /var/run/occulite/gate-tokens by the SHA-256 of its
+  # secret: the token's name, the segments under /addons/ its scopes open, an expiry, address ranges.
+  # The gate takes the token from Authorization: Bearer alone, answers 401 for one it does not know,
+  # 403 for another addon or an address outside the ranges, and hands the addon the token in the
+  # session header with X-Occulite-Auth: token and X-Occulite-Token: <name>; a session carries
+  # X-Occulite-Auth: session. Forged copies of the identity headers never reach the addon.
+  TOK=olt_0123456789abcdef0123456789abcdef
+  TOK2=olt_fedcba9876543210fedcba9876543210
+  TOKX=olt_00000000000000000000000000000000
+  TOKR=olt_11111111111111111111111111111111
+  mkdir -p /var/run/occulite/gate-tokens
+  printf 'name loom\naddons echo cgi\n' >"/var/run/occulite/gate-tokens/$(session_file $TOK)"
+  printf 'name other\naddons other\n' >"/var/run/occulite/gate-tokens/$(session_file $TOK2)"
+  printf 'name old\naddons echo\nexpires 1000000000\n' >"/var/run/occulite/gate-tokens/$(session_file $TOKX)"
+  printf 'name ranged\naddons echo\nip 192.0.2.0/24\n' >"/var/run/occulite/gate-tokens/$(session_file $TOKR)"
+  FORGED_ID="-H X-Occulite-Auth:session -H x_occulite_token:admin -H X-Occulite-Token:root"
+  # identity <label> <status> <X-Echo-Identity or none> curl arguments...
+  identity() {
+    label=$1 want_code=$2 want_id=$3
+    shift 3
+    head=$(curl -sk -o /dev/null -D - --max-time 3 "$@" | tr -d '\r')
+    code=$(echo "$head" | sed -n '1s/^HTTP\/[0-9.]* \([0-9]*\).*/\1/p')
+    id=$(echo "$head" | sed -n 's/^[Xx]-[Ee]cho-[Ii]dentity: //p')
+    [ -n "$id" ] || id=none
+    if [ "$code" = "$want_code" ] && [ "$id" = "$want_id" ]; then ok "$label: $code $id"; else bad "$label: got $code $id, want $want_code $want_id"; fi
+  }
+  echoed "an addon, the token as Bearer: the token in the session header" 200 $TOK $R -H "Authorization: Bearer $TOK" $S/addons/echo/
+  identity "an addon, the token as Bearer: X-Occulite-Auth token and its name" 200 "auth=token;token=loom" $R -H "Authorization: Bearer $TOK" $S/addons/echo/x
+  identity "an addon, the token over HTTP/2 with forged identity headers: only the gate's" 200 "auth=token;token=loom" $R --http2 -H "Authorization: Bearer $TOK" $FORGED $FORGED_ID $S/addons/echo/
+  identity "an addon, a session cookie: X-Occulite-Auth session, no token" 200 "auth=session;token=-" $R -H "$HC" $FORGED_ID $S/addons/echo/
+  identity "an addon, ?sid= with the alias: X-Occulite-Auth session" 200 "auth=session;token=-" $R "$S/addons/echo/?sid=@$ALIAS@"
+  echoed "a CGI through occulited, the token as Bearer" 200 $TOK $R -H "Authorization: Bearer $TOK" http://ccu/addons/cgi/settings.cgi
+  echoed "a WebSocket upgrade with the token as Bearer" 101 $TOK $R --http1.1 -H "Authorization: Bearer $TOK" $WS $S/addons/echo/ws
+  before=$(reached)
+  echoed "an addon, a token of another addon: 403" 403 none $R -H "Authorization: Bearer $TOK2" $S/addons/echo/
+  echoed "an addon, a token nobody has: 401" 401 none $R -H "Authorization: Bearer $TOKX$TOKX" $S/addons/echo/
+  echoed "an addon, an expired token: 401" 401 none $R -H "Authorization: Bearer $TOKX" $S/addons/echo/
+  echoed "an addon, a token from outside its address range: 403" 403 none $R -H "Authorization: Bearer $TOKR" $S/addons/echo/
+  echoed "an addon, a token nobody has beside a live cookie: the token's answer" 401 none $R -H "Authorization: Bearer $TOKX$TOKX" -H "$HC" $S/addons/echo/
+  echoed "an addon, the token in ?sid=: no credential" 401 none $R "$S/addons/echo/?sid=$TOK"
+  echoed "an addon, the token in the gate cookie: no credential" 401 none $R -H "Cookie: $GC=$TOK" $S/addons/echo/
+  echoed "an addon, forged identity headers alone: 401" 401 none $R $FORGED_ID $S/addons/echo/
+  if [ "$(reached)" = "$before" ]; then ok "the refused token requests never reached the addon"; else bad "a refused token request reached the addon:"; tail -n +$((before + 1)) /tmp/echo.log; fi
+  if grep -q 'token refused: token=other addon=echo' /var/log/lighttpd-error.log; then ok "the 403 is logged with the token's name and the addon"; else bad "no log line for the refused token"; fi
+  rm -f "/var/run/occulite/gate-tokens/$(session_file $TOK)"
+  echoed "an addon, the token once it was deleted: 401" 401 none $R -H "Authorization: Bearer $TOK" $S/addons/echo/
+else
+  echo "skip  the token half: this occulited's gate reads no token mirror"
+fi
 }
 else
   echo "skip  the gate half: this occulited's gate does not set X-Occulite-Session"
@@ -552,6 +610,7 @@ fi
 # shellcheck disable=SC2086
 {
 echoed "an addon path outside /addons/ (/description.xml), forged headers: none" 200 - $R $FORGED $S/description.xml
+identity "an addon path outside /addons/, forged identity headers: none reach it" 200 "auth=-;token=-" $R -H "X-Occulite-Auth: token" -H "X_Occulite_Token: admin" $S/description.xml
 echoed "an addon path outside /addons/, a live cookie: no header without the gate" 200 - $R -H "$HC" $FORGED http://ccu/description.xml
 echoed "an addon path inside /api/ (/api/x/lights), a live cookie and forged headers" 200 - $R --http2 -H "$SC" $FORGED $S/api/x/lights
 echoed "an addon's own socket :8282, forged headers" 200 - $FORGED "http://$IP:8282/"

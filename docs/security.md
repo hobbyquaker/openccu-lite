@@ -219,6 +219,18 @@ that names the port.
   request reaches the CGI — one SHA-256 (`lighty.c.md`) and one `open()` against the session
   mirror on tmpfs, `/run/occulite/sessions`, whose files are named by the hash of the session id, so the mirror holds no usable id either. Addons keep their own `tclrega` check; the
   shim hashes the id it is asked about the same way and answers exactly that call and nothing else.
+  - *An API token at the gate* (GitHub issue #3): a program may open one addon's pages with a token
+    instead of an account — `Authorization: Bearer <token>` on every request, and the token must hold
+    the **scope `addon:<id>`** of that addon (or Full access); its other scopes count for nothing
+    there, and the scope opens no API route. The token page offers the scope per installed addon, and
+    a pairing request may ask for it (`addons: ["<id>"]`). The gate reads a second mirror,
+    `/run/occulite/gate-tokens/<sha256 of the secret>` (the token's name, the URL segments it opens,
+    its expiry and address ranges — never a secret), answers 401 for an unknown or expired token and
+    403 for the wrong addon or an address outside the ranges (a journal line names the token), and
+    hands the addon the token as `X-Occulite-Session` with `X-Occulite-Auth: token` and
+    `X-Occulite-Token: <name>`; a session-opened request carries `X-Occulite-Auth: session`.
+    Client-sent copies of the three headers are removed everywhere, as the session header's always
+    were. No token ever travels in a URL, and none is turned into a session.
 
 **The `certs` group (2026-09-09).** `/etc/config/server.pem` — the system's TLS certificate
 *and* key, one PEM, what lighttpd serves and what S50lighttpd regenerates when it expires — is

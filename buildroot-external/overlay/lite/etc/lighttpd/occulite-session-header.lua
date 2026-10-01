@@ -1,9 +1,12 @@
--- openccu-lite: no request reaches a backend with a client-sent X-Occulite-Session, nor with a
--- client-sent X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host or Forwarded.
+-- openccu-lite: no request reaches a backend with a client-sent X-Occulite-Session, X-Occulite-Auth
+-- or X-Occulite-Token, nor with a client-sent X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host
+-- or Forwarded.
 --
 -- occulited's session gate (/etc/lighttpd/occulite-gate.lua, from package/occulited) hands an addon
--- the id of the session it validated in the request header X-Occulite-Session, and removes a
--- client-sent one first. The gate runs only in front of /addons/. This script runs for every other
+-- the credential it validated in the request header X-Occulite-Session - a session id, its alias,
+-- or an API token sent as Authorization: Bearer with the addon's scope addon:<id> - says which in
+-- X-Occulite-Auth (session or token) and names a token in X-Occulite-Token, and removes
+-- client-sent copies of all three first. The gate runs only in front of /addons/. This script runs for every other
 -- request, on every socket (modules.conf sets it globally, and the gate's own block replaces it):
 -- an addon's drop-in may proxy a path outside /addons/ (RedMatic's /description.xml and
 -- /api/*/lights to Node-RED's Amazon Echo hub) or open a socket of its own, and none of those may
@@ -34,6 +37,8 @@ end
 
 local STRIPPED = {
     X_OCCULITE_SESSION = true,
+    X_OCCULITE_AUTH = true,
+    X_OCCULITE_TOKEN = true,
     X_FORWARDED_FOR = true,
     X_FORWARDED_PROTO = true,
     X_FORWARDED_HOST = true,

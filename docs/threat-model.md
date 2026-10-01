@@ -283,13 +283,17 @@ there, held to its level and to the origin rule of lite-rpc, and to nothing else
 
 ### B2 · lighttpd ↔ occulited
 
-**Crosses:** the proxied request, and with it the session the gate validated (`X-Occulite-Session`), the client's
+**Crosses:** the proxied request, and with it the credential the gate validated (`X-Occulite-Session`: a session
+id, its alias, or — since the addon ingress scope `addon:<id>`, GitHub issue #3 — an API token sent as
+`Authorization: Bearer`, with `X-Occulite-Auth` saying which and `X-Occulite-Token` naming a token), the client's
 address (`X-Forwarded-For`: lighttpd's element, the last one — a client-sent header is removed before lighttpd adds
 its own, B-230) and the protocol (`X-Forwarded-Proto`).
 
-**Checked by:** occulited listening on `127.0.0.1:8183` only; the gate script, which validates the session
-before an addon page is served and **removes a client-sent session header** before it sets its own; occulited
-trusting the forwarded headers only because nothing else can reach the port.
+**Checked by:** occulited listening on `127.0.0.1:8183` only; the gate script, which validates the session — or
+the token against the token mirror (`/run/occulite/gate-tokens`, hashes only: the segments it opens, its expiry,
+its ranges) — before an addon page is served and **removes a client-sent session or identity header** before it
+sets its own; occulited trusting the forwarded headers only because nothing else can reach the port. A token's
+other scopes give nothing at the gate, and a token accepted there opens no API route beyond what its scopes say.
 
 **Has gone wrong here:** the gate itself. The rule to keep: anything a client may send and lighttpd may
 also set has to be removed before it is set.
@@ -404,7 +408,7 @@ and its tooling have to confirm, and is the list that becomes findings.
 
 | | Here that would be | In the way today | To check |
 | --- | --- | --- | --- |
-| **S**poofing | A client sending `X-Occulite-Session` itself, or faking `X-Forwarded-For` to dodge the lockout | The gate removes a client-sent header before setting its own; the global magnet removes it everywhere the gate does not run; both remove a client-sent `X-Forwarded-For`, `-Proto`, `-Host` and `Forwarded` too, and occulited takes only the last element of `X-Forwarded-For` (lighttpd's), and only from the loopback (B-230); only lighttpd reaches 8183 | That both removals are still in place after any lighttpd config change — this is the bug class; that nothing but the loopback can reach 2121 |
+| **S**poofing | A client sending `X-Occulite-Session`, `X-Occulite-Auth` or `X-Occulite-Token` itself (an addon ingress token's identity, or a session's, claimed by a program that has neither), or faking `X-Forwarded-For` to dodge the lockout or a token's address range | The gate removes a client-sent copy of the three before setting its own; the global magnet removes them everywhere the gate does not run; both remove a client-sent `X-Forwarded-For`, `-Proto`, `-Host` and `Forwarded` too, and occulited takes only the last element of `X-Forwarded-For` (lighttpd's), and only from the loopback (B-230); only lighttpd reaches 8183. A token's address range is checked by the gate against the connection's own address, not a header | That both removals are still in place after any lighttpd config change — this is the bug class; that nothing but the loopback can reach 2121 |
 | **T**ampering | Changing the proxied body or the path | The loopback; lighttpd is the only writer | The path rewriting rules: what `/addons/<id>/…` can become before occulited sees it |
 | **R**epudiation | — | The request log names the address the gate forwarded | Whether the log's address is the forwarded one and not lighttpd's |
 | **I**nformation disclosure | An answer meant for one session served to another | No shared cache; `Cache-Control: private, no-cache`; the session decides the answer | Any route that answers the same bytes to everyone and is cached by lighttpd |
