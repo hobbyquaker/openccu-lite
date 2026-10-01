@@ -2,431 +2,150 @@
 
 *Deutsch — die englische Fassung ist [switching.md](switching.md).*
 
-Der Wechsel **zu** openccu-lite ist ein unterstützter Vorgang. **Zurück** geht es, indem man das
-Backup einspielt, das man vor dem Wechsel angelegt hat — nicht, indem man OpenCCU über lite flasht
-und erwartet, dass die Konfiguration noch da ist.
-
-**Vor der Migration ein Backup anlegen und aufbewahren.** Diese `.sbk` ist der Weg zurück. Alles
-andere auf dieser Seite ist Mechanik. **Seit dem 2026-09-25 gibt es überhaupt keinen anderen Weg
-zurück mehr:** nach seinem ersten Start entfernt openccu-lite die Altlasten der CCU vom userfs —
-die ReGa-Datenbank (`homematic.regadom` und ihre `.bak`), die `measurement` und `userprofiles`
-der WebUI, die Arbeitsdateien der ReGa und den NEO Server von mediola —, sobald die Namen daraus
-importiert sind. Die Funk-Identität, die Schlüssel, die Interface-Konfiguration und die Addons
-bleiben.
-
-Die Mechanik ist die einfache Hälfte: gleiches Partitionslayout, gleiches Format von Image und
-Update-Paket, und `/usr/local` — Anlernungen, Funkschlüssel, Interface-Konfiguration, Addons —
-überlebt in beide Richtungen. Was nicht überlebt, ist die Datenbank der ReGa. openccu-lite betreibt
-keine ReGaHss, also wird die `homematic.regadom` auf dem System vom Moment des Wechsels an nicht
-mehr gepflegt: jeder Name, jeder Raum, jedes Gewerk, jedes Programm und jede Systemvariable, die
-man danach ändert, existiert im Metadaten-Speicher von openccu-lite und sonst nirgends. Wer OpenCCU
-zurückflasht, bekommt ein OpenCCU mit einer ReGa-Datenbank, die am Tag des Wechsels eingefroren
-wurde, und daran ändert auch kein Hin- und Herkopieren einzelner Teile etwas. **Diese Seite hat
-früher das Gegenteil behauptet und einen HM-Script-Export angeboten, der die Lücke überdecken
-sollte. Beides ist weg (2026-09-08).**
+**Vor dem Wechsel ein Backup (`.sbk`) anlegen und aufbewahren. Es ist der einzige Weg zurück.** Nach seinem ersten
+Start entfernt openccu-lite die ReGa-Datenbank der CCU und die Daten der WebUI vom System (siehe
+[Was sich beim ersten Start ändert](#was-sich-beim-ersten-start-ändert)). Wer ohne das Backup zu OpenCCU zurückflasht,
+bekommt ein laufendes OpenCCU mit Anlernungen und Schlüsseln, aber ohne Namen, Räume, Programme und Systemvariablen.
 
 ## OpenCCU / CCU3 → openccu-lite
 
-**Die Kurzfassung für eine OpenCCU-VM (`ova`) oder ein SD-Karten-Produkt**: in der OpenCCU-WebUI
-unter Einstellungen → Systemsteuerung → Zentralen-Wartung → Software-Update durchführen die
-`openccu-lite-<produkt>-<version>.zip` hochladen (**eine CCU3 nimmt stattdessen die `-ccu3.tgz`**,
-siehe *Welches Paket für welches System* unten), bestätigen, neu starten lassen. Das eigene
-Recovery-System von OpenCCU flasht das Image und behält `/usr/local`; das lite-System kommt mit den
-Anlernungen, Schlüsseln und Addons hoch, liest beim ersten Start die Namen, Räume und Gewerke aus
-der ReGa-Datenbank und fragt nach einem Administrator-Passwort. Die `.zip` wird angenommen, weil
-die `/VERSION` des lite-Images die `PLATFORM` von upstream trägt — genau die vergleicht das
-Recovery. **Der Weg zurück**: OpenCCU über den Abschnitt *Systemaktualisierung* der lite-Status-Seite
-mit der `OpenCCU-<version>-ova.zip` von upstream flashen, dann **das vor der Migration angelegte
-Backup einspielen**. Das Flashen allein ergibt ein funktionierendes OpenCCU mit den Anlernungen,
-Schlüsseln und Addons — `/usr/local` überlebt —, aber seine ReGa-Datenbank ist die vom Tag des
-Wechsels. Das Backup ist es, was das System wieder zu dem System macht, das es war.
+In der WebUI von OpenCCU oder der CCU3: Einstellungen → Systemsteuerung → Zentralen-Wartung → Software-Update
+durchführen, das Paket (unten) hochladen, bestätigen, neu starten lassen. Anlernungen, Schlüssel, die
+Interface-Konfiguration und die Addons bleiben in `/usr/local`. Beim ersten Start übernimmt das System die Namen,
+Räume und Gewerke aus der ReGa-Datenbank und fragt nach einem Administrator-Passwort.
 
 ### Welches Paket für welches System
 
-Ein Release enthält pro Board mehr als eine Datei. Welche Ihr System nimmt, hängt davon ab, wie es
-eingerichtet wurde, nicht von der Hardware allein — `cat /VERSION` über SSH (`PRODUCT=…`) sagt
-Ihnen, welches Sie haben:
+`cat /VERSION` über SSH (`PRODUCT=…`) zeigt, was für ein System es ist:
 
-| Ihr System | Paket | Was auf dem Weg passiert |
+| Ihr System | Paket | Was passiert |
 | --- | --- | --- |
-| OpenCCU, von einem OpenCCU-Image auf SD-Karte oder USB-Datenträger geschrieben (`PRODUCT=rpi3`, `rpi4`, `rpi5`, …) | `openccu-lite-<produkt>-<version>.zip` | ein Durchlauf des Recovery-Systems: es entpackt das Image auf dem userfs, schreibt Boot- und Root-Partition, behält `/usr/local`, startet neu. Etwa drei Minuten. |
-| Die OpenCCU-VM (`PRODUCT=ova`) | `openccu-lite-x86_64-ova-<version>.zip` | dasselbe, ein Durchlauf. |
-| Eine CCU3 oder eine Karte, die aus dem CCU3-Image von eQ-3 oder einem CCU3-Backup-Image eingerichtet wurde (`PRODUCT=ccu3`: bootfs 256 MB, rootfs 1 GB, userfs) | `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` | die WebUI entpackt das Archiv, und das Recovery führt dessen `update_script` aus: es schreibt die neue Boot-Partition — mit dem Recovery-System von openccu-lite — und übergibt, weil die Root-Partition 1 GB groß ist und das Image 2 GB, den Rest an dieses neue Recovery. **Zwei Recovery-Durchläufe, zwei Neustarts:** der zweite vergrößert die Root-Partition auf 2 GB, verschiebt dafür die Benutzerpartition und schreibt das Root-Dateisystem. Rechnen Sie damit, dass das System zehn Minuten oder länger dunkel ist. |
+| OpenCCU auf SD-Karte oder USB-Datenträger (`PRODUCT=rpi3`, `rpi4`, `rpi5`, …) | `openccu-lite-<produkt>-<version>.zip` | ein Recovery-Durchlauf, ein Neustart, etwa drei Minuten |
+| Die OpenCCU-VM (`PRODUCT=ova`) | `openccu-lite-x86_64-ova-<version>.zip` | dasselbe |
+| Eine CCU3 oder eine Karte aus einem CCU3-Image oder CCU3-Backup-Image (`PRODUCT=ccu3`) | `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` | zwei Recovery-Durchläufe und zwei Neustarts: der zweite vergrößert die Root-Partition auf 2 GB. Mit zehn Minuten oder mehr rechnen. |
 
-Die `.zip` ist für ein System mit CCU3-Layout das falsche Paket: ihr Image ist für eine SD-Karte
-aufgeteilt, und das Recovery bräuchte ohnehin die entpackten 2,4 GB auf dem userfs. Die `-ccu3.tgz`
-ist der für dieses Layout gebaute Weg (der Pfad CCU3 → OpenCCU von upstream, den openccu-lite
-weiterverwendet).
+Die `.zip` ist für ein System mit CCU3-Layout das falsche Paket; dort die `-ccu3.tgz` nehmen.
+
+**Eine Neuinstallation** braucht kein Update: die `.img` aus der `.zip` des Releases auf eine SD-Karte schreiben
+(Raspberry Pi 3/4) oder die `.ova` importieren (Proxmox, VMware, VirtualBox). Die Geräte des alten Systems kommen dann
+per [Restore oder Geräte-Import](#geräte-in-eine-neuinstallation-übernehmen) dazu.
 
 ### Der Platz, den das Update braucht
 
-Das Recovery entpackt das Update **auf dem userfs (`/usr/local`), bevor es irgendetwas schreibt**:
-das Image der `.zip` hat entpackt etwa 2,4 GB, das Root-Dateisystem der `-ccu3.tgz` 2 GB, jeweils
-zusätzlich zum Upload selbst. Prüfen Sie das vorher — die WebUI zeigt es auf der Seite
-*Zentralen-Wartung* unter *Software-Update durchführen* als *Verfügbarer Speicherplatz: X GB (> 2,8 GB
-erforderlich)*, und über SSH zeigt `df -h /usr/local` es in der Spalte *Avail*. **Unter 2,8 GB frei:
-nicht starten.** Alte Backups unter `/usr/local/tmp` und große Addon-Daten sind der übliche Grund;
-räumen Sie sie zuerst weg. Auf einer Karte mit CCU3-Layout, deren Benutzerpartition nicht bis zum
-Ende der Karte reicht, vergrößert das Recovery von openccu-lite sie — das hilft aber erst im zweiten
-Durchlauf, und nur, wenn der freie Platz hinter der Partition liegt, nicht, wenn die Partition voll
-ist.
+Das Recovery entpackt das Update auf dem userfs (`/usr/local`), bevor es etwas schreibt. **Nötig sind mindestens
+2,8 GB frei.** Die WebUI zeigt das unter *Software-Update durchführen* (*Verfügbarer Speicherplatz*), über SSH
+`df -h /usr/local`. Alte Backups unter `/usr/local/tmp` und große Addon-Daten sind die üblichen Platzfresser; vorher
+wegräumen.
 
 ### Vor dem Wechsel prüfen
 
-- **Ein Backup angelegt und aufbewahrt** — die `.sbk` aus Einstellungen → Systemsteuerung →
-  Sicherheit → Backup erstellen (oder `createBackup.sh`), vom System heruntergeladen. Sie ist der
-  Weg zurück.
-- **Genug freier Platz** auf dem userfs (oben): mindestens 2,8 GB.
-- **Das richtige Paket** für die Form Ihres Systems (die Tabelle oben), seine `.sha256` geprüft.
-- **SSH oder physischer Zugang zur Hand.** Ein Wechsel, der auf halbem Weg stehen bleibt, lässt das
-  System in seinem Recovery-System zurück, das nur einfaches HTTP auf Port 80 spricht; auf einer CCU3
-  ist das Recovery-Blinkmuster der LED der Hinweis. Halten Sie die SD-Karte oder die Konsole der VM
-  erreichbar und notieren Sie die Adresse des Systems: ein fehlgeschlagenes Update kann mit einer
-  neuen DHCP-Adresse zurückkommen.
-- **Eine Stromversorgung, der Sie vertrauen**, für die ganze Dauer: der zweite Durchlauf schreibt
-  Partitionstabellen.
+- **Ein Backup**, angelegt unter Einstellungen → Systemsteuerung → Sicherheit → Backup erstellen und vom System
+  heruntergeladen.
+- **2,8 GB frei** auf dem userfs.
+- **Das richtige Paket** (Tabelle oben), seine `.sha256` geprüft.
+- **Zugang, falls etwas schiefgeht:** die Adresse des Systems notiert (ein fehlgeschlagenes Update kann mit einer neuen
+  DHCP-Adresse zurückkommen), SD-Karte oder Konsole der VM erreichbar.
+- **Sichere Stromversorgung** für das ganze Update: der zweite Durchlauf auf der CCU3 schreibt Partitionstabellen.
 
 ### Ein Recovery, das in seinem Menü stehen bleibt
 
-Ein Recovery-System, das nach einem unbeaufsichtigten Update oben bleibt — eine dunkle WebUI, und
-`http://<system>/` zeigt das Menü des Recovery statt der Update-Ausgabe —, bedeutet: **das Update
-ist fehlgeschlagen, und das Recovery hat das normale System nicht gestartet.** Das CCU3-Recovery von
-eQ-3 aus dem Jahr 2018, das jede CCU3 vor ihrem ersten openccu-lite-Update ausführt, tut genau das:
-sein unbeaufsichtigtes Update bleibt bei jedem Fehler im Menü stehen, und der Grund steht nur so
-lange auf der Seite, wie die Ausgabe noch da ist (die Recovery-Seite zeigt die Ausgabe des laufenden
-Updates; ist es vorbei, das Menü). Die Recovery-Systeme von OpenCCU und openccu-lite starten nach
-einem fehlgeschlagenen unbeaufsichtigten Update stattdessen das normale System, und openccu-lite
-behält den Grund: die letzten Zeilen von `/usr/local/var/recovery/<zeit>.log`, die das Journal beim
-nächsten Start übernimmt.
+Bleibt die WebUI dunkel und zeigt `http://<system>/` das Menü des Recovery, **ist das Update fehlgeschlagen**. Das
+ursprüngliche Recovery der CCU3 bleibt bei jedem Fehler dort stehen. *Normal Reboot* startet das vorherige System,
+`/usr/local` unangetastet; *Check storage* prüft die Partitionen mit `e2fsck`. Vor einem neuen Versuch klären, warum
+es fehlschlug; meist ist es der freie Platz, und der wächst nicht von selbst. Das Recovery von openccu-lite startet
+nach einem Fehler das normale System, und das Journal zeigt den Grund beim nächsten Start.
 
-**Der Weg zurück aus dem Menü:** *Normal Reboot* auf der Recovery-Seite startet das System, das vorher
-da war (`/usr/local` und die Anlernungen unangetastet), und Sie können sich Platz, Paket und `.sbk`
-ansehen und von vorn beginnen. *Check storage* auf derselben Seite lässt `e2fsck` über die
-Partitionen laufen und zeigt, was es repariert hat — nützlich nach einem fehlgeschlagenen zweiten
-Durchlauf. Was Sie nicht tun sollten: dasselbe Paket aus dem Menü heraus noch einmal hochladen, ohne
-zu wissen, warum der erste Versuch fehlgeschlagen ist. Der Platz ist der übliche Grund, und er wächst
-nicht von selbst.
+### Geräte in eine Neuinstallation übernehmen
 
-1. **Backup** auf dem alten System (Einstellungen → Systemsteuerung → Sicherheit → Backup
-   erstellen, oder `createBackup.sh`). Die `.sbk` aufbewahren.
-2. **Flashen / aktualisieren** auf openccu-lite. Der Updater nimmt das Paket an; das
-   Recovery-System ist das von upstream.
-3. **Erster Start**: wer an Ort und Stelle aktualisiert hat, dessen System hat seine Anlernungen
-   und Schlüssel schon — `/usr/local` wurde nicht angefasst —, und das Administrator-Passwort wird
-   einmal gesetzt. Wer neu geflasht hat, **spielt zuerst die `.sbk` ein** (die Seite Sicherung ist
-   erreichbar, sobald ein Wegwerf-Administrator angelegt ist): das Einspielen ersetzt `/usr/local`
-   komplett — Anlernungen, Schlüssel, Addons und auch den eigenen Zustand von `occulited` —, der
-   vor dem Einspielen angelegte Administrator ist also weg, und das System fragt beim nächsten
-   Besuch wieder nach einem. Diese Reihenfolge ist Absicht: nichts vom alten System geht verloren,
-   und nichts aus der Zeit vor dem Einspielen bleibt zurück. Die ReGa-Datenbank im Backup wird
-   angenommen und einfach ignoriert. **Eine Sicherung mit eigenem BidCos-Sicherheitsschlüssel** (dem
-   System-Sicherheitsschlüssel der alten CCU): die Seite Sicherung fragt nach seiner Passphrase -
-   nur, um zu prüfen, ob die Ihre die richtige ist; sie wird mit der Signatur der Sicherung
-   verglichen und nie gespeichert. *Überspringen - ich kenne sie nicht* gibt es immer, und eine
-   falsche oder übersprungene Passphrase hält das Einspielen nie auf: nach einer deutlichen Warnung
-   und Ihrer Bestätigung geht es weiter. Das Einspielen selbst schlüsselt kein Gerät um - der
-   Schlüssel kommt unverändert zurück, die BidCos-Geräte arbeiten weiter -, aber die Passphrase
-   brauchen Sie später, um den Schlüssel zu ändern, die Geräte umzuschlüsseln (Umzug auf ein anderes
-   System, Schlüssel neu setzen), sie an einer anderen Zentrale anzulernen oder auf einem System mit
-   einem anderen Schlüssel wiederherzustellen. Ohne sie bleibt nur, jedes dieser Geräte auf
-   Werkseinstellungen zurückzusetzen und neu anzulernen - suchen Sie sie also, solange die alte CCU
-   noch greifbar ist.
-3a. **Angelernte Geräte aus der Sicherung statt eines Restores** (eine Neuinstallation, noch nichts
-   angelernt): Die Seite Sicherung liest die `.sbk` einmal, und *Angelernte Geräte importieren und neu
-   starten* übernimmt die Anlernungen der drei Funkarten mit ihrer Identität - BidCos-Adresse und
-   Schlüsselspeicher, die HmIP-Identität, die LAN-Gateways - und zuvor die Namen, Räume und Gewerke der
-   ReGa-Datenbank der Sicherung; dann startet das System neu. Zwei Dinge sagt Ihnen das Panel, bevor Sie
-   klicken:
-   - **Ein anderes Funkmodul.** Die HmIP-Identität einer Sicherung ist an das Funkmodul des Systems
-     gebunden, das sie angelegt hat. Betreibt dieses System HmIP-RF auf einem anderen Modul (eine andere
-     SGTIN), übernimmt hmipserver die Identität beim Start nach dem Import auf dieses Modul - der
-     *Adaptertausch*: offline, wenn die Sicherung von einem System im lokalen Schlüsselmodus stammt,
-     sonst über den Schlüsselserver von eQ-3, der eine Internetverbindung braucht und den Tausch ablehnen
-     kann ([lokaler-schluesselmodus.md](lokaler-schluesselmodus.md)). Jedes HmIP-Gerät wird danach für das neue Modul umgeschlüsselt; ein Batteriegerät erst, wenn
-     es aufwacht - drücken Sie eine Taste daran, wenn es stumm bleibt, und rechnen Sie in Stunden, nicht
-     in Minuten. Die Seite Schnittstellen zeigt, wie die Übernahme ausging (offen, erledigt, abgelehnt),
-     und bietet einen neuen Versuch an - einen Neustart von HmIP-RF, das den Tausch bei jedem Start
-     versucht. Ein Modul, das der Schlüsselserver ablehnt, lässt HmIP-RF gestoppt; der Ausweg ist das
-     vorherige Modul oder ein Neubeginn mit diesem (jedes HmIP-Gerät neu anlernen). BidCos-RF braucht
-     keinen Tausch: rfd läuft mit der importierten Adresse und Seriennummer auf dem Modul, das es hat -
-     RPI-RF-MOD, HM-MOD-RPI-PCB, HmIP-RFUSB, HM-CFG-USB-2 oder LAN-Gateway gleichermaßen -, und die Seite
-     Schnittstellen sagt, ob es das tut.
-   - **Ein eigener BidCos-Sicherheitsschlüssel.** Der Schlüsselspeicher der Sicherung kommt so mit, wie
-     er ist - die damit angelernten BidCos-Geräte kennen diesen Schlüssel -, und der Import kommt ohne
-     die Passphrase des anderen Systems aus. Das Panel fragt trotzdem danach, als Prüfung, ob die Ihre
-     die richtige ist (das Einspielen oben ebenso, mit derselben Warnung, wenn sie nicht passt oder Sie
-     überspringen); der Import geht so oder so weiter. Bewahren Sie die Passphrase sicher auf: Sie
-     brauchen sie, um den Schlüssel später zu ändern, diese Geräte umzuschlüsseln oder neu anzulernen
-     oder auf einem System mit einem anderen Schlüssel wiederherzustellen. Ein System, das schon einen eigenen Schlüssel hat, bestätigt,
-     dass der der Sicherung ihn ersetzt; ein System mit angelernten Geräten lehnt den Import ganz ab, so
-     dass kein angelerntes Gerät dadurch je umgeschlüsselt wird.
-4. **Namen, Räume und Gewerke**: solange die alte CCU noch erreichbar ist, holt *Namen → Von einer
-   CCU importieren* sie über deren Remote-Script-Port (8181). Die Firewall der alten CCU muss das
-   neue System zulassen (REGA: *Vollzugriff*, oder die neue Adresse in der Liste). Räume und Gewerke
-   werden zu flachen Knoten; Objekte, die noch den Standardnamen `<Typ> <Adresse>` der CCU tragen,
-   werden ausgelassen und gezählt. Ist die alte CCU weg, denselben Import von irgendeiner CCU
-   ausführen, auf der das Backup eingespielt ist, oder eine früher exportierte `meta.json`
-   importieren.
+Die Seite Sicherung bietet zwei Wege:
 
-   **Umlaute**: die ReGa-Datenbank deklariert `iso-8859-1` und ist es nicht — sie ist gemischt.
-   Die Strings von eQ-3 selbst sind wirklich Latin-1 (eine Einheit ist das einzelne Byte für
-   „°C“), während ein Name, den ein Benutzer auf einer aktuellen Firmware eingetippt hat, in
-   derselben Datei UTF-8 ist. Beides wird richtig gelesen; vor dem 2026-09-07 kam jeder Umlaut in
-   einem Namen als `Ã¼` an. Wer einen Import sieht, der mit einem älteren Image gemacht wurde,
-   sieht genau das, und ein erneuter Import auf einem aktuellen Image behebt es. Ein System, dessen
-   ReGa denselben Raum in beiden Kodierungen hat — was auf einer CCU vorkommt, die mehrere
-   Firmware-Generationen durchlaufen hat —, endet hier mit einem Raum, nicht mit zwei.
+- **Die `.sbk` einspielen**: ersetzt `/usr/local` komplett, mit Anlernungen, Schlüsseln, Addons und dem eigenen
+  Zustand des Systems. Der vor dem Einspielen angelegte Administrator ist danach weg, das System fragt nach einem
+  neuen. Die ReGa-Datenbank im Backup wird ignoriert; ihre Namen lassen sich getrennt importieren (unten).
+- **Angelernte Geräte importieren** (nur auf einem System ohne angelernte Geräte): *Angelernte Geräte importieren und
+  neu starten* übernimmt Anlernungen und Identität von BidCos-RF, HmIP-RF und den LAN-Gateways, dazu Namen, Räume und
+  Gewerke aus der Sicherung, und startet neu.
 
-   **Die eigenen Räume und Gewerke der CCU**: die elf Räume und zehn Gewerke, die eine CCU von
-   selbst anlegt (Wohnzimmer … Terrasse, Licht … Energiemanagement), stehen in der ReGa unter einem
-   Übersetzungsschlüssel — `roomBathroom` oder `${roomBathroom}` —, und die WebUI setzt auf jeder
-   Seite den Namen aus ihren Sprachdateien ein. Jeder Import (von diesem System, aus einem Backup,
-   von einer laufenden CCU) macht jetzt dasselbe, mit den deutschen Namen der WebUI: aus
-   `roomBathroom` wird *Badezimmer*, aus `funcHeating` *Heizung*. Übersetzt wird nur ein Name, der
-   genau einer dieser Schlüssel ist; ein selbst eingetippter bleibt, wie er ist, und ein englisches
-   System benennt sie von Hand um. Ein Speicher, der vor dieser Änderung importiert wurde (er
-   zeigt `roomBathroom`, `funcCentral` … in der Seitenleiste der App), wird beim Start von
-   `occulited` korrigiert: diese Knoten werden an Ort und Stelle umbenannt, behalten ihre Ids
-   (`room/roombathroom`) und damit ihre Mitglieder, und jede Umbenennung ist eine gewöhnliche
-   Revision im Änderungsstrom.
-5. **Was nicht mitkommt**: Programme, Systemvariablen, Alarme, Favoriten, Diagramme — hier gibt es
-   nichts, das sie ausführen oder anzeigen könnte. Die Automatisierung wandert zu Node-RED
-   (RedMatic), Home Assistant, ioBroker oder was man sonst schon einsetzt.
-6. **Addons**: die im [Katalog](https://github.com/hobbyquaker/occulited/blob/master/docs/catalog-format.md)
-   funktionieren bekanntermaßen. Addons, die die ReGa brauchen (CUxD, die XML-API, alles, was
-   Systemvariablen liest oder seine Einstellungen im ReGa-DOM hält), werden **bei diesem ersten
-   Start deaktiviert** und auf der Seite Zusatzsoftware als „deaktiviert, inkompatibel“ aufgeführt,
-   jedes mit dem Grund; deinstalliert werden sie nicht, und ein Schalter holt eines für die Mutigen
-   zurück. Der Katalog führt solche Addons gar nicht.
-7. **Addons mit Binaries für eine andere Architektur** werden beim selben ersten Start deaktiviert
-   und als **„deaktiviert, braucht ein Update“** aufgeführt, mit der betreffenden Datei beim Namen.
-   `/usr/local` überlebt einen Wechsel, also kommt ein auf dem alten System installiertes Addon
-   genau so mit, wie es war — und ein Addon, das für eine Maschine kompiliert ist, die diese nicht
-   ist, kann hier nicht laufen. Siehe
-   [Architecture and addon binaries](addons.md#architecture-and-addon-binaries): die Reparatur ist
-   die Schaltfläche *Installieren* / *Aktualisieren* des Katalogs, die das für dieses System gebaute
-   Release holt.
-8. **Der NEO Server von mediola**, den das eigene Paket von OpenCCU auf das userfs entpackt
-   (`/usr/local/addons/mediola`, `rc.d/97NeoServer`), kommt auch mit und kann hier nicht
-   funktionieren: er postet an `/tclrega.exe` und `/api/homematic.cgi`, die ReGa und den CGI-Stack
-   der WebUI. openccu-lite schaltet ihn **einmal** ab, mit dem eigenen Schalter des Addons
-   (`Disabled` in seinem Verzeichnis, das sein rc.d-Script beachtet) und dem Ausführbar-Bit seines
-   rc.d-Eintrags, und führt ihn mit den anderen ReGa-abhängigen Addons auf den Seiten Status und
-   Zusatzsoftware auf. Nach dem ersten Start geht er mit den anderen Altlasten (was die eigene
-   Deinstallation des Addons tut, `neoDisabled`-Marker eingeschlossen).
-10. **Die Altlasten** (es gibt keinen Weg zurück außer dem vor der Migration angelegten Backup):
-   sobald der Namensimport des ersten Starts die ReGa-Datenbank gelesen hat (oder zur Ruhe gekommen
-   ist: aufgegeben hat, oder nicht nötig war, weil der Speicher Namen hält), entfernt occulited
-   genau diese Liste, einmal — `homematic.regadom`, `homematic.regadom.bak`, `measurement`,
-   `userprofiles`, `etc/config/rega`, den NEO Server — und schreibt `<state>/ccu-leftovers-removed.json`
-   und eine Journal-Zeile (`ccu leftovers removed …`, die Pfade und die freigewordenen Bytes). Ein
-   Import, der noch laufen muss, behält sie mit einer Warnung bis zu einem späteren Start. Ein
-   System ohne Altlasten hält einen leeren Lauf fest, damit ein später eingespieltes CCU-Backup
-   nicht ausgekehrt wird. Das Panel *Altlasten von OpenCCU* der Seite Sicherung ist weg.
-9. **Der Zustand eines Addons außerhalb seines eigenen Verzeichnisses** — das Profil von
-   homematic-manager in `/usr/local/hmm`, aus seinen OpenCCU-Tagen root-eigen — wird beim
-   Einsperren des Addons übernommen: dem Benutzer des Addons übereignet und in seiner Unit
-   beschreibbar gemacht, beim Einsperren und wieder bei jedem Start, sodass ein Addon, das
-   eingesperrt wurde und dann seinen eigenen Zustand nicht schreiben konnte, vom nächsten Update
-   repariert wird.
+**Ein eigener BidCos-Sicherheitsschlüssel** kommt so mit, wie er ist; die BidCos-Geräte arbeiten weiter. Die Seite
+Sicherung fragt nach seiner Passphrase nur zur Prüfung und speichert sie nie. Eine falsche oder übersprungene
+Passphrase (*Überspringen - ich kenne sie nicht*) hält Einspielen und Import nicht auf. **Die Passphrase suchen,
+solange die alte CCU noch greifbar ist:** man braucht sie, um den Schlüssel später zu ändern, die Geräte auf ein
+anderes System umzuziehen oder auf einem System mit anderem Schlüssel wiederherzustellen. Ohne sie bleibt nur, jedes
+BidCos-Gerät zurückzusetzen und neu anzulernen.
 
-### Abnahmetest auf einer VM (erster Lauf 2026-09-06)
+**Ein anderes Funkmodul.** BidCos-RF braucht nichts: es läuft mit der importierten Adresse auf jedem Modul. Die
+HmIP-Identität ist dagegen an das Funkmodul des Systems gebunden, das das Backup angelegt hat. Auf einem anderen Modul
+übernimmt hmipserver sie beim Start (der *Adaptertausch*):
 
-Was „alles funktioniert weiter“ heißt, als Checkliste. Auf einem Proxmox-Snapshot der OpenCCU-VM
-ausführen, damit der Weg zurück ein Klick ist, selbst wenn der Software-Weg zurück scheitert.
+- Stammt die Sicherung von einem System im lokalen Schlüsselmodus, geht das offline; siehe
+  [lokaler-schluesselmodus.md](lokaler-schluesselmodus.md).
+- Sonst läuft es über den Schlüsselserver von eQ-3. Das braucht eine Internetverbindung, und **der Schlüsselserver
+  kann den Tausch ablehnen**, auch für ein Modul, das er schon kennt. Nach einer Ablehnung bleibt HmIP-RF gestoppt.
+  Die Seite Schnittstellen zeigt den Stand (offen, erledigt, abgelehnt) und die Auswege: *Erneut versuchen*, zurück
+  zum vorherigen Modul oder *Mit diesem Modul neu beginnen…* (jedes HmIP-Gerät neu anlernen).
+- Nach dem Tausch wird jedes HmIP-Gerät für das neue Modul umgeschlüsselt. Ein Batteriegerät erst, wenn es aufwacht:
+  eine Taste daran drücken und in Stunden rechnen, nicht in Minuten.
 
-1. Vorher: in der OpenCCU-WebUI die Geräteanzahl, einen Gerätenamen, einen Raum, den Zustand des
-   Sicherheitsschlüssels (Einstellungen → Systemsteuerung → Sicherheit), die LAN-Gateways, die
-   Addons, die IP/den Hostnamen notieren. Ein `.sbk`-Backup und den Proxmox-Snapshot anlegen.
-2. Die `openccu-lite-x86_64-ova-<version>.zip` unter Einstellungen → Systemsteuerung →
-   Zentralen-Wartung → Software-Update durchführen hochladen, bestätigen, neu starten lassen. Das
-   Recovery zeigt seinen Fortschritt auf der Konsole; das Ganze dauert ~3 Minuten.
-3. Erster Besuch von `http://<system>/`: die Willkommensseite fragt nach einem
-   Administrator-Passwort und zeigt das Ergebnis des regadom-Imports — Geräte, Kanäle, Räume und
-   Gewerke gezählt. `curl http://<system>/api/system/v1/status` → `first_boot_import` hat dieselben
-   Zahlen.
-4. Prüfen, in dieser Reihenfolge: **Funk** (Modul erkannt, `hm_mode` wie vorher,
-   Sicherheitsschlüssel „gesetzt“, wenn er es war, LAN-Gateways aufgeführt), **Namen** (das
-   notierte Gerät hat seinen Namen, der Raum existiert mit seinen Kanälen), **Zusatzsoftware**
-   (dieselbe Liste, läuft), **Netzwerk** (Adresse und Hostname unverändert), **Protokoll**
-   (rfd-/hmipserver-Zeilen, keine Fehlerschleife), **Dienste** (rfd, hmipserver laufen). Die
-   Dateien, die man von OpenCCU kennt (`/var/log/messages`, `hmserver.log`, `lighttpd-*.log`),
-   sind hier das Journal: die Seite Protokoll, ihr Download, oder `journalctl` (`-t hmipserver`,
-   `-t lighttpd`).
-5. Ein Geräte-Rundlauf: ein angelerntes Gerät drücken, sein Kanal-Ereignis auf der Seite Namen oder
-   über `/api/system/v1/radio/health` beobachten (der Duty Cycle aktualisiert sich) — wenn ja, hat
-   die Anlernung überlebt.
-6. Der Weg zurück: auf der Status-Seite die `OpenCCU-<version>-ova.zip` (die von upstream)
-   hochladen, *Neu starten und installieren*. OpenCCU kommt **ohne** seine ReGa-Datenbank zurück
-   (openccu-lite hat `homematic.regadom` nach seinem ersten Start entfernt): das vor dem Wechsel
-   angelegte Backup einspielen. Eine `meta.json` unter `/usr/local/etc/occulite/` bleibt für den
-   nächsten Wechsel liegen.
-   Das ist die zweite Hälfte des Abnahmetests: **beide Richtungen, kein Neuflashen**.
+### Was sich beim ersten Start ändert
 
-Was auf dieser Liste scheitert, ist ein Bug, keine Dokumentationslücke.
-
-### Was der Lauf vom 2026-09-07 gefunden hat
-
-Der Hinweg wurde in der Nacht vom 2026-09-06 auf den 07. auf einer Test-VM gefahren, mit einem
-`ova-lite-systemd`-Image, das in dieser Nacht gebaut wurde. Er fand siebenundzwanzig Bugs, drei
-davon kann die Checkliste oben nicht formulieren, weil vorher niemand so weit gekommen war:
-
-- das System startete **ganz ohne Firewall** — nichts, was in Tcl geschrieben war, lief;
-- **das Update ließ sich einmal installieren und nie wieder**: die eigene `/VERSION` des
-  Recovery-Systems behielt den lite-Produktnamen, während die des Images auf den von upstream
-  umgeschrieben wird, sodass das Recovery, das ein lite-Image installiert, jedes lite-Image
-  ablehnt — und auch die `ova.zip` von upstream, also Schritt 6 dieser Liste, den Weg zurück;
-- die Seite Netzwerk und die LAN-Gateway-Liste waren auf einem System leer, das beides hatte, und
-  ein Speichern hätte diese Leere zurückgeschrieben.
-
-Mit diesen Korrekturen besteht die Liste: das System installiert eine Release-Zip von seiner
-eigenen Status-Seite und ist nach zweieinhalb Minuten mit seinen Addons, seinem Metadaten-Speicher
-und seiner Konfiguration intakt zurück; *Namen → Namen aus einer ReGa-Datenbank importieren* liest die
-eigene ReGa-Datenbank des Systems und meldet, was es gefunden hat; die Seiten Funk, Namen, Zusatzsoftware, Netzwerk,
-Protokoll und Dienste antworten alle mit dem wirklichen Zustand des Systems; und die fünf
-geprüften Katalog-Addons installieren sich, starten in ihren eigenen Units und überleben das
-Firmware-Update.
-
-### Schritt 6, der Rundlauf, gefahren am 2026-09-07 06:26–06:46
-
-Beide Richtungen, auf derselben Test-VM, mit der eigenen
-`OpenCCU-3.89.8.20260719-ova.zip` von upstream (403 218 494 B, Prüfsumme gegen die `.sha256` des
-Releases geprüft) und der `…-lite.0-beta.1-ova-lite-systemd.zip` der Nacht:
-
-| | wie | dauerte |
-| --- | --- | --- |
-| lite → OpenCCU | die lite-Status-Seite: `POST /system-update/upload` (angenommen, `board: ova` gegen die laufende `platform: ova`), dann *Neu starten und installieren* | 3 min |
-| OpenCCU → lite | der **eigene** WebUI-Weg von OpenCCU: seine `cp_maintenance.cgi` prüfte die Zip (sie sucht darin nach `EULA.de`/`EULA.en` — die lite-Zip trägt beide), legte sie bereit und startete neu | 2,5 min |
-
-Was auf der OpenCCU-Seite zurückkam: `ReGaHss` läuft und antwortet auf `rega_script`
-(`dom.GetObject(1555).Name()` → `HM-CC-TC JEQ0230153`, dreizehn Raumobjekte), `rfd`, lighttpd,
-`sshd`, mosquitto und das Node-RED von RedMatic, die vier Addons weiterhin in `/usr/local/addons`
-mit ihren `rc.d`-Links, `homematic.regadom` unberührt mit seinem Zeitstempel von vor dem Wechsel,
-und `meta.json` wartend unter `/usr/local/etc/occulite/` auf den nächsten Wechsel. Das eigene
-Protokoll des Recovery für den Hinweg lohnt einmal das Lesen: *„[2/5] Checking update_script… no
-'update_script', OK … flashing bootfs…OK, updating bootloader (GRUB)… OK, flashing rootfs……OK,
-DONE“* — das Recovery von upstream flasht ein openccu-lite-Image ohne ein Wort über die Plattform,
-und genau dafür behält die `/VERSION` des lite-Images das `PRODUCT` von upstream.
-
-Und danach wieder auf der lite-Seite: keine fehlgeschlagenen Units, die vier `addon-*.service`-Units
-aktiv, 55 Firewall-Regeln, kein Marker für ein unsauberes Herunterfahren, die Administrator-Anmeldung
-funktioniert und der Metadaten-Speicher steht weiterhin auf Revision 1, mit dem auf der lite-Seite
-umbenannten Kanal und seinem Raum-Enum (`BidCos-RF.JEQ0230153:1` → *Wohnzimmer Thermostat*,
-`room/wohnzimmer`). **Nichts musste neu geflasht werden, und nichts wurde aus einem Backup
-eingespielt.**
-
-Der Rundlauf fand einen Bug: die Id des Benutzers `occulite` wurde automatisch aus dem System-Pool
-von buildroot (100…999) vergeben, demselben Pool, den upstream mit *seinen* Systembenutzern füllt,
-sodass auf der OpenCCU-Seite der Metadaten-Speicher — `users.json`, `local-token` — dem
-Privilege-Separation-Benutzer des `sshd` von upstream gehörte. Die Id ist jetzt auf 8100 festgelegt;
-beide Init-Pfade reparieren die Eigentümerschaft des Speichers ohnehin beim Start, sodass ein
-älteres System in die Änderung hinein aktualisiert, ohne es zu merken.
+- **Namen, Räume und Gewerke** werden aus der ReGa-Datenbank gelesen. Die vordefinierten Räume und Gewerke der CCU
+  bekommen ihre deutschen WebUI-Namen (*Badezimmer*, *Heizung*); Objekte, die noch einen Standardnamen wie
+  `<Typ> <Adresse>` tragen, werden ausgelassen. Später importiert *Namen aus einer ReGa-Datenbank importieren* auf der
+  Seite Sicherung sie aus einer `.regadom`- oder `.sbk`-Datei.
+- **Nicht übernommen:** Programme, Systemvariablen, Alarme, Favoriten, Diagramme. Die Automatisierung wandert zu
+  Node-RED (RedMatic), Home Assistant, ioBroker oder was man sonst schon einsetzt.
+- **Addons:** die im [Katalog](https://github.com/hobbyquaker/occulited/blob/master/docs/catalog-format.md)
+  funktionieren. Addons, die die ReGa brauchen (CUxD, die XML-API, …), werden deaktiviert und als *deaktiviert,
+  inkompatibel* geführt. Addons mit Binaries für eine andere Architektur stehen als *deaktiviert, braucht ein Update*
+  da; *Installieren* / *Aktualisieren* im Katalog holt den passenden Build
+  ([addons.md](addons.md#architecture-and-addon-binaries)). Deinstalliert wird nichts.
+- **Der NEO Server von mediola** läuft ohne die ReGa nicht und wird abgeschaltet.
+- **Die Altlasten werden entfernt, sobald die Namen importiert sind:** `homematic.regadom` und ihre `.bak`, die
+  `measurement` und `userprofiles` der WebUI, `etc/config/rega` und der NEO Server. Die Journal-Zeile
+  `ccu leftovers removed` nennt sie. Funk-Identität, Schlüssel, Interface-Konfiguration und Addons bleiben.
 
 ## openccu-lite → OpenCCU / CCU3
 
-**Das Einzige, was zählt: das Backup einspielen, das vor der Migration angelegt wurde.** Alles
-Folgende setzt voraus, dass es da ist. Wer es nicht hat, kommt trotzdem zu einem laufenden OpenCCU
-zurück — nur nicht zu *seinem* OpenCCU.
+1. **OpenCCU installieren:** Status-Seite → *Systemaktualisierung* → die `OpenCCU-<version>-<PRODUCT>.zip` von
+   upstream → *Neu starten und installieren*. Anlernungen, Schlüssel und Addons bleiben in `/usr/local`. Für ein
+   System mit CCU3-Layout ist es die `OpenCCU-<version>-ccu3.tgz` von upstream; dieser Weg ist ungetestet, also Backup
+   und den [Ausweg über das Neuflashen](#der-ausweg-über-das-neuflashen) im Blick behalten.
+2. **Die vor dem Wechsel angelegte `.sbk` einspielen**, in der WebUI von OpenCCU. Nur das bringt die ReGa-Datenbank
+   zurück, mit Namen, Räumen, Programmen und Systemvariablen vom Tag des Wechsels. Was seitdem unter openccu-lite
+   geändert wurde, kommt nicht mit: dafür gibt es keinen Export.
 
-0. **Was openccu-lite entfernt hat**: `homematic.regadom` und die Daten der WebUI sind nach seinem
-   ersten Start weg. Auf der lite-Seite geänderte Namen, Räume und Gewerke leben im
-   Metadaten-Speicher und sonst nirgends. Programme und Systemvariablen waren auf der lite-Seite
-   nie vorhanden. OpenCCU wacht also so auf, wie man es verlassen hat — und genau deshalb ist das
-   Backup von vor der Migration die Antwort und kein Nachgedanke.
-1. **Flashen / aktualisieren** auf OpenCCU: lite-Status-Seite → *Systemaktualisierung* → die
-   `OpenCCU-<version>-<PRODUCT>.zip` von upstream → *Neu starten und installieren*. `/usr/local`
-   überlebt, also sind Anlernungen, Funkschlüssel und Addons schon da. Ein System mit CCU3-Layout
-   (`PRODUCT=ccu3`) hat nach dem Wechsel eine 2-GB-Root-Partition, was auch das aktuelle Layout von
-   upstream ist; sein Weg zurück ist die `OpenCCU-<version>-ccu3.tgz` von upstream — ein Weg, der
-   hier noch nicht gelaufen ist, behalten Sie also die `.sbk` und den Reflash-Ausweg unten im Blick.
-2. **Die `.sbk` von vor der Migration einspielen**, über die eigene WebUI von OpenCCU. Das ist der
-   Schritt, der das System wieder zum eigenen macht.
-3. Die `meta.json` des Metadaten-Speichers bleibt in `/usr/local/etc/occulite/` und wird von all dem
-   nicht berührt, sodass ein späterer Wechsel zu lite seine Namen dort findet, wo er sie gelassen
-   hat.
+Die Namen von openccu-lite bleiben in `/usr/local/etc/occulite/meta.json` liegen, für einen späteren Wechsel zurück
+zu openccu-lite.
 
-**Mit eingeschaltetem HSTS** (System → Zertifikat): HSTS ausschalten, dann **das System in jedem
-verwendeten Browser einmal unter seinem Namen öffnen**, bevor die Zip von OpenCCU installiert
-wird — oder das System nach dem Wechsel über seine IP-Adresse öffnen. Das Hochladen einer Datei, die
-kein openccu-lite-Release ist, schaltet HSTS von selbst aus, und die Status-Seite nennt dann die
-Namen, die zu öffnen sind. Solange HSTS aus ist, sendet das System `Strict-Transport-Security:
-max-age=0`, und zwar so lange, wie die Frist war, höchstens 30 Tage, und ein Browser, der das
-sieht, vergisst HSTS für diesen Namen. Ein Browser, der in dieser Zeit nicht vorbeikam, erinnert
-sich weiterhin: das Recovery-System, das OpenCCU installiert, liefert nur reines HTTP, und OpenCCU
-liefert ein selbstsigniertes Zertifikat, sobald das von lite installierte weniger als einen Tag vor
-dem Ablauf steht (upstream erneuert nichts und ersetzt es). Ein solcher Browser verweigert beides
-unter diesem Namen — die Recovery-Seite als *Verbindung abgelehnt*, das Zertifikat von OpenCCU ohne
-einen Weg daran vorbei —, bis das max-age nach seinem letzten HTTPS-Besuch abgelaufen ist
-(standardmäßig sieben Tage). `max-age=0` muss den Browser **vor** dem Wechsel erreichen: weder das
-Recovery-System noch OpenCCU können es senden. `http://<IP-Adresse>/` funktioniert immer, denn
-HSTS gilt nie für eine Adresse; der Installationshinweis der lite-Status-Seite verlinkt das
-Recovery auf diesem Weg.
+**Verschlüsselte Sicherungen:** OpenCCU kann eine `.sbk.age` nicht lesen. Auf der Seite Sicherung *Unverschlüsselt
+herunterladen (für OpenCCU oder eine CCU3)* verwenden, oder sie auf einem PC entschlüsseln:
+`age -d -i key.txt -o backup.sbk backup.sbk.age` (`key.txt` enthält die Zeile `AGE-SECRET-KEY-1…` aus dem Notfallkit).
 
-**Es gibt keinen Export, mit dem sich Namen zurücktragen ließen.** Genau dafür gab es früher einen
-HM-Script-Export, und er wurde am 2026-09-08 entfernt: er verleitete dazu, eine halbe Migration als
-umkehrbar zu behandeln, wo die ehrliche Antwort ein Backup ist. Programme, Systemvariablen und
-alles andere, das nur die ReGa versteht, waren auf diesem Weg ohnehin nie ausdrückbar.
-
-**Verschlüsselte Sicherungen:** eine `.sbk.age` von der lite-Seite Sicherung ist keine `.sbk` für
-OpenCCU oder eine CCU3. Für den Weg zurück entweder *Unverschlüsselt herunterladen (für OpenCCU oder
-eine CCU3)* auf dem laufenden lite-System verwenden — es fragt nach dem Passwort und wird im Journal
-festgehalten — oder die `.sbk.age` auf einem PC entschlüsseln, mit
-`age -d -i key.txt -o backup.sbk backup.sbk.age`, wobei `key.txt` die Zeile `AGE-SECRET-KEY-1…` aus
-dem Notfallkit enthält. Die `.sbk` von vor der Migration, der Weg zurück, war nie verschlüsselt.
+**Mit eingeschaltetem HSTS** (System → Zertifikat): HSTS ausschalten **und danach das System in jedem verwendeten
+Browser einmal unter seinem Namen öffnen**, bevor OpenCCU installiert wird. Das Hochladen des OpenCCU-Pakets schaltet
+HSTS von selbst aus, und die Status-Seite nennt dann die zu öffnenden Namen. Ein Browser, der das verpasst hat,
+verweigert unter diesem Namen bis zu sieben Tage lang die HTTP-Seite des Recovery und das Zertifikat von OpenCCU.
+`http://<IP-Adresse>/` funktioniert immer.
 
 ## HmIP-Geräte nach einem Neustart unerreichbar: der Sicherheitszähler
 
-**Das Symptom:** nach einem Neustart oder einem Update antwortet kein HmIP-Gerät mehr - auch die
-Bedienung vor Ort nicht -, während BidCos-RF-Geräte am selben Modul weiterlaufen, und ein weiterer
-Neustart des Systems hilft nicht. **Die Ursache** (eq-3/occu#134, OpenCCU/OpenCCU#4274; Berichte im
-Forum seit 2025-11): jeder HmIP-Rahmen trägt einen Sicherheitszähler, den die Geräte nur aufwärts
-akzeptieren. Bei jedem Start liest hmipserver den Zähler des Funkmoduls (*"Current Security
-Counter: N"* in seinem Journal), berechnet aus der Uhrzeit und zwei Zahlen aus der Datei des Access
-Points (`crRFD/data/<SGTIN>.ap`: der Zeitpunkt der ersten Verbindung und ein Offset) einen Wert und
-schreibt ihn ins Modul, wenn er höher ist (*"Update security counter to calculation: M"*). Das Modul
-übernimmt die unteren 32 Bit dieses Werts, verglichen wird aber der ganze: hat der berechnete Wert
-einmal 2³² überschritten, schützt die Prüfung nichts mehr, und ein Start mit einer zurückliegenden
-Uhr - eine CCU ohne Echtzeituhr nach einem Stromausfall, NTP nicht erreichbar - gefolgt von einem
-Start mit richtiger Uhr setzt den Zähler des Moduls unter das, was die Geräte schon gesehen haben.
-Von da an verwerfen sie jeden Rahmen des Systems als Wiederholung.
+**Symptom:** nach einem Neustart oder Update antwortet kein HmIP-Gerät mehr, auch nicht bei Bedienung vor Ort,
+während BidCos-RF weiterläuft, und weitere Neustarts helfen nicht. **Ursache** (eq-3/occu#134,
+OpenCCU/OpenCCU#4274): HmIP-Geräte akzeptieren den Sicherheitszähler nur aufsteigend. hmipserver leitet ihn aus der
+Uhrzeit ab, und auf einem älteren Access Point ist der Wert über 2³² gelaufen. Ein Start mit falscher Uhr (keine
+Echtzeituhr, kein Zeitserver) kann den Zähler dann unter das setzen, was die Geräte schon gesehen haben, und sie
+verwerfen alles als Wiederholung.
 
-**Was openccu-lite dagegen tut:**
+**Der Schutz in openccu-lite:** die Uhr startet nie im Jahr 1970 und gilt nur in einem plausiblen Bereich als
+vertrauenswürdig. Auf einem gefährdeten Access Point wartet HmIP-RF, bis die Zeit vertrauenswürdig ist (ein
+Zeitserver antwortet, oder die Zeit wird auf der Seite Netzwerk gestellt). Die Status-Seite warnt vor dem Zähler
+(*near*, *wrapped*, *backwards*), und die Seite Sicherung beurteilt den Access Point einer Sicherung vor Import oder
+Restore.
 
-- **Die Uhr startet nie im Jahr 1970.** Der Start stellt die Uhr mindestens auf den Bau des Images,
-  dann auf die beim letzten Herunterfahren (stündlich) gesicherte Zeit, und der Funkstack wartet auf
-  eine Echtzeituhr oder einen Zeitserver (`occu-clock-valid`, höchstens etwa 150 s). `chronyd` läuft
-  immer.
-- **Eine Uhr gilt nur zwischen dem Bau des Images und 15 Jahren danach als vertrauenswürdig** - aus
-  einer Echtzeituhr, von einem Zeitserver und von Hand auf der Netzwerk-Seite gestellt gleichermaßen.
-  Eine Echtzeituhr mit leerer Batterie oder einer unsinnigen Zeit, ein Zeitserver mit falschem Jahr
-  wird nicht übernommen; die Status-Seite sagt es. Eine weit vorauslaufende Uhr würde den Zähler
-  endgültig über 2³² schieben.
-- **Der Zähler wird beobachtet.** `occulited radio ready hmipserver` liest die beiden Zeilen jedes
-  Starts (der Logger, der sie schreibt, bleibt auf *info*, egal welcher HmIP-Loglevel gesetzt ist),
-  und `occulited radio prep hmipserver` berechnet aus der Access-Point-Datei und der laufenden Uhr,
-  was der nächste Start schreiben würde. Die Status-Seite warnt, wenn der Zähler 2³¹ überschritten hat
-  (*near*: die Uhr synchron halten), 2³² (*wrapped*: der Schutz ist weg) oder unter das gesetzt wurde,
-  was die Geräte gesehen haben (*backwards*: die Abhilfe unten).
-- **Auf einem umgelaufenen oder gefährdeten Access Point wird hmipserver zurückgehalten, solange die
-  Uhr nicht vertrauenswürdig ist** (das Tor lief in den Timeout oder hat Echtzeituhr oder Zeitserver
-  abgelehnt). Die Status-Seite sagt es; eine von Hand auf der Netzwerk-Seite gestellte Zeit oder ein
-  antwortender Zeitserver gibt ihn frei. Der Preis: ein solches System ohne Zeitserver startet
-  HmIP-RF erst, wenn die Zeit gestellt ist. Ein System, dessen Access Point auf openccu-lite
-  entstanden ist, ist nicht betroffen: sein Offset liegt bei ein paar Tausend, der Zähler erreicht
-  2³² etwa 40 Jahre nach der ersten Verbindung.
-- **Der Access Point einer Sicherung wird vor einem Import oder Restore beurteilt**: die Seite
-  Sicherung zeigt den berechneten Wert und das Urteil, damit klar ist, in welchem Zustand das
-  mitgebrachte System ist.
-
-**Wenn es doch passiert ist** (die Status-Seite sagt *backwards*, oder jedes HmIP-Gerät schweigt,
-während BidCos läuft): ein Neustart des Systems hilft nicht. **Die Geräte stromlos machen** -
-Batterie raus und rein, bei Netzgeräten die Sicherung aus und ein - oder sie neu anlernen. Den Offset
-in der Access-Point-Datei von Hand zu ändern (der Behelf aus dem Ticket) verschiebt nur den nächsten
-Umlauf. Die Korrektur gehört in eQ-3s HmIP-Server; openccu-lite liefert dieses Binary unverändert aus
-und verfolgt die Tickets.
+**Wenn es passiert ist** (*backwards*, oder jedes HmIP-Gerät schweigt): ein Neustart des Systems hilft nicht. **Die
+Geräte stromlos machen** (Batterie raus und rein, Sicherung aus und ein) oder neu anlernen.
 
 ## Der Ausweg über das Neuflashen
 
-Lehnt der eine Updater das Paket des anderen ab (eine Versionsprüfung, eine geänderte
-Partitionstabelle), das Image von Grund auf flashen und die `.sbk` einspielen. Alles oben gilt
-weiterhin; nur der Flash-Schritt ändert sich — und das Backup leistet so oder so dieselbe Arbeit.
+Wird ein Update-Paket abgelehnt, das Image von Grund auf flashen und die `.sbk` einspielen. Alles oben gilt weiterhin;
+nur der Flash-Schritt ist anders.
