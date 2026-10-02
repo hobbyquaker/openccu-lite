@@ -11,7 +11,7 @@
 #
 ################################################################################
 
-OCCULITED_VERSION = e0f5227624975b3054cb9d8499c7b7f25649cc11
+OCCULITED_VERSION = eb512490cd2786afa2dc2b91796344a953f6e2c8
 OCCULITED_SITE = $(call github,hobbyquaker,occulited,$(OCCULITED_VERSION))
 OCCULITED_LICENSE = GPL-3.0-only
 OCCULITED_LICENSE_FILES = LICENSE
