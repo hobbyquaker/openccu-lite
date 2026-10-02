@@ -82,6 +82,10 @@ hmipserver moves it across when it starts (the *adapter exchange*):
   with this module…* (every HmIP device paired again).
 - After the exchange every HmIP device is re-keyed for the new module. A battery device only follows when it wakes up:
   press a button on it, and allow hours rather than minutes.
+- The system that made the backup must not keep running the network: one HmIP network, one running system.
+- The system records every adapter exchange - which module took which network over, when, whether the key server took
+  part, and how it went - in `/etc/config/occulite/hmip-exchanges.jsonl`, which is part of every backup. Nothing is
+  sent anywhere; the Interfaces page shows the record under a refused exchange.
 
 Before a restore or an import the Backup page also judges the backup's HmIP security counter; see
 [known-issues.md](known-issues.md#hmip-devices-unreachable-after-a-reboot-the-security-counter).

@@ -86,7 +86,7 @@ Ein Thermostat zeigt Soll- und Isttemperatur und die Betriebsarten, ein Dimmer s
 Farbleuchte Farbe und Farbtemperatur. Auf dem Telefon wird aus dem Baum links eine Schublade hinter einem runden Knopf.
 Wie Kanäle zu Namen, Räumen und Gewerken kommen, zeigt der Abschnitt
 [Namen, Räume und Gewerke](#namen-räume-und-gewerke). Unter Einstellungen lässt sich die Bedienung zur Startseite
-machen, ohne Kopfleiste als ganzes Fenster zeigen oder ohne Anmeldung freigeben.
+machen, ohne Kopfleiste als ganzes Fenster zeigen, aus der Kopfleiste nehmen oder ohne Anmeldung freigeben.
 
 ## Das System-Menü
 
@@ -402,9 +402,10 @@ Die Symbole rechts in der Kopfleiste.
 ![Einstellungen](26-einstellungen.png)
 
 Sprache und Design (hell, dunkel oder wie das Betriebssystem es vorgibt), die Startseite nach der Anmeldung (Status oder
-Bedienung) und ob die Bedienung als ganzes Fenster ohne Kopfleiste erscheint. **Bedienung ohne Anmeldung** gibt die
-Bedienung für jeden frei, der die Weboberfläche erreicht, unter einem Konto mit höchstens der Stufe *bedienen*; das
-ist nur für ein abgeschottetes Heimnetz gedacht.
+Bedienung), ob die Bedienung als ganzes Fenster ohne Kopfleiste erscheint und ob ihr Reiter in der Kopfleiste steht
+(ausgeblendet bleibt sie unter ihrer Adresse `/app` erreichbar, und die Startseite ist dann Status). **Bedienung ohne
+Anmeldung** gibt die Bedienung für jeden frei, der die Weboberfläche erreicht, unter einem Konto mit höchstens der Stufe
+*bedienen*; das ist nur für ein abgeschottetes Heimnetz gedacht.
 
 ### Konto
 

@@ -85,6 +85,10 @@ HmIP-Identität ist dagegen an das Funkmodul des Systems gebunden, das das Backu
   zum vorherigen Modul oder *Mit diesem Modul neu beginnen…* (jedes HmIP-Gerät neu anlernen).
 - Nach dem Tausch wird jedes HmIP-Gerät für das neue Modul umgeschlüsselt. Ein Batteriegerät erst, wenn es aufwacht:
   eine Taste daran drücken und in Stunden rechnen, nicht in Minuten.
+- Das System, von dem die Sicherung stammt, darf das Netz nicht weiter betreiben: ein HmIP-Netz, ein laufendes System.
+- Das System protokolliert jeden Adaptertausch - welches Modul welches Netz übernommen hat, wann, ob der Schlüsselserver
+  beteiligt war und wie es ausging - in `/etc/config/occulite/hmip-exchanges.jsonl`, das in jeder Sicherung enthalten
+  ist. Nichts wird irgendwohin gesendet; die Seite Schnittstellen zeigt das Protokoll unter einem abgelehnten Tausch.
 
 Vor einem Einspielen oder Import beurteilt die Seite Sicherung außerdem den HmIP-Sicherheitszähler der Sicherung;
 siehe [bekannte-probleme.md](bekannte-probleme.md#hmip-geräte-nach-einem-neustart-unerreichbar-der-sicherheitszähler).
