@@ -129,6 +129,14 @@ jobs:
         # settle_snippet (B-279): the guest-side poll the addon install check uses instead of a fixed
         # sleep - active at once, activating then active, a failure at once, the bound
         run: sh scripts/testcases/lite-qemu-settle-test.sh
+      - name: The QEMU test cleans up however it ends
+        # task 308: a stub QEMU that fails, dies or outlives a TERM - the work dir goes every time,
+        # QEMU's death is noticed at once, and the work dir stays off a tmpfs /tmp
+        run: sh scripts/testcases/lite-qemu-cleanup-test.sh
+      - name: The QEMU test's addon e2e waits for GitHub's rate limit
+        # task 310: the addon e2e reads GitHub's budget for the address first and waits for the reset
+        # within a bound, instead of failing on the rate limit
+        run: sh scripts/testcases/lite-qemu-ratelimit-test.sh
       - name: A file that leaves an overlay leaves the target
         # the merged-overlay step on an incremental build: removed from the target, and a package
         # that installs the same path is marked for reinstall

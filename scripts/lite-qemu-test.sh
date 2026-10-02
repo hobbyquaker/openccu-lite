@@ -11,6 +11,18 @@
 # before; the HTTP checks are the same for both.
 #
 # Usage: scripts/lite-qemu-test.sh <sdcard.img> [port]
+#
+# The work dir (a sparse copy of the image, 4.5 GB apparent, ~700 MB real, the serial log) goes to
+# LITE_QEMU_WORKDIR, or to /var/tmp when /tmp is a tmpfs: on the runner /tmp is a tmpfs counted as
+# the container's memory, and disk copies there starved the 2 GB guest until the OOM killer took
+# QEMU (task 308, dev.35). Whatever ends the script - a pass, a failure, QEMU dying, Ctrl-C or a
+# kill - stops the QEMU it started and removes the work dir; a failed run keeps only its serial log,
+# next to it as <workdir>.serial.log.
+#
+# LITE_QEMU_FRESH=1 is the fresh-image probe of the build rounds (no outbound connection from a
+# fresh image, D-91): boot 1, then ten minutes of the guest's TCP connections to ports 443 and 80
+# and occulited's journal lines about the outside, nothing else. It replaces the runner's
+# hand-made copy of this script (dev29b-qemu-fresh.sh), which exited before the cleanup.
 set -u
 IMG=${1:?disk image}
 PORT=${2:-8090}
@@ -42,11 +54,70 @@ fi
 if [ -n "$ROOTFS" ]; then
   say "/VERSION in the image:"; "$DEBUGFS" -R 'cat /VERSION' "$ROOTFS" 2>/dev/null | sed 's/^/  | /'
 fi
-WORK=$(mktemp -d)
+# the cgroup's OOM kills, read before and after: a QEMU that vanished is most likely one of them
+oom_kills() { awk '$1 == "oom_kill" {print $2}' /sys/fs/cgroup/memory.events 2>/dev/null; }
+OOM0=$(oom_kills)
+[ -z "$OOM0" ] || say "cgroup oom_kill: $OOM0"
+
+# the work dir: never on a tmpfs when it can be helped (see the top)
+if [ -n "${LITE_QEMU_WORKDIR:-}" ]; then
+  mkdir -p "$LITE_QEMU_WORKDIR" && WORK=$(mktemp -d "$LITE_QEMU_WORKDIR/lite-qemu.XXXXXXXXXX") || { say "cannot create a work dir in $LITE_QEMU_WORKDIR"; exit 1; }
+elif [ "$(stat -f -c %T "${TMPDIR:-/tmp}" 2>/dev/null)" = tmpfs ] && [ -d /var/tmp ] && [ -w /var/tmp ] \
+  && [ "$(stat -f -c %T /var/tmp 2>/dev/null)" != tmpfs ]; then
+  WORK=$(mktemp -d /var/tmp/lite-qemu.XXXXXXXXXX) || { say "cannot create a work dir in /var/tmp"; exit 1; }
+else
+  WORK=$(mktemp -d) || { say "cannot create a work dir"; exit 1; }
+fi
+say "work dir $WORK ($(stat -f -c %T "$WORK" 2>/dev/null))"
 GUEST_PID=
-# the driver holds the chardev socket and the CI step's stderr; it must not outlive the script
-trap 'guest_close 2>/dev/null; [ -f "$WORK/qemu.pid" ] && kill "$(cat "$WORK/qemu.pid")" 2>/dev/null; true' EXIT
-cp --sparse=always "$IMG" "$WORK/disk.img"
+
+qemu_pid() { cat "$WORK/qemu.pid" 2>/dev/null; }
+qemu_alive() { p=$(qemu_pid); [ -n "$p" ] && kill -0 "$p" 2>/dev/null; }
+# stop the QEMU this script started, by its pidfile: TERM, up to 10 s, then KILL
+qemu_stop() {
+  p=$(qemu_pid); [ -n "$p" ] || return 0
+  kill "$p" 2>/dev/null || return 0
+  for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$p" 2>/dev/null || return 0; sleep 1; done
+  say "QEMU (pid $p) ignored TERM; killing it"; kill -9 "$p" 2>/dev/null; true
+}
+oom_report() {
+  o=$(oom_kills); [ -n "$o" ] || return 0
+  if [ -n "$OOM0" ] && [ "$o" != "$OOM0" ]; then say "cgroup oom_kill: $OOM0 -> $o: the OOM killer struck during this run"
+  else say "cgroup oom_kill: $o (unchanged)"; fi
+}
+# QEMU gone while the test still needs it: say so once, with the OOM count, and end the run. In
+# the script's own shell only (a $( ) subshell cannot end the script; guest() there just returns).
+# Before task 308 the guest driver was restarted against the dead socket for minutes, until the
+# script's bash segfaulted (rc 139) and left the work dir behind.
+qemu_check() {
+  qemu_alive && return 0
+  [ -n "$(qemu_pid)" ] || return 0  # not started yet
+  say "FAIL: QEMU's process (pid $(qemu_pid)) is gone: $1"
+  oom_report
+  FAILED=1
+  exit 1
+}
+cleanup() {
+  rc=$?
+  trap - EXIT INT TERM
+  guest_close 2>/dev/null
+  qemu_stop
+  if [ -n "${WORK:-}" ] && [ -d "$WORK" ]; then
+    if [ "$rc" != 0 ] && [ -s "$WORK/serial.log" ]; then
+      say "last serial output:"; tail -n 60 "$WORK/serial.log" | sed 's/^/  | /'
+      cp "$WORK/serial.log" "$WORK.serial.log" && say "serial log kept at $WORK.serial.log"
+    fi
+    rm -rf "$WORK"
+  fi
+  [ "$rc" = 0 ] || oom_report
+  exit "$rc"
+}
+# the driver holds the chardev socket and the CI step's stderr, QEMU the disk copy: neither may
+# outlive the script, however it ends
+trap cleanup EXIT
+trap 'say "interrupted"; exit 130' INT
+trap 'say "terminated"; exit 143' TERM
+cp --sparse=always "$IMG" "$WORK/disk.img" || { say "cannot copy $IMG into $WORK"; exit 1; }
 # a real VM disk is bigger than the image: give the userfs resize room (journald lives there
 # on the systemd product; the image's userfs partition is 3 MB until it grows)
 truncate -s +2G "$WORK/disk.img"
@@ -54,7 +125,7 @@ truncate -s +2G "$WORK/disk.img"
 SYSTEMD=0
 if [ -n "$ROOTFS" ] && "$DEBUGFS" -R 'stat /usr/lib/systemd/systemd' "$ROOTFS" >/dev/null 2>&1; then
   SYSTEMD=1
-  "$DEBUGFS" -R "dump /zImage $WORK/zImage" "$ROOTFS" >/dev/null 2>&1 || { say "cannot extract /zImage"; rm -rf "$WORK"; exit 1; }
+  "$DEBUGFS" -R "dump /zImage $WORK/zImage" "$ROOTFS" >/dev/null 2>&1 || { say "cannot extract /zImage"; exit 1; }
 fi
 
 # the guest shell: one command line at a time over the serial socket, output until the marker.
@@ -229,7 +300,46 @@ page_wait() {
   echo "$pw_code after ${pw_n}s"
 }
 
+# github_budget <need> <max wait s>: the addon e2e's GitHub budget (task 310). The guest reaches
+# GitHub through QEMU's user network, i.e. from this host's public address, and occulited asks
+# GitHub's API unauthenticated: 60 calls an hour per address, shared with everything else behind
+# it (dev.35 and dev.36 lost the e2e to "GitHub rate limit" after a few runs in an hour). So read
+# the address's budget here first (GET /rate_limit costs nothing); with fewer than <need> calls left,
+# wait for the reset if it comes within <max wait s> - watching QEMU meanwhile - else fail and say
+# when it resets. An unreadable answer goes on (the install then says what GitHub says). Prints one
+# line; returns 1 only for "the reset is too far". LITE_QEMU_GITHUB_API overrides the API base.
+github_budget() {
+  gb_api=${LITE_QEMU_GITHUB_API:-https://api.github.com}
+  gb_n=0
+  while :; do
+    gb=$(curl -s --max-time 15 -H 'Accept: application/vnd.github+json' "$gb_api/rate_limit" | python3 -c '
+import json, sys, time
+try:
+    r = json.load(sys.stdin)["resources"]["core"]
+    print(int(r["remaining"]), max(0, int(r["reset"]) - int(time.time())), int(r["limit"]))
+except Exception:
+    print("? 0 0")' 2>/dev/null)
+    gb_rem=${gb%% *}; gb_rest=${gb#* }; gb_reset=${gb_rest%% *}; gb_limit=${gb_rest#* }
+    case "$gb_rem" in ''|*[!0-9]*) echo "GitHub's rate limit could not be read; going on"; return 0;; esac
+    if [ "$gb_rem" -ge "$1" ]; then
+      [ "$gb_n" = 0 ] && echo "GitHub: $gb_rem of $gb_limit calls left (need $1)" || echo "GitHub: $gb_rem of $gb_limit calls left after waiting ${gb_n}s"
+      return 0
+    fi
+    if [ "$gb_n" -gt 0 ] && [ "$gb_n" -ge "$2" ]; then
+      echo "GitHub: still $gb_rem of $gb_limit calls left after waiting ${gb_n}s (need $1)"; return 1
+    fi
+    if [ $((gb_n + gb_reset)) -gt "$2" ]; then
+      echo "GitHub: $gb_rem of $gb_limit calls left (need $1), the reset is in ${gb_reset}s - more than the ${2}s this run may wait"; return 1
+    fi
+    echo "GitHub: $gb_rem of $gb_limit calls left (need $1); waiting ${gb_reset}s for the reset" >&2
+    gb_end=$((gb_n + gb_reset + 15))
+    while [ "$gb_n" -lt "$gb_end" ]; do qemu_check "while waiting for GitHub's rate limit"; sleep 30; gb_n=$((gb_n + 30)); done
+  done
+}
+
 guest() {
+  # QEMU gone: no new driver against its dead socket - the caller's check fails on the silence
+  if ! qemu_alive; then say "guest: QEMU's process is gone"; GUEST_PID=; return 1; fi
   guest_open
   printf '%s\n' "$1" >&8
   while IFS= read -r __l <&9; do
@@ -242,6 +352,18 @@ guest() {
   return 1
 }
 
+# the fresh-image probe (LITE_QEMU_FRESH=1, see the top): what a fresh image reaches out to by
+# itself in its first ten minutes. It prints and judges nothing; the build round reads it.
+fresh_probe() {
+  say "FRESH: occulited.json at the first start"; guest 'uptime; cat /usr/local/etc/occulite/occulited.json; echo; ls -l --time-style=+%T /usr/local/etc/occulite/ | grep -iE "catalog|firmware|update|release"'
+  for m in 1 2 3 4 5 6 7 8 9 10; do
+    qemu_check "during the fresh probe"
+    say "FRESH: minute $m: TCP to ports 443/80 (remote, state) every 10 s"; guest 'for i in 1 2 3 4 5 6; do awk "NR>1 && (\$3 ~ /:01BB\$/ || \$3 ~ /:0050\$/) {print \$3, \$4}" /proc/net/tcp; sleep 10; done | sort | uniq -c; uptime'
+  done
+  say "FRESH: occulited's journal lines about the outside"; guest 'journalctl -u occulited -b --no-pager -o cat | grep -iE "catalog|firmware|update|release|github|outbound|config:|ssdp" | head -30; ls -l --time-style=+%T /usr/local/etc/occulite/ | grep -iE "catalog|firmware|update|release"'
+  say "FRESH: done"
+}
+
 boot() {
   if [ "$SYSTEMD" = 1 ]; then
     qemu-system-x86_64 -m 2048 -smp 2 -cpu qemu64 \
@@ -250,12 +372,12 @@ boot() {
       -drive file="$WORK/disk.img",format=raw,if=virtio \
       -netdev user,id=n0,hostfwd=tcp:127.0.0.1:$PORT-:80 -device virtio-net-pci,netdev=n0 \
       -display none -chardev socket,id=ser0,path="$WORK/serial.sock",server=on,wait=off -serial chardev:ser0 \
-      -pidfile "$WORK/qemu.pid" -daemonize >/dev/null 2>&1 || { say "qemu failed to start"; rm -rf "$WORK"; exit 1; }
+      -pidfile "$WORK/qemu.pid" -daemonize >/dev/null 2>&1 || { say "qemu failed to start"; exit 1; }
   else
     qemu-system-x86_64 -m 2048 -smp 2 -cpu qemu64 \
       -drive file="$WORK/disk.img",format=raw,if=virtio \
       -netdev user,id=n0,hostfwd=tcp:127.0.0.1:$PORT-:80 -device virtio-net-pci,netdev=n0 \
-      -display none -serial file:"$WORK/serial.log" -pidfile "$WORK/qemu.pid" -daemonize >/dev/null 2>&1 || { say "qemu failed to start"; rm -rf "$WORK"; exit 1; }
+      -display none -serial file:"$WORK/serial.log" -pidfile "$WORK/qemu.pid" -daemonize >/dev/null 2>&1 || { say "qemu failed to start"; exit 1; }
   fi
   say "$1: booting (TCG, ${WORK}/disk.img is a copy; nothing is written to $IMG)"
   wait_http "$1"
@@ -264,6 +386,7 @@ boot() {
 wait_http() {
   T0=$(date +%s)
   for _ in $(seq 1 180); do
+    qemu_check "$1: while waiting for HTTP"
     H=$(curl -s --max-time 3 "http://127.0.0.1:$PORT/api/system/v1/health" 2>/dev/null)
     case "$H" in *'"ok":true'*) break;; esac
     sleep 5
@@ -290,6 +413,7 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # fifos and GUEST_PID would be created and lost inside it, and the next call would start a
   # second driver against a chardev that serves one client at a time.
   guest_open
+  if [ "${LITE_QEMU_FRESH:-0}" = 1 ]; then fresh_probe; qemu_check "during the fresh probe"; say "OK (fresh probe)"; exit 0; fi
   # psplash-start.service (buildroot's, not ours) fails here because headless QEMU has no
   # framebuffer; on a box or a VM with a display it does not. occu-interface-clock.service is
   # skipped without rfd since task 129 (B-142); its old failure stays tolerated for older images.
@@ -341,6 +465,13 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   ADDONS=${LITE_QEMU_ADDONS-mosquitto hm2mqtt hmm redmatic}
   if [ -n "$ADDONS" ] && [ "$FAILED" = 0 ]; then
     BASE="http://127.0.0.1:$PORT"
+    # task 310: the refresh asks GitHub twice per catalogue entry (the stars, the releases), the
+    # installs once per addon; 30 leaves room. LITE_QEMU_GITHUB_NEED/_WAIT override.
+    R=$(github_budget "${LITE_QEMU_GITHUB_NEED:-30}" "${LITE_QEMU_GITHUB_WAIT:-3900}") || fail "the addon e2e cannot run: $R"
+    say "addons: $R"
+    GB_BEFORE=$(printf '%s\n' "$R" | sed -n 's/^GitHub: \([0-9]*\) of .*/\1/p')
+  fi
+  if [ -n "$ADDONS" ] && [ "$FAILED" = 0 ]; then
     say "addons: the first account and a session"
     curl -s --max-time 10 -X POST -H 'Content-Type: application/json' -d '{"username":"litetest","password":"lite-qemu-test-2026"}' "$BASE/api/auth/v1/setup" >"$WORK/setup.json"
     SID=$(sed -n 's/.*"sid":"\([^"]*\)".*/\1/p' "$WORK/setup.json")
@@ -358,12 +489,14 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
     done
     for id in $ADDONS; do
       [ "$FAILED" = 0 ] || break
+      qemu_check "before the install of $id"
       say "addons: installing $id from the catalogue"
       T0=$(date +%s)
       code=$(curl -s -o "$WORK/install.json" -w '%{http_code}' --max-time 30 -X POST -H "$AUTH" -H 'Content-Type: application/json' -d '{}' "$BASE/api/system/v1/catalog/$id/install")
       [ "$code" = 202 ] || { fail "install of $id not accepted ($code): $(cat "$WORK/install.json")"; continue; }
       P=""
       for _ in $(seq 1 300); do
+        qemu_check "during the install of $id"
         P=$(curl -s --max-time 10 -H "$AUTH" "$BASE/api/system/v1/catalog/progress")
         case "$P" in *'"phase":"done"'*|*'"phase":"failed"'*) break;; esac
         sleep 5
@@ -398,6 +531,10 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
       A=$(curl -s --max-time 30 -H "$AUTH" "$BASE/api/system/v1/addons")
       case "$A" in *"\"id\":\"$id\""*) fail "$id is still in the addon list after the uninstall";; esac
     done
+    # what the e2e cost of the address's budget (others behind the address count too)
+    R=$(LITE_QEMU_GITHUB_NEED=0 github_budget 0 0)
+    GB_AFTER=$(printf '%s\n' "$R" | sed -n 's/^GitHub: \([0-9]*\) of .*/\1/p')
+    if [ -n "${GB_BEFORE:-}" ] && [ -n "$GB_AFTER" ]; then say "addons: GitHub calls used meanwhile: $((GB_BEFORE - GB_AFTER)) ($R)"; else say "addons: $R"; fi
   else
     say "addons: the install e2e is skipped (LITE_QEMU_ADDONS empty or an earlier failure)"
   fi
@@ -419,6 +556,7 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   guest_close
   # the VM reboots in place (-kernel boots are not -no-reboot); wait until the endpoint is gone
   for _ in $(seq 1 60); do
+    qemu_check "during the reboot"
     curl -s --max-time 2 "http://127.0.0.1:$PORT/api/system/v1/health" >/dev/null 2>&1 || break
     sleep 2
   done
@@ -463,9 +601,9 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   guest_close
 fi
 
-kill "$(cat "$WORK/qemu.pid")" 2>/dev/null; sleep 1
-if [ "$FAILED" = 0 ]; then rm -rf "$WORK"; say "OK"; exit 0; fi
-# the disk copy goes even on a failure: $WORK is usually on a tmpfs, and each kept copy held up to
-# 1.5 GB of the build host's memory until later runs were ended by the OOM killer (dev.26's round)
-rm -f "$WORK/disk.img" "$WORK/zImage"
-say "last serial output:"; tail -n 60 "$WORK/serial.log" 2>/dev/null | sed 's/^/  | /'; say "serial log kept at $WORK/serial.log"; exit 1
+# (no QEMU check here: the systemd phase ends with a poweroff, and QEMU exits with its guest)
+qemu_stop
+oom_report
+# the cleanup trap removes the work dir; on a failure it keeps the serial log next to it
+if [ "$FAILED" = 0 ]; then say "OK"; exit 0; fi
+exit 1
