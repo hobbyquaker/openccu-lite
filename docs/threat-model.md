@@ -302,14 +302,14 @@ also set has to be removed before it is set.
 
 **Crosses:** one operation per request over `/run/occulite/helper.sock` (root:occulite, 0660) — a command from
 the program list, a file write under an allowed prefix, or one of the named operations (the root password, the
-certificate, the LED frames, the log listing, and root's `authorized_keys` and ending an SSH
-session).
+certificate and its removal, the LED frames, the log listing, root's `authorized_keys` and ending an SSH
+session, an addon's policy files, its rc.d entry's enabled bit, and the removal of its rc.d entry and web link).
 
 **Checked by:** the socket's group; `priv.Policy`, which is an allowlist of programs, path prefixes and exact
 paths; and each named operation's own check **at the boundary**, not only in the caller (the key is parsed again,
 the certificate is parsed again, the pid must be an `sshd-session`).
 
-**Has gone wrong here:** the shell allowlist was a prefix test; write paths ran outside the helper; the ownership repair walked addon-controlled paths as root; the program list checked names and passed the arguments through — `systemd-run /bin/sh -c …` was root (B-234, fixed: a shape per program); the symlink operation checked the link and not its target, and a write followed any link (B-235, fixed: the target checked, only the image's links followed, nothing followed below the check).
+**Has gone wrong here:** the shell allowlist was a prefix test; write paths ran outside the helper; the ownership repair walked addon-controlled paths as root; the program list checked names and passed the arguments through — `systemd-run /bin/sh -c …` was root (B-234, fixed: a shape per program); the symlink operation checked the link and not its target, and a write followed any link (B-235, fixed: the target checked, only the image's links followed, nothing followed below the check); the files of the named operations (`shadow`, `server.pem` and its markers) lay under the `/etc/config/` write prefix, so the generic write, rename, chmod, chown and remove reached them whole (B-238, fixed: a named operation's file is outside every generic operation, in both spellings of the config directory, and the directory that holds one cannot be moved, removed, given away or opened up); the same prefixes, and `/usr/local/addons/`, still reached files root later runs or obeys - `rc.d/<id>`, the CGIs of the addon web trees (which may run as uid 0), and `addon-policy/<id>.conf`, `.needs` and `.start`, which the generator installs as the unit's drop-in (`User=`, `ExecStartPre=+`) and whose uid the boot's addon-users step turns into an account (B-293, fixed: everything under rc.d and the web trees, what their links lead to, and the three policy files are outside every generic operation; the helper renders the policy files itself from a checked decision - the addon's own user, a uid from 30000, nothing root-equivalent for a confined addon, no field that adds a line - and enables, disables and removes an addon's rc.d entry and web link by operations of their own; the certificate's removal is an operation of its own as well, and no named file keeps a generic exception); the rest of a root addon's directory - its `bin/`, its `node_modules`, whatever its rc.d script starts - was still under the `/usr/local/addons/` write prefix (B-294, fixed: the prefix is gone; the uninstall's removal of an emptied addon directory, the NEO Server's `Disabled` marker and the NEO Server leftover's removal are operations of one shape each); a root addon's config directory `<config>/addons/<id>` - where its script finds what it sources or runs - was still under the `/usr/local/etc/config/` prefix, and the ownership walk gave `/usr/local/addons/<id>` to `addon-<id>` whenever that account existed, confined or not (B-295, fixed: an addon's config directory is outside every generic operation unless the drop-in the helper rendered confines the addon, the CCU's `addons/mh` and an unknown id included, a chmod that only takes bits away aside; the walk requires that drop-in to confine the addon to exactly that uid, and the daemon writes the confined drop-in before it asks for the walk).
 
 **The rule:** the unprivileged side assembles, the helper decides. Anything the helper accepts because "occulited
 would not send that" is a bug waiting to be found.
@@ -320,7 +320,10 @@ would not send that" is a bug waiting to be found.
 
 **Checked by:** the operation's own narrowness. A named operation exists so that a general one does not have to:
 `/etc/config/shadow` is never readable by occulited because the helper rewrites one field of one line;
-`authorized_keys` is written as a whole section rather than by a general file write.
+`authorized_keys` is written as a whole section rather than by a general file write; an addon's systemd
+drop-in is rendered by the helper from the decision the daemon sends, never written as the daemon's text
+(B-293); an addon's emptied directory is removed by an operation that removes nothing with content in it,
+because `/usr/local/addons/` is no write prefix (B-294).
 
 **Watch:** every new general capability (a new program on the list, a new write prefix) widens this line for
 everything, not only for the feature that asked for it.
@@ -435,7 +438,7 @@ and its tooling have to confirm, and is the list that becomes findings.
 | **R**epudiation | — | The journal | — |
 | **I**nformation disclosure | A file read as root and handed out whole | The named operations return only what is needed (the certificate's blocks, not the key) | Each operation's answer, field by field |
 | **D**enial of service | An operation that blocks the helper for everyone | Timeouts; the helper answers one connection at a time | Which operations can run long, and whether one caller can starve the others |
-| **E**levation | The whole line: anything wrong here is root | The narrowness of each operation | New operations, every time: what does this let the unprivileged side do that it could not do before? |
+| **E**levation | The whole line: anything wrong here is root | The narrowness of each operation; a named operation's files are outside the generic operations, so its narrowness holds at the boundary (B-238); so are the files root runs or obeys - rc.d, the addon web trees and what their links lead to, the policy drop-ins (B-293), and the addons' own directories under `/usr/local/addons/` (B-294) and a root addon's config directory (B-295) | New operations, every time: what does this let the unprivileged side do that it could not do before? What under a write prefix does root run or obey? |
 
 ### B5 · The system ↔ addons
 
