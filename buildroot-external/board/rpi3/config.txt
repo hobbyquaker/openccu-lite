@@ -60,6 +60,15 @@ dtoverlay=rpi-rf-mod
 # make sure gpio12 is set as input and pull_up
 gpio=12=ip,pu
 
+# openccu-lite (task 315): the RPI-RF-MOD's status LED yellow from power-on.
+# start.elf drives red (16) and green (20) high and blue (21) low while it
+# reads this file, about two seconds after reset, instead of the LED staying
+# dark until the kernel and S02InitRTC light it (some 20 s on a Pi 3). The
+# kernel keeps the levels: the overlay's pinctrl sets function and pull only,
+# its LEDs come up in the same yellow, and S02InitRTC writes it again.
+gpio=16,20=op,dh
+gpio=21=op,dl
+
 # use fixed names for start.elf/fixup.dat
 start_file=start.elf
 fixup_file=fixup.dat
