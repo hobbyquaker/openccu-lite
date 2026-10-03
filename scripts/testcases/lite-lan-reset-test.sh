@@ -8,10 +8,58 @@
 # a hub-only and a failed reset. Nothing needs root.
 #
 # Usage: sh scripts/testcases/lite-lan-reset-test.sh    (from the fork's checkout)
+#
+# B-303: the recovery system carries the same logic as /bin/lan9514-reset (its record in
+# /tmp/lan9514-reset), run from /etc/network/if-pre-up.d before eth0 comes up, and S90AutoUpdate
+# keeps its log, the USB tree and the kernel log with the install log. Without an argument this
+# runs every case against both scripts, checks that their code is the same apart from the record's
+# path, and checks the recovery's hook and diagnostics.
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
-S="$HERE/buildroot-external/overlay/lite/usr/libexec/occu/lite-lan-reset"
-[ -x "$S" ] || { echo "lite-lan-reset not found or not executable at $S"; exit 2; }
+LITE="$HERE/buildroot-external/overlay/lite/usr/libexec/occu/lite-lan-reset"
+REC="$HERE/buildroot-external/package/recovery-system/external/overlay/base"
+if [ $# -eq 0 ]; then
+  rc=0
+  sh "$0" lite || rc=1
+  sh "$0" recovery || rc=1
+  f=0
+  if [ "$(sed -n '/^R=/,$p' "$LITE" | sed 's|^MARK=.*|MARK=|')" = "$(sed -n '/^R=/,$p' "$REC/bin/lan9514-reset" | sed 's|^MARK=.*|MARK=|')" ]; then
+    echo "ok   the recovery's lan9514-reset is lite-lan-reset's code (only the record's path differs)"
+  else
+    echo "FAIL the recovery's lan9514-reset and lite-lan-reset differ beyond the record's path"; f=1
+  fi
+  H="$REC/etc/network/if-pre-up.d/lan9514-reset"
+  if [ -x "$H" ] && grep -q '^\[ "${IFACE}" = "eth0" \] || exit 0$' "$H" && grep -q '^/bin/lan9514-reset 2>&1 | tee -a /tmp/lan9514-reset.log$' "$H" \
+     && [ "$(ls "$REC/etc/network/if-pre-up.d" | sort | head -n 1)" = lan9514-reset ]; then
+    echo "ok   the recovery runs it for eth0 before the other pre-up hooks"
+  else
+    echo "FAIL the recovery's if-pre-up.d hook is missing, not executable, or not first"; f=1
+  fi
+  S90="$REC/etc/init.d/S90AutoUpdate"
+  fn=$(sed -n '/^recovery_diagnostics() {$/,/^}$/p' "$S90")
+  if [ -n "$fn" ] && echo "$fn" | grep -q '/tmp/lan9514-reset.log' && echo "$fn" | grep -q '/sys/bus/usb/devices' \
+     && echo "$fn" | grep -q 'dmesg' && grep -q 'recovery_diagnostics >>"${log}"' "$S90"; then
+    echo "ok   the kept install log gets the reset's log, the USB tree and the kernel log"
+  else
+    echo "FAIL S90AutoUpdate does not keep the recovery's diagnostics with the install log"; f=1
+  fi
+  # the diagnostics themselves, in a shell: no failure without the files of a real system
+  out=$( (eval "$fn"; recovery_diagnostics) 2>&1 ); drc=$?
+  if [ "$drc" = 0 ] && echo "$out" | grep -q '^--- recovery system diagnostics ---$' && echo "$out" | grep -q '^usb devices:$'; then
+    echo "ok   recovery_diagnostics runs and ends 0"
+  else
+    echo "FAIL recovery_diagnostics: rc $drc: $out"; f=1
+  fi
+  [ "$rc" = 0 ] && [ "$f" = 0 ] && { echo "LAN reset (lite and recovery): all cases passed"; exit 0; }
+  exit 1
+fi
+case "$1" in
+  lite) S=$LITE; MARKREL=/run/lite-lan-reset ;;
+  recovery) S="$REC/bin/lan9514-reset"; MARKREL=/tmp/lan9514-reset ;;
+  *) echo "usage: $0 [lite|recovery]"; exit 2 ;;
+esac
+echo "--- $1: $S"
+[ -x "$S" ] || { echo "the script is not found or not executable at $S"; exit 2; }
 T=$(mktemp -d) || exit 2
 sim_pid=""
 trap '[ -n "$sim_pid" ] && kill "$sim_pid" 2>/dev/null; rm -rf "$T" "$T.out" "$T.log"' EXIT
@@ -20,13 +68,13 @@ fails=0
 ok() { echo "ok   $1"; }
 bad() { echo "FAIL $1"; fails=$((fails+1)); }
 has() { # <key=value> <what>: a line of the marker
-  grep -qx "$1" "$T/run/lite-lan-reset" 2>/dev/null && ok "$2" || bad "$2: /run/lite-lan-reset has $(tr '\n' ' ' < "$T/run/lite-lan-reset" 2>/dev/null), want $1"
+  grep -qx "$1" "$T$MARKREL" 2>/dev/null && ok "$2" || bad "$2: /run/lite-lan-reset has $(tr '\n' ' ' < "$T$MARKREL" 2>/dev/null), want $1"
 }
 
 # a Pi 3 B as the kernel shows it; the hub and eth0 only with "hub"
 board() { # <model> [hub]
   rm -rf "${T:?}"/* "$T.log"
-  mkdir -p "$T/proc/device-tree" "$T/run" "$T/sys/class/gpio" "$T/sys/bus/usb/devices" "$T/sys/class/net"
+  mkdir -p "$T/proc/device-tree" "$T/run" "$T/tmp" "$T/sys/class/gpio" "$T/sys/bus/usb/devices" "$T/sys/class/net"
   printf '%s\000' "$1" > "$T/proc/device-tree/model"
   : > "$T/sys/class/gpio/export"; : > "$T/sys/class/gpio/unexport"
   mkdir -p "$T/sys/class/gpio/gpiochip512/device/of_node" "$T/sys/class/gpio/gpiochip568/device/of_node"
@@ -94,10 +142,10 @@ order() { # <what> <pattern>...: the patterns appear in the simulator's log in t
 
 # other boards: nothing, even without a hub
 board "Raspberry Pi 4 Model B Rev 1.1"; run none; rc=$?
-[ "$rc" = 0 ] && [ ! -e "$T/run/lite-lan-reset" ] && [ ! -s "$T/sys/class/gpio/export" ] && [ "$(cat "$T/sys/devices/platform/soc/3f980000.usb/buspower")" = 'Bus Power = 0x1' ] \
+[ "$rc" = 0 ] && [ ! -e "$T$MARKREL" ] && [ ! -s "$T/sys/class/gpio/export" ] && [ "$(cat "$T/sys/devices/platform/soc/3f980000.usb/buspower")" = 'Bus Power = 0x1' ] \
   && ok "a Pi 4: nothing done, exit 0" || bad "a Pi 4: rc $rc, $(cat "$T.out")"
 rm -rf "$T/proc"; run none; rc=$?
-[ "$rc" = 0 ] && [ ! -e "$T/run/lite-lan-reset" ] && ok "no device tree (x86_64): nothing done, exit 0" || bad "no device tree: rc $rc"
+[ "$rc" = 0 ] && [ ! -e "$T$MARKREL" ] && ok "no device tree (x86_64): nothing done, exit 0" || bad "no device tree: rc $rc"
 
 # the hub there: no reset
 board "Raspberry Pi 3 Model B Rev 1.2" hub; run none; rc=$?

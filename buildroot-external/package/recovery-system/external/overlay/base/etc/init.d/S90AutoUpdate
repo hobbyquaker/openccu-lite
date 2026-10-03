@@ -10,11 +10,42 @@
 # system reads it at its next boot (openccu-lite carries it into its journal) and
 # removes it. Best effort: nothing here may fail the update or the reboot.
 save_install_log() {
+  local log
   if [[ -f /tmp/fwinstall.log ]] && mkdir -p /usr/local/var/recovery 2>/dev/null; then
     chmod 0755 /usr/local/var/recovery 2>/dev/null
-    cp /tmp/fwinstall.log "/usr/local/var/recovery/$(date -u +%Y-%m-%dT%H-%M-%SZ).log" 2>/dev/null &&
+    log="/usr/local/var/recovery/$(date -u +%Y-%m-%dT%H-%M-%SZ).log"
+    if cp /tmp/fwinstall.log "${log}" 2>/dev/null; then
+      recovery_diagnostics >>"${log}" 2>/dev/null
       chmod 0644 /usr/local/var/recovery/*.log 2>/dev/null
+    fi
   fi
+  return 0
+}
+
+# what the recovery system saw of its hardware, appended to the kept install log: whether the
+# network came up (the LAN9514 reset's record, eth0), the USB tree and the end of the kernel
+# log - so that an update that ran without a network can be explained afterwards
+recovery_diagnostics() {
+  local d
+  echo "--- recovery system diagnostics ---"
+  if [[ -f /tmp/lan9514-reset.log ]]; then
+    sed 's/^/lan9514-reset: /' /tmp/lan9514-reset.log
+  fi
+  if [[ -f /tmp/lan9514-reset ]]; then
+    echo "lan9514-reset record: $(tr '\n' ' ' </tmp/lan9514-reset)"
+  fi
+  if [[ -e /sys/class/net/eth0 ]]; then
+    echo "eth0: operstate $(cat /sys/class/net/eth0/operstate 2>/dev/null), carrier $(cat /sys/class/net/eth0/carrier 2>/dev/null)"
+  else
+    echo "eth0: missing"
+  fi
+  echo "usb devices:"
+  for d in /sys/bus/usb/devices/*; do
+    [[ -f "${d}/idVendor" ]] || continue
+    echo "  ${d##*/} $(cat "${d}/idVendor"):$(cat "${d}/idProduct") $(cat "${d}/product" 2>/dev/null)"
+  done
+  echo "kernel log (the last 150 lines):"
+  dmesg 2>/dev/null | tail -n 150
   return 0
 }
 
