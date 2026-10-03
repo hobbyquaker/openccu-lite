@@ -6,12 +6,45 @@
 # from udev's database for the device. Only the keys usbmount uses are passed, and never through
 # eval: a stick's label is whatever its owner wrote into it.
 #
+# B-278: usbmount's add takes a lock (lockfile-create --retry 3 /run/usbmount/.mount) and removes it
+# in an EXIT trap. A stick pulled while usbmount mounts it stops the unit (BindsTo=), systemd
+# SIGTERMs usbmount, the trap does not run, and the lock stays: every later add waits 30 s and
+# fails "cannot acquire lock" until a reboot empties /run. lockfile-progs writes no usable PID into
+# the lock (its content is 0), so "stale" means no usbmount process is alive: then the lock is
+# removed before usbmount runs. A usbmount of another partition that is running holds a live lock,
+# and that one is left alone.
+#
 # Usage: lite-usb-mount add|remove <kernel name>   (sda1, sdb, mmcblk1p1)
 set -u
 action=${1:-}
 name=${2:-}
 USBMOUNT=${LITE_USBMOUNT:-/usr/share/usbmount/usbmount}
 UDEVADM=${LITE_UDEVADM:-udevadm}
+LOCK=${LITE_USBMOUNT_LOCK:-/run/usbmount/.mount.lock}
+PROC=${LITE_PROC:-/proc}
+
+# usbmount_alive: a process runs usbmount - its name (a script run by its #! line is named after
+# the file) or its command line (run through sh)
+usbmount_alive() {
+  for d in "${PROC}"/[0-9]*; do
+    comm=''
+    [ -r "${d}/comm" ] && read -r comm < "${d}/comm" 2>/dev/null
+    [ "${comm}" = usbmount ] && return 0
+    if [ -r "${d}/cmdline" ]; then
+      case " $(tr '\0' ' ' < "${d}/cmdline" 2>/dev/null) " in
+        *" /usr/share/usbmount/usbmount "*|*" ${USBMOUNT} "*) return 0 ;;
+      esac
+    fi
+  done
+  return 1
+}
+
+# clear_stale_lock: the lock without a usbmount alive to hold it is left by one that was killed
+clear_stale_lock() {
+  [ -e "${LOCK}" ] || return 0
+  usbmount_alive && return 0
+  rm -f "${LOCK}" && echo "removed the stale usbmount lock ${LOCK}: no usbmount process holds it"
+}
 
 case "${action}" in
   add|remove) ;;
@@ -37,6 +70,8 @@ if [ "${action}" = add ]; then
 ${props}
 EOT
 fi
+
+[ "${action}" = add ] && clear_stale_lock
 
 "${USBMOUNT}" "${action}"
 rc=$?

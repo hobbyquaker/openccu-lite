@@ -55,6 +55,57 @@ for n in "" "../sda" "sda1;x" "sd a"; do
 done
 sh "$TOOL" format sda1 2>/dev/null; [ $? = 2 ] && ok "unknown action refused" || bad "unknown action"
 
+# B-278: usbmount's lock (lockfile-progs, content 0, no PID) left by a usbmount that was killed while
+# it mounted - the stick pulled, the unit stopped by BindsTo=, usbmount SIGTERMed before its EXIT
+# trap ran. The next add removes it when no usbmount process is alive, and leaves a live one alone.
+export LITE_USBMOUNT_LOCK="$T/run/usbmount/.mount.lock"
+mkdir -p "$T/run/usbmount" "$T/proc/1" "$T/proc/42"
+echo systemd > "$T/proc/1/comm"; printf '/sbin/init\0' > "$T/proc/1/cmdline"
+echo sh > "$T/proc/42/comm"; printf 'sh\0/usr/libexec/occu/lite-usb-mount\0add\0sda1\0' > "$T/proc/42/cmdline"
+stale() { echo 0 > "$LITE_USBMOUNT_LOCK"; rm -f "$T/got"; }
+stale
+out=$(LITE_PROC="$T/proc" sh "$TOOL" add sda1); rc=$?
+[ $rc = 0 ] && [ ! -e "$LITE_USBMOUNT_LOCK" ] && grep -qx 'action=add' "$T/got" && ok "a stale lock is removed before the add, and usbmount runs" || bad "stale lock: rc $rc, lock $(ls "$LITE_USBMOUNT_LOCK" 2>&1)"
+case "$out" in *"removed the stale usbmount lock"*) ok "the removal is said in the unit's journal" ;; *) bad "no word on the removal: $out" ;; esac
+out=$(LITE_PROC="$T/proc" sh "$TOOL" add sda1)
+case "$out" in *"removed the stale"*) bad "a removal without a lock: $out" ;; *) ok "no lock, nothing removed" ;; esac
+# a usbmount alive - by its name (run by its #! line), or through sh by its command line
+mkdir -p "$T/proc/77"; echo usbmount > "$T/proc/77/comm"
+stale; LITE_PROC="$T/proc" sh "$TOOL" add sda1 >/dev/null
+[ -e "$LITE_USBMOUNT_LOCK" ] && ok "a live usbmount's lock stays (by name)" || bad "a live lock removed (by name)"
+echo sh > "$T/proc/77/comm"; printf 'sh\0/usr/share/usbmount/usbmount\0add\0' > "$T/proc/77/cmdline"
+stale; LITE_PROC="$T/proc" sh "$TOOL" add sda1 >/dev/null
+[ -e "$LITE_USBMOUNT_LOCK" ] && ok "a live usbmount's lock stays (by command line)" || bad "a live lock removed (by command line)"
+rm -rf "$T/proc/77"
+# the remove takes no lock and touches none
+stale; LITE_PROC="$T/proc" sh "$TOOL" remove sda1 >/dev/null
+[ -e "$LITE_USBMOUNT_LOCK" ] && ok "remove leaves the lock alone" || bad "remove took the lock away"
+# the real thing, in this machine's /proc: a usbmount that takes the lock and holds it - alive, the
+# lock stays; killed with it held, the lock is left behind, and the next add mounts the stick
+mkdir -p "$T/slow"
+cat > "$T/slow/usbmount" <<EOS
+#!/bin/sh
+echo 0 > "$LITE_USBMOUNT_LOCK"
+sleep 30 &
+echo \$! > "$T/slow/child"
+wait
+EOS
+chmod +x "$T/slow/usbmount"
+rm -f "$LITE_USBMOUNT_LOCK"
+"$T/slow/usbmount" add &
+slow=$!
+i=0; while [ ! -s "$T/slow/child" ] && [ $i -lt 50 ]; do sleep 0.1; i=$((i+1)); done
+rm -f "$T/got"
+sh "$TOOL" add sda1 >/dev/null
+[ -e "$LITE_USBMOUNT_LOCK" ] && ok "a running usbmount's lock stays (this machine's /proc)" || bad "a running usbmount's lock was removed"
+kill -9 $slow 2>/dev/null; wait $slow 2>/dev/null
+kill "$(cat "$T/slow/child" 2>/dev/null)" 2>/dev/null
+[ -e "$LITE_USBMOUNT_LOCK" ] && ok "the killed usbmount left its lock" || bad "no lock left by the killed usbmount"
+rm -f "$T/got"
+sh "$TOOL" add sda1 >/dev/null; rc=$?
+[ $rc = 0 ] && [ ! -e "$LITE_USBMOUNT_LOCK" ] && grep -qx 'action=add' "$T/got" && ok "after a killed mount the stick mounts again" || bad "after a killed mount: rc $rc"
+unset LITE_USBMOUNT_LOCK
+
 # usbmount.conf: nosuid, and the usbstorage group (B-259) on FAT, exFAT and NTFS, read and write
 printf 'root:x:0:\nocculite:x:8100:\ncerts:x:8101:\nusbstorage:x:8102:occulite\n' > "$T/group"
 out=$(LITE_GROUP_FILE="$T/group" sh -c ". '$CONF'; echo \"\$MOUNTOPTIONS|\$FS_MOUNTOPTIONS\"")
