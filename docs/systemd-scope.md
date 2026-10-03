@@ -244,6 +244,10 @@ so every step waited for every earlier one (on the Charly the web UI answered at
   detection merges its keys into it, task 129);
 - multimacd after the radio hardware (not after the clock gate, task 108); rfd and hmipserver both
   after multimacd and the clock gate, side by side; rfd also after `occu-set-lgw-key`;
+- rfd, hmipserver and hmlangw are `PartOf=multimacd.service` (B-86): a stop or restart of multimacd,
+  systemd's own restart after a crash included, stops them first and starts them again after it. A
+  multimacd restart under an open `/dev/mmd_*` endpoint locked the kernel up and the hardware watchdog
+  reset the system. Where multimacd does not run, the line does nothing;
 - `occu-lgw-firmware-update` after the network and the radio hardware, `occu-set-lgw-key` after it,
   hs485d after that and `occu-init-hs485d`;
 - `occu-init-hs485d` and `occu-init-addons` after the radio hardware;

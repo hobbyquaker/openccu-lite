@@ -22,13 +22,16 @@ for an administrator password.
 | --- | --- | --- |
 | OpenCCU on an SD card or USB disk (`PRODUCT=rpi3`, `rpi4`, `rpi5`, …) | `openccu-lite-<product>-<version>.zip` | one recovery pass, one reboot, about three minutes |
 | The OpenCCU VM (`PRODUCT=ova`) | `openccu-lite-x86_64-ova-<version>.zip` | the same |
-| A CCU3, or a card set up from a CCU3 image or CCU3 backup image (`PRODUCT=ccu3`) | `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` | two recovery passes and two reboots: the second grows the root partition to 2 GB. Plan for ten minutes or more. |
+| A CCU3, or a card set up from a CCU3 image or CCU3 backup image (`PRODUCT=ccu3`) | `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` | two recovery passes and two reboots: the second grows the root partition to 2 GB. Plan for about 25 minutes after *Start update*, up to 30-40 minutes on a slower or larger card (see [below](#a-dark-update-on-a-raspberry-pi-3-or-charly)). |
 
 The `.zip` is the wrong package for a CCU3-shaped system; take the `-ccu3.tgz`.
 
 **A new installation** needs no update: write the `.img` from the release's `.zip` to an SD card (Raspberry Pi 3/4), or
 import the `.ova` (Proxmox, VMware, VirtualBox). Then bring your old system's devices across with a
 [restore or a device import](#bringing-the-devices-into-a-new-installation).
+
+The VM (the `.ova`, and the package for the OpenCCU VM) is meant for testing, not for production; see the
+[recommendations](recommendations.de.md#virtualisierung) (in German).
 
 ### The space the update needs
 
@@ -44,6 +47,17 @@ Old backups under `/usr/local/tmp` and large addon data are the usual culprits; 
 - **Access if something goes wrong:** the system's address written down (a failed update may come back on a new DHCP
   address), and the SD card or the VM's console within reach.
 - **Reliable power** for the whole update: the CCU3's second pass writes partition tables.
+
+### A dark update on a Raspberry Pi 3 or Charly
+
+On a Raspberry Pi 3 (a Charly or a CCU3-shaped card) the recovery may run **without a network**: the board's
+Ethernet chip sometimes does not come back after the reboot into the recovery. The update goes on regardless, but
+`http://<system>/` shows nothing while it runs. **A fast magenta blink of the status LED means: the update is running -
+wait, do not power off.** With the `-ccu3.tgz` it takes about 25 minutes after *Start update* on a Pi 3 with a 32 GB
+card (the upload before it about 5 minutes; the longest step, moving the userfs to make room for the larger root
+partition, about 10 minutes at 4 MB/s); a slower or larger card takes longer, **up to about 30-40 minutes**. Then the
+system reboots into openccu-lite by itself, and its network is back. The recovery keeps its own log and what it saw of
+the network and the USB devices; openccu-lite shows it in its log (tag `recovery`) after the first start.
 
 ### A recovery that stays at its menu
 

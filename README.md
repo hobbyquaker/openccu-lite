@@ -10,7 +10,7 @@
 > selbst helfen können: Leute, die eine CCU von innen kennen (`rfd`, `hs485d`, der `hmipserver`,
 > Funkmodule und Key-Handling, das RPC-Protokoll, die Paramsets, ...).
 
-openccu-lite ist ein Fork des [OpenCCU-Projekts](https://github.com/OpenCCU/OpenCCU), der einige alte Softwareteile entfernt,
+Openccu-lite ist ein Fork des [OpenCCU-Projekts](https://github.com/OpenCCU/OpenCCU), der einige alte Softwareteile entfernt,
 die für Anwender, die ihre Automation anderswo (z. B. in Home Assistant, ioBroker, Node-RED, ...) betreiben, nicht notwendig sind:
 **Es gibt in openccu-lite keine ReGaHSS, keine WebUI-Programme und keine Homematic-Scripte.**
 Die alte CCU-WebUI wurde durch eine [neu entwickelte Oberfläche](docs/walkthrough/README.md) ersetzt, der neue Daemon ["occulited"](https://github.com/hobbyquaker/occulited)
@@ -20,19 +20,21 @@ Die alte CCU-WebUI wurde durch eine [neu entwickelte Oberfläche](docs/walkthrou
 
 Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https://github.com/hobbyquaker/openccu-lite/releases).
 
-- **Wechsel von OpenCCU (Raspberry Pi oder VM):** erst ein Backup anlegen, dann in der OpenCCU-WebUI unter
-  Einstellungen → Systemsteuerung → Zentralen-Wartung → Software-Update durchführen die
-  `openccu-lite-<produkt>-<version>.zip` hochladen. Anlernungen, Schlüssel und Addons bleiben; Namen, Räume und
-  Gewerke übernimmt das System beim ersten Start. Details in [switching.de.md](docs/switching.de.md).
-- **Wechsel von einer CCU3:** die `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` im Software-Update der CCU3 hochladen.
 - **Neuinstallation auf einem Raspberry Pi 3/4:** die `.zip` des Releases entpacken und die `.img` darin auf die SD-Karte schreiben.
-- **Neuinstallation als VM:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.).
-- eine Neuinstallation kann (solange noch keine Geräte angelernt sind) angelernte Geräte, Schlüssel, Namen und Räume aus einem
-  (Open)CCU-Backup in einem Schritt importieren. Der BidCos-Sicherheitsschlüssel der Sicherung kommt so mit, wie er ist (seine
-  Passphrase wird nur als Prüfung abgefragt, nie als Hürde; sie wird für spätere Schlüsseländerungen gebraucht); eine
-  HmIP-Identität, die an ein anderes Funkmodul gebunden ist, übernimmt hmipserver auf das Modul dieses Systems, und die
-  Seite Schnittstellen zeigt, wie das ausging ([switching.de.md](docs/switching.de.md)).
-- **Geräte anlernen und konfigurieren, Direktverknüpfungen verwalten:** dafür den
+- **Neuinstallation als VM:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.). Das VM-Image ist zum Testen
+  gedacht, nicht für den Produktivbetrieb, siehe
+  [Empfehlungen](docs/recommendations.de.md#virtualisierung).
+
+## Wechsel von (Open)CCU zu openccu-lite
+
+In der OpenCCU-WebUI unter *Einstellungen → Systemsteuerung → Zentralen-Wartung → Software-Update durchführen* die
+`openccu-lite-<produkt>-<version>.zip` hochladen. Beim Update von einer original CCU3 Firmware die `-ccu3.tgz`
+verwenden. Anlernungen, Schlüssel, Addons, Namen, Räume und Gewerke werden übernommen [switching.de.md](docs/switching.de.md). WebUI-Programme und Variablen entfallen ersatzlos. Für den Weg zurück unbedingt vorher ein
+Backup anlegen!
+
+## Geräte anlernen und konfigurieren, Direktverknüpfungen verwalten
+
+Dafür den
   [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) oder 
   [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) aus dem Addon-Katalog installieren.
 
@@ -40,7 +42,8 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
 
 Ein Rundgang mit Bildern durch jede Seite der Weboberfläche: [docs/walkthrough](docs/walkthrough/README.md).
 Weiteres, meist auf Englisch, in [`docs/`](docs/) dieses Repositorys: der Wechsel von und zu OpenCCU
-([switching.de.md](docs/switching.de.md), auf Deutsch), bekannte Probleme und was das System dagegen tut
+([switching.de.md](docs/switching.de.md), auf Deutsch), was sich gegenüber OpenCCU ändert
+([aenderungen.md](docs/aenderungen.md), auf Deutsch), bekannte Probleme und was das System dagegen tut
 ([bekannte-probleme.md](docs/bekannte-probleme.md), auf Deutsch), der lokale Schlüsselmodus für HmIP – offline-fähig,
 Funkmodultausch ohne Schlüsselserver von eQ-3 ([lokaler-schluesselmodus.md](docs/lokaler-schluesselmodus.md), auf
 Deutsch), Addons ([addons.md](docs/addons.md)), Sicherheit ([security.md](docs/security.md),
@@ -50,6 +53,7 @@ Portierungs-Kit für Addon-Maintainer ([porting-from-rega.md](docs/porting-from-
 Systemdienst mit der Weboberfläche ist [occulited](https://github.com/hobbyquaker/occulited); seine
 [`docs/`](https://github.com/hobbyquaker/occulited/tree/master/docs) beschreiben die Metadaten-,
 System- und Auth-API, `occulited.json`, das Addon-Manifest und den Katalog.
+Empfehlungen: [recommendations.de.md](docs/recommendations.de.md).
 
 ## Fehler und Hilfe
 
@@ -62,3 +66,7 @@ dort melden.
 ## Lizenz
 
 Apache-2.0 für alles hier Geschriebene; die `occu`-Bestandteile behalten die Bedingungen von eQ-3.
+
+## Haftungsausschluss
+
+openccu-lite wird OHNE JEDE AUSDRÜCKLICHE ODER IMPLIZIERTE GARANTIE bereitgestellt, einschließlich der Garantie zur Benutzung für den vorgesehenen oder einem bestimmten Zweck sowie jeglicher Rechtsverletzung, jedoch nicht darauf beschränkt. IN KEINEM FALL sind die Autoren oder Copyrightinhaber für jeglichen Schaden oder sonstige Ansprüche haftbar zu machen, ob infolge der Erfüllung eines Vertrages, eines Deliktes oder anders im Zusammenhang mit der Software oder sonstiger Verwendung der Software entstanden.

@@ -22,13 +22,16 @@ Räume und Gewerke aus der ReGa-Datenbank und fragt nach einem Administrator-Pas
 | --- | --- | --- |
 | OpenCCU auf SD-Karte oder USB-Datenträger (`PRODUCT=rpi3`, `rpi4`, `rpi5`, …) | `openccu-lite-<produkt>-<version>.zip` | ein Recovery-Durchlauf, ein Neustart, etwa drei Minuten |
 | Die OpenCCU-VM (`PRODUCT=ova`) | `openccu-lite-x86_64-ova-<version>.zip` | dasselbe |
-| Eine CCU3 oder eine Karte aus einem CCU3-Image oder CCU3-Backup-Image (`PRODUCT=ccu3`) | `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` | zwei Recovery-Durchläufe und zwei Neustarts: der zweite vergrößert die Root-Partition auf 2 GB. Mit zehn Minuten oder mehr rechnen. |
+| Eine CCU3 oder eine Karte aus einem CCU3-Image oder CCU3-Backup-Image (`PRODUCT=ccu3`) | `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` | zwei Recovery-Durchläufe und zwei Neustarts: der zweite vergrößert die Root-Partition auf 2 GB. Mit etwa 25 Minuten ab dem Start des Updates rechnen, auf einer langsameren oder größeren Karte bis zu 30-40 Minuten (siehe [unten](#ein-dunkles-update-auf-einem-raspberry-pi-3-oder-charly)). |
 
 Die `.zip` ist für ein System mit CCU3-Layout das falsche Paket; dort die `-ccu3.tgz` nehmen.
 
 **Eine Neuinstallation** braucht kein Update: die `.img` aus der `.zip` des Releases auf eine SD-Karte schreiben
 (Raspberry Pi 3/4) oder die `.ova` importieren (Proxmox, VMware, VirtualBox). Die Geräte des alten Systems kommen dann
 per [Restore oder Geräte-Import](#geräte-in-eine-neuinstallation-übernehmen) dazu.
+
+Die VM (`.ova` und das Paket für die OpenCCU-VM) ist zum Testen gedacht, nicht für den Produktivbetrieb; siehe
+[Empfehlungen](recommendations.de.md#virtualisierung).
 
 ### Der Platz, den das Update braucht
 
@@ -46,6 +49,18 @@ wegräumen.
 - **Zugang, falls etwas schiefgeht:** die Adresse des Systems notiert (ein fehlgeschlagenes Update kann mit einer neuen
   DHCP-Adresse zurückkommen), SD-Karte oder Konsole der VM erreichbar.
 - **Sichere Stromversorgung** für das ganze Update: der zweite Durchlauf auf der CCU3 schreibt Partitionstabellen.
+
+### Ein dunkles Update auf einem Raspberry Pi 3 oder Charly
+
+Auf einem Raspberry Pi 3 (einem Charly oder einer Karte aus einem CCU3-Image) läuft das Recovery womöglich **ohne
+Netzwerk**: Der Ethernet-Chip der Platine kommt nach dem Neustart ins Recovery manchmal nicht wieder. Das Update läuft
+trotzdem weiter, aber `http://<system>/` zeigt währenddessen nichts. **Ein schnelles magentafarbenes Blinken der
+Status-LED heißt: Das Update läuft - warten, nicht ausschalten.** Mit dem `-ccu3.tgz` dauert es auf einem Pi 3 mit einer
+32-GB-Karte etwa 25 Minuten ab dem Start des Updates (das Hochladen davor etwa 5 Minuten; der längste Schritt, das
+Verschieben des Userfs für die größere Root-Partition, etwa 10 Minuten bei 4 MB/s); eine langsamere oder größere Karte
+braucht länger, **bis zu etwa 30-40 Minuten**. Danach startet das System von selbst openccu-lite, und sein Netzwerk ist
+wieder da. Das Recovery bewahrt sein eigenes Protokoll auf, dazu, was es vom Netzwerk und von den USB-Geräten gesehen
+hat; openccu-lite zeigt es nach dem ersten Start in seinem Log (Tag `recovery`).
 
 ### Ein Recovery, das in seinem Menü stehen bleibt
 

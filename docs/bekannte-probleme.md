@@ -9,7 +9,7 @@ Bekannte Probleme der Homematic-Software, die openccu-lite betreibt, und was ope
 **Das Symptom:** nach einem Neustart oder einem Update antwortet kein HmIP-Gerät mehr - auch die
 Bedienung vor Ort nicht -, während BidCos-RF-Geräte am selben Modul weiterlaufen, und ein weiterer
 Neustart des Systems hilft nicht. **Die Ursache** (eq-3/occu#134, OpenCCU/OpenCCU#4274; Berichte im
-Forum seit 2025-11): jeder HmIP-Rahmen trägt einen Sicherheitszähler, den die Geräte nur aufwärts
+Forum seit 2025-11): jeder HmIP-Frame trägt einen Sicherheitszähler, den die Geräte nur aufwärts
 akzeptieren. Bei jedem Start liest hmipserver den Zähler des Funkmoduls (*"Current Security
 Counter: N"* in seinem Journal), berechnet aus der Uhrzeit und zwei Zahlen aus der Datei des Access
 Points (`crRFD/data/<SGTIN>.ap`: der Zeitpunkt der ersten Verbindung und ein Offset) einen Wert und
@@ -18,7 +18,7 @@ schreibt ihn ins Modul, wenn er höher ist (*"Update security counter to calcula
 einmal 2³² überschritten, schützt die Prüfung nichts mehr, und ein Start mit einer zurückliegenden
 Uhr - eine CCU ohne Echtzeituhr nach einem Stromausfall, NTP nicht erreichbar - gefolgt von einem
 Start mit richtiger Uhr setzt den Zähler des Moduls unter das, was die Geräte schon gesehen haben.
-Von da an verwerfen sie jeden Rahmen des Systems als Wiederholung.
+Von da an verwerfen sie jeden Frame des Systems als Wiederholung.
 
 **Was openccu-lite dagegen tut:**
 
@@ -38,7 +38,7 @@ Von da an verwerfen sie jeden Rahmen des Systems als Wiederholung.
   (*near*: die Uhr synchron halten), 2³² (*wrapped*: der Schutz ist weg) oder unter das gesetzt wurde,
   was die Geräte gesehen haben (*backwards*: die Abhilfe unten).
 - **Auf einem umgelaufenen oder gefährdeten Access Point wird hmipserver zurückgehalten, solange die
-  Uhr nicht vertrauenswürdig ist** (das Tor lief in den Timeout oder hat Echtzeituhr oder Zeitserver
+  Uhr nicht vertrauenswürdig ist** (das Gate lief in den Timeout oder hat Echtzeituhr oder Zeitserver
   abgelehnt). Die Status-Seite sagt es; eine von Hand auf der Netzwerk-Seite gestellte Zeit oder ein
   antwortender Zeitserver gibt ihn frei. Der Preis: ein solches System ohne Zeitserver startet
   HmIP-RF erst, wenn die Zeit gestellt ist. Ein System, dessen Access Point auf openccu-lite

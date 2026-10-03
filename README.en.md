@@ -28,7 +28,8 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
 - **Switching from a CCU3:** upload `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` in the CCU3's software update.
 - **New install on a Raspberry Pi 3/4:** unpack the release `.zip` and write the `.img` inside it to the SD card.
 - **New install as a VM:** import the `.ova` (Proxmox, VMware, VirtualBox and so on); the LXC container is described
-  in [install-lxc.md](docs/install-lxc.md).
+  in [install-lxc.md](docs/install-lxc.md). The VM image is meant for testing, not for production (nor as the switch of an
+  OpenCCU VM), see the [recommendations](docs/recommendations.de.md#virtualisierung) (in German).
 - a new install can (as long as no devices are paired yet) import paired devices, keys, names and rooms from an
   (Open)CCU backup in one step. The backup's BidCos security key comes along as it is (its passphrase is asked as a
   check only, never as a gate; later key changes need it); an HmIP identity bound to another radio module is taken over
@@ -41,7 +42,8 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
 
 A walkthrough of every page of the web UI, with screenshots (in German): [docs/walkthrough](docs/walkthrough/README.md).
 In [`docs/`](docs/) of this repository: moving from and to OpenCCU
-([switching.md](docs/switching.md)), known issues and what the system does about them
+([switching.md](docs/switching.md)), what differs from OpenCCU ([aenderungen.md](docs/aenderungen.md), in German),
+known issues and what the system does about them
 ([known-issues.md](docs/known-issues.md)), HmIP local key mode - offline-capable, radio module swaps without eQ-3's key
 server ([lokaler-schluesselmodus.md](docs/lokaler-schluesselmodus.md), in German), the Proxmox container ([install-lxc.md](docs/install-lxc.md)),
 addons ([addons.md](docs/addons.md)), security ([security.md](docs/security.md),
@@ -51,6 +53,7 @@ porting kit for addon maintainers ([porting-from-rega.md](docs/porting-from-rega
 service with the web UI is [occulited](https://github.com/hobbyquaker/occulited); its
 [`docs/`](https://github.com/hobbyquaker/occulited/tree/master/docs) describe the metadata, system
 and auth APIs, `occulited.json`, the addon manifest and the catalogue.
+Recommendations: [recommendations.de.md](docs/recommendations.de.md) (in German).
 
 ## Bugs and help
 
