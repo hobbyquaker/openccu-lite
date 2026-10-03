@@ -52,6 +52,8 @@ jobs:
         run: sh scripts/testcases/lite-module-sig-guard-test.sh
       - name: The binaries carry the build's hardening flags
         run: sh scripts/testcases/lite-hardening-guard-test.sh
+      - name: occulited reports the image's version
+        run: sh scripts/testcases/lite-occulited-version-guard-test.sh
       - name: The boot order and the boot path
         run: |
           sh scripts/testcases/lite-unit-order-test.sh
@@ -81,6 +83,7 @@ jobs:
         run: |
           sh scripts/testcases/lite-boot-screen-test.sh
           sh scripts/testcases/lite-board-leds-test.sh
+          sh scripts/testcases/lite-status-led-dts-test.sh
           sh scripts/testcases/lite-lan-reset-test.sh
       - name: The web server's certificate on a system without an address
         run: sh scripts/testcases/lite-lighttpd-cert-test.sh
@@ -96,3 +99,7 @@ jobs:
           sh scripts/testcases/lite-smartd-test.sh
       - name: The recovery grows the userfs (a loop device in a privileged container)
         run: sh scripts/testcases/lite-userfs-grow-test.sh
+      - name: The recovery removes an upload that fwprepare refused (fwinstall.sh in a container)
+        run: sh scripts/testcases/lite-fwprepare-cleanup-test.sh
+      - name: The update packages' EULA carries openccu-lite's preamble
+        run: sh scripts/testcases/lite-eula-test.sh

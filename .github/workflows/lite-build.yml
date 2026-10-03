@@ -65,6 +65,10 @@ jobs:
         run: sh scripts/testcases/lite-module-sig-guard-test.sh
       - name: The binaries carry the build's hardening flags
         run: sh scripts/testcases/lite-hardening-guard-test.sh
+      - name: occulited reports the image's version
+        # the guard the lite post-build runs on the image: a build round whose occulited pin carries
+        # another release than the image version, or none, stops
+        run: sh scripts/testcases/lite-occulited-version-guard-test.sh
       - name: The boot order is a dependency graph
         # the units' After= edges against the intended graph (no serial SysV chain coming back, no
         # cycle), /var/run a link before any early writer (usbmount's lock under /run, tmpfiles L+),
@@ -115,7 +119,9 @@ jobs:
         # lite-board-leds (task 158), the LED lines of S99SetupLEDs that occu-board-leds.service runs
         # after the radio detection: the MODE2 and MODE1 triggers, disableOnboardLED, the RPI-RF-MOD
         # only in HM-LGW mode, and nothing written on a box without the LEDs
-        run: sh scripts/testcases/lite-board-leds-test.sh
+        run: |
+          sh scripts/testcases/lite-board-leds-test.sh
+          sh scripts/testcases/lite-status-led-dts-test.sh
       - name: The LAN9514 reset before the network
         # lite-lan-reset (B-249): a Pi 3 B whose hub is missing after a warm reboot gets LAN_RUN
         # pulsed and its USB host port re-powered; other boards and a present hub are left alone
@@ -150,6 +156,11 @@ jobs:
         # the static checks of fwinstall.sh and S90AutoUpdate; the loop-device part needs /dev/loop-control,
         # which this runner's container has not, so it runs on GitHub's runners and on a workstation only
         run: sh scripts/testcases/lite-userfs-grow-test.sh
+      - name: The recovery removes an upload that fwprepare refused
+        # the static checks, and fwinstall.sh in an unprivileged debian container (docker, apt over the network)
+        run: sh scripts/testcases/lite-fwprepare-cleanup-test.sh
+      - name: The update packages' EULA carries openccu-lite's preamble
+        run: sh scripts/testcases/lite-eula-test.sh
       - name: The lighttpd redirects and the session gate, on a real lighttpd
         # the base and lite overlays' lighttpd configuration with occulited's fragment and gate, parsed
         # and driven by curl in an Alpine container (docker, apk over the network): the HTTP -> HTTPS
