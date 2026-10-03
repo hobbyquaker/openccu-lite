@@ -88,11 +88,20 @@ done
 for d in rfd hmipserver multimacd hs485d hmlangw; do
   unit_has "$d.service" "ExecStartPre=+/usr/bin/occulited radio prep $d"
   unit_has "$d.service" "ConditionPathExists=/run/occulite/radio/$d.enabled"
-  # hmipserver's one ExecCondition is the fatal-error marker (D-102), which the plan does not decide
+  # the ExecConditions are the plan's marker again (systemd checks Condition*= only at a requested
+  # start, not at its own restarts) and, for hmipserver, the fatal-error marker (D-102) - nothing
+  # else: a failing prep is a failure, never a skip
+  marker="ExecCondition=/bin/sh -c 'test -e /run/occulite/radio/$d.enabled'"
+  others=$(grep "^ExecCondition=" "$U/$d.service" | grep -vxF "$marker")
   if [ "$d" = hmipserver ]; then
-    [ "$(grep -c "^ExecCondition=" "$U/$d.service")" = 1 ] && grep -q "^ExecCondition=/bin/sh -c '! test -e /run/occulite/radio/hmipserver.fatal'$" "$U/$d.service" && ok "hmipserver.service: its only ExecCondition is the fatal-error marker" || bad "hmipserver.service: one ExecCondition, the fatal-error marker"
+    want="ExecCondition=/bin/sh -c '! test -e /run/occulite/radio/hmipserver.fatal'"
   else
-    unit_nomatch "$d.service" '^ExecCondition=' "no ExecCondition: the plan's marker decides, a failing prep is a failure"
+    want=""
+  fi
+  if grep -qxF "$marker" "$U/$d.service" && [ "$others" = "$want" ]; then
+    ok "$d.service: its ExecConditions are the plan's marker${want:+ and the fatal-error marker}"
+  else
+    bad "$d.service: ExecConditions must be the plan's marker${want:+ and the fatal-error marker} only, found: $(grep '^ExecCondition=' "$U/$d.service" | tr '\n' ' ')"
   fi
   unit_nomatch "$d.service" 'lite-radio-prep' "no shell helper"
 done

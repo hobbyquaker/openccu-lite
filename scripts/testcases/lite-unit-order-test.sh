@@ -165,6 +165,31 @@ need multimacd.service occu-init-rf-hardware.service
 need rfd.service multimacd.service occu-set-lgw-key.service
 need hmipserver.service multimacd.service
 need hmlangw.service multimacd.service
+# B-86: whatever holds a /dev/mmd_* endpoint is part of multimacd - a restart of multimacd (by hand,
+# or systemd's after a crash) stops it first, or the re-created eq3_char_loop masters lock the kernel
+# up and the watchdog resets the system. PartOf, never BindsTo or Requires: without multimacd (no
+# shared radio module) the daemons run on their own.
+partof() {
+  cat "$U/$1" "$U/$1.d/"*.conf 2>/dev/null | sed -n 's/^PartOf=//p' | tr ' ' '\n' | grep -v '^$'
+}
+binds() {
+  cat "$U/$1" "$U/$1.d/"*.conf 2>/dev/null | sed -n 's/^\(BindsTo\|Requires\|Requisite\)=//p' | tr ' ' '\n' | grep -v '^$'
+}
+for d in rfd hmipserver hmlangw; do
+  if partof $d.service | grep -qx multimacd.service; then ok "$d.service is PartOf multimacd"; else bad "$d.service must be PartOf=multimacd.service (B-86)"; fi
+  if binds $d.service | grep -qx multimacd.service; then bad "$d.service binds to or requires multimacd: it would not run without it"; else ok "$d.service does not bind to multimacd"; fi
+done
+# the radio plan's marker is checked by ExecCondition= too: Condition*= is not checked at systemd's
+# own restarts, so a unit the plan dropped while it was failing would restart forever
+for d in rfd hmipserver multimacd hmlangw hs485d; do
+  if cat "$U/$d.service" | grep -qx "ExecCondition=/bin/sh -c 'test -e /run/occulite/radio/$d.enabled'"; then
+    ok "$d.service re-checks its plan marker at every start (ExecCondition)"
+  else
+    bad "$d.service lacks ExecCondition on /run/occulite/radio/$d.enabled"
+  fi
+done
+# and nothing the other way round: multimacd's stop must not wait for, or pull in, its dependants
+if partof multimacd.service | grep -qx 'rfd.service\|hmipserver.service\|hmlangw.service'; then bad "multimacd is PartOf a dependant"; else ok "multimacd is PartOf none of its dependants"; fi
 
 # LAN gateways and wired
 need occu-lgw-firmware-update.service occu-network.service occu-init-rf-hardware.service

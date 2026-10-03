@@ -23,11 +23,23 @@ Description=BidCos-RF Interface
 # and key change first (occu-set-lgw-key orders after occu-lgw-firmware-update)
 # rfd hands the system time to the radio module and the LAN gateways: a trusted clock first.
 After=multimacd.service hmlangw.service occu-set-lgw-key.service occu-clock-valid.service
+# A stop or restart of multimacd - by hand, by occulited, or systemd's own restart after a
+# multimacd crash - stops this unit first and starts it again afterwards. While a process still
+# holds its /dev/mmd_* endpoint open, multimacd's restart re-creates the eq3_char_loop masters under
+# it, the kernel locks up, and the hardware watchdog resets the system (seen on the Charly's
+# RPI-RF-MOD and on a Pi 4's HmIP-RFUSB). PartOf, not BindsTo: where multimacd does not run (no
+# shared radio module) it never starts or stops, and this unit runs on its own as before.
+PartOf=multimacd.service
 Wants=occu-clock-valid.service
 ConditionPathExists=/run/occulite/radio/rfd.enabled
 StartLimitIntervalSec=0
 
 [Service]
+# The plan's marker once more, at every start: systemd checks Condition*= only at a start that is
+# asked for, not at its own Restart= restarts - so a unit the radio plan dropped while it was
+# failing or starting (an addon's Wants= pulls it in during a connection change, before the
+# new plan is written) would restart forever. An ExecCondition= "no" ends it as skipped.
+ExecCondition=/bin/sh -c 'test -e /run/occulite/radio/rfd.enabled'
 Type=exec
 ExecStartPre=+/usr/bin/occulited radio prep rfd
 ExecStartPre=-+/usr/libexec/occu/lite-psplash boot S61rfd

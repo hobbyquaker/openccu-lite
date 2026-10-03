@@ -37,6 +37,11 @@ ConditionPathExists=/run/occulite/radio/hs485d.enabled
 StartLimitIntervalSec=0
 
 [Service]
+# The plan's marker once more, at every start: systemd checks Condition*= only at a start that is
+# asked for, not at its own Restart= restarts - so a unit the radio plan dropped while it was
+# failing or starting (an addon's Wants= pulls it in during a connection change, before the
+# new plan is written) would restart forever. An ExecCondition= "no" ends it as skipped.
+ExecCondition=/bin/sh -c 'test -e /run/occulite/radio/hs485d.enabled'
 Type=forking
 PIDFile=/run/hs485d/run/hs485dLoader.pid
 ExecStartPre=+/usr/bin/occulited radio prep hs485d

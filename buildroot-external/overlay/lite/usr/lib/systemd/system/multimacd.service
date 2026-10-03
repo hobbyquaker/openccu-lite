@@ -32,6 +32,11 @@ ConditionPathExists=/run/occulite/radio/multimacd.enabled
 StartLimitIntervalSec=0
 
 [Service]
+# The plan's marker once more, at every start: systemd checks Condition*= only at a start that is
+# asked for, not at its own Restart= restarts - so a unit the radio plan dropped while it was
+# failing or starting (an addon's Wants= pulls it in during a connection change, before the
+# new plan is written) would restart forever. An ExecCondition= "no" ends it as skipped.
+ExecCondition=/bin/sh -c 'test -e /run/occulite/radio/multimacd.enabled'
 Type=exec
 ExecStartPre=+/usr/bin/occulited radio prep multimacd
 ExecStartPre=-+/usr/libexec/occu/lite-psplash boot S60multimacd
