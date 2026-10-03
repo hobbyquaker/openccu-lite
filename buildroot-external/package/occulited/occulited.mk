@@ -11,7 +11,14 @@
 #
 ################################################################################
 
-OCCULITED_VERSION = eb512490cd2786afa2dc2b91796344a953f6e2c8
+OCCULITED_VERSION = 8392ad1bec2518299ecd6437a9e4385cdd094467
+# The version the binary reports (occulited task 9): the image version the pinned commit is tagged
+# with (v1.0.0-dev.38 -> 1.0.0-dev.38). The archive has no .git for `git describe`, so the pin
+# carries it: every build round tags occulited's pinned commit v<LITE_VERSION> and sets it here,
+# and board/lite/post-build.sh (scripts/lite-occulited-version-guard.sh) stops a round whose image
+# version is not this one. Empty for a pin without a tag: the binary then reports its commit, as
+# the images before the first tag did.
+OCCULITED_RELEASE = 1.0.0-dev.39
 OCCULITED_SITE = $(call github,hobbyquaker,occulited,$(OCCULITED_VERSION))
 OCCULITED_LICENSE = GPL-3.0-only
 OCCULITED_LICENSE_FILES = LICENSE
@@ -25,7 +32,8 @@ OCCULITED_DEPENDENCIES = tcl openccu-base
 
 OCCULITED_GOMOD = github.com/hobbyquaker/occulited
 OCCULITED_BUILD_TARGETS = cmd/occulited
-OCCULITED_LDFLAGS = -s -w -X main.version=$(OCCULITED_VERSION)
+OCCULITED_LDFLAGS = -s -w -X main.version=$(or $(OCCULITED_RELEASE),$(OCCULITED_VERSION)) \
+	-X main.commit=$(OCCULITED_VERSION)
 # a static binary, no cgo, ever (D-15)
 OCCULITED_GO_ENV = CGO_ENABLED=0
 # Not a PIE (task 261, measured with buildroot's Go 1.26): without cgo, `-buildmode=pie` gives a

@@ -287,3 +287,13 @@ fi
 # copied recipe, a warm tree that was never reconfigured after lite-hardening.mk changed - fails
 # the build here rather than shipping.
 "$(cd "$(dirname "$0")/../../.." && pwd)/scripts/lite-hardening-guard.sh" "${TARGET_DIR}"
+
+# And occulited reports the version of this image (occulited task 9): a build round tags occulited's
+# pinned commit with the image version and sets OCCULITED_RELEASE in package/occulited/occulited.mk;
+# a round whose pin names another release - the previous round's, or none - stops here. A build
+# outside a round (no LITE_VERSION=, so LITE-VERSION's bare VERSION) only checks that the binary
+# carries the pin.
+lite_top="$(cd "$(dirname "$0")/../../.." && pwd)"
+"${lite_top}/scripts/lite-occulited-version-guard.sh" "${TARGET_DIR}" \
+	"${lite_top}/buildroot-external/package/occulited/occulited.mk" \
+	"${LITE_VERSION:-}" "$(sed -n 's/^VERSION=//p' "${lite_top}/LITE-VERSION")"
