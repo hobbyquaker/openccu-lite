@@ -11,14 +11,14 @@
 #
 ################################################################################
 
-OCCULITED_VERSION = 8392ad1bec2518299ecd6437a9e4385cdd094467
+OCCULITED_VERSION = 6826b8531691d5d65bcae4cd317bd776decfa44a
 # The version the binary reports (occulited task 9): the image version the pinned commit is tagged
 # with (v1.0.0-dev.38 -> 1.0.0-dev.38). The archive has no .git for `git describe`, so the pin
 # carries it: every build round tags occulited's pinned commit v<LITE_VERSION> and sets it here,
 # and board/lite/post-build.sh (scripts/lite-occulited-version-guard.sh) stops a round whose image
 # version is not this one. Empty for a pin without a tag: the binary then reports its commit, as
 # the images before the first tag did.
-OCCULITED_RELEASE = 1.0.0-dev.39
+OCCULITED_RELEASE = 1.0.0-dev.40
 OCCULITED_SITE = $(call github,hobbyquaker,occulited,$(OCCULITED_VERSION))
 OCCULITED_LICENSE = GPL-3.0-only
 OCCULITED_LICENSE_FILES = LICENSE
