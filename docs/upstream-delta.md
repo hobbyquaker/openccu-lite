@@ -113,6 +113,7 @@ rebased ones.
 | 59 | openccu-lite's EULA preamble (task 319, 2026-10-03): `release/updatepkg/lite/` - `EULA.de`/`EULA.en` = upstream's `rpi3/EULA.*` unchanged with `preamble.<lang>.html` after `<body>` (not OpenCCU; support only in openccu-lite's issue tracker; no donations, a GitHub star; OpenCCU's buttons go to OpenCCU's developers), `update_script` and the file lists as links to `rpi3/`; `aarch64-rpi3`, `aarch64-rpi4`, `aarch64-rpi5`, `x86_64-ova -> lite` (were `-> rpi3`). `scripts/lite-eula.sh` writes the two files, `--check` fails when upstream's EULA changed under them; `scripts/testcases/lite-eula-test.sh` | lite-only; **review on merge**: an upstream EULA change fails the test - run `scripts/lite-eula.sh` | (this commit) |
 | 58 | The RPI-RF-MOD's status LED dimmable (task 315, 2026-10-03): **`package/rpi-rf-mod/dts/rpi-rf-mod.dts`** - the three `gpio-leds` children become `pwm-leds` over three `pwm-gpio` providers on GPIO 16/20/21 (the kernel's software PWM, one hrtimer per channel; 4 ms period, `max-brightness 255`, red and green `default-state "on"` for the boot's yellow, the labels and so the sysfs names unchanged, so every trigger writer - S02InitRTC, S99SetupLEDs, the recovery, upstream's hss_led - keeps working); the pin setup stays on `&leds`. **`board/rpi{3,4,5}/kernel.config`**: `CONFIG_PWM_GPIO=y`; **`kernel/6.18/global.config`**: `CONFIG_LEDS_TRIGGER_PATTERN=y` - both built in, because the recovery kernel builds from the same fragments and loads no modules, and the LED must be lit from the probe. **`board/rpi{3,4,5}/config.txt`**: `gpio=16,20=op,dh`, `gpio=21=op,dl` - start.elf lights the yellow about two seconds after reset instead of the kernel some 20 s later (Pi 3). `scripts/testcases/lite-status-led-dts-test.sh`. occulited's controller mixes and dims; the `brightness` attribute means 0-255 now (a writer of `1` gets 1/255 - none found in the fork, RedMatic or node-red-contrib-ccu) | the overlay and the kernel options **upstreamable** (dimmable on top, nothing else changes); the `config.txt` lines **upstreamable** (upstream already uses `gpio=12=ip,pu`) | (this commit) |
 | 59 | No `rootdelay=5` on the Pi kernel line (task 315, 2026-10-03): **`board/rpi{3,4}/boot.cmd`** - `rootwait` alone waits for the root device for as long as it takes; the fixed five seconds were a quarter of the dark LED span at a reboot. `rpi5/boot.cmd` keeps it (no lab Pi 5). | upstream candidate after the lab's reboots on SD and USB roots | (this commit) |
+| 60 | The recovery's LED for an RPI-RF-MOD on an HB-RF-USB frees the names from their own driver (task 326, 2026-10-04): **`package/recovery-system/.../etc/init.d/S11InitRFHardware`** unbound `leds-gpio`'s `leds`/`gpio-leds` by name before loading `rpi_rf_mod_led`; since row 58 the `rpi_rf_mod:*` names belong to `leds_pwm`'s `rpi_rf_mod_leds`, so nothing was freed, the adapter's LEDs were renamed `rpi_rf_mod:*_1` and the recovery's magenta went to the empty header pins (the adapter LED stayed yellow; dev.39 and dev.40). It now unbinds the LED's own device from its own driver (`rpi_rf_mod:blue/device` and its `driver` link) and binds it again after the module, as upstream intends for `leds-gpio`. occulited's radio run (`hbrfLED`) does the same at every boot. `scripts/testcases/lite-recovery-hbrf-led-test.sh` | needed only with row 58's overlay; **upstreamable** with it (for upstream's `leds-gpio` the behaviour is the same) | (this commit) |
 
 ## 1. ReGaHss and the WebUI are options of `package/openccu-base`
 
@@ -255,11 +256,11 @@ the target toolchain. The product config leaves upstream's `tclrega.so` out
 with `BR2_PACKAGE_OPENCCU_BASE_REGAHSS` (item 1; until 3.89.8 by deselecting
 the `tclrega` package) and enables `BR2_PACKAGE_LIGHTTPD_LUA` for
 `mod_magnet`. Bumping: change `OCCULITED_VERSION`, run
-`make occulited-source`, copy the reported hash into `occulited.hash`. occulited is versioned like
-the image: a build round tags the pinned commit `v<image version>` in occulited's repository and
-sets `OCCULITED_RELEASE` to the image version, which the binary reports beside the commit
-(`-X main.version`, `-X main.commit`); `scripts/lite-occulited-version-guard.sh`, run by the lite
-post-build, stops a round whose pin names another release.
+`make occulited-source`, copy the reported hash into `occulited.hash`. occulited's version is the
+pinned commit (`-X main.version`, `-X main.commit`); a build round tags that commit
+`v<image version>` in occulited's repository, which only names the occulited that went into the
+image. `scripts/lite-occulited-version-guard.sh`, run by the lite post-build, stops an image whose
+binary does not carry the pin.
 
 **Since the 3.89.9 rebase (task 126) two guards protect the shim.** `package/openccu-base`
 installs the real `tclrega.so` to the same `/lib/tclrega.so` whenever REGAHSS is on, and
@@ -741,8 +742,9 @@ the overlay creates on every Pi, nor an LED that is already owned after the boot
   it is not there — `occu-leds.service`'s stop (the first step of a shutdown) and occulited's
   `ExecStopPost` (yellow slow: not supervised; the shutdown pattern while the system goes down). Only
   with an RPI-RF-MOD in `/var/hm_mode`, never in HM-LGW mode.
-- **The recovery system** keeps its own `S02InitRTC`, `S11InitRFHardware` and `S99SetupLEDs`
-  unchanged: magenta, driven by its scripts.
+- **The recovery system** keeps its own `S02InitRTC`, `S11InitRFHardware` and `S99SetupLEDs`:
+  magenta, driven by its scripts. Since task 326 `S11InitRFHardware` frees the LED names for an
+  RPI-RF-MOD on an HB-RF-USB from whichever driver holds them (index row 60).
 
 A rebase that changes the LED blocks of these scripts has to keep the guards.
 

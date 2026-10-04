@@ -168,6 +168,5 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - Keine 32-Bit-ARM-Produkte
 - Update-Pakete bleiben mit OpenCCU austauschbar
 - Update-Pakete zeigen vor der EULA von OpenCCU einen eigenen Vorspann: wo es Unterstützung gibt, keine Spenden
-- occulited trägt die Versionsnummer des Images
 - SBOM (CycloneDX 1.6) mit allen Bestandteilen und Lizenzen
 - Die Workflows, Home-Assistant-Add-ons und Helm-Charts von OpenCCU sind aus dem Repository entfernt
