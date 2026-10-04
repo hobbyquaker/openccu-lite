@@ -33,6 +33,11 @@
 		     occulite:fixed-level alone - so the two lines are in the journal at the warn default
 		     and occulited can judge the counter (eq-3/occu#134). -->
 		<Logger name="de.eq3.cbcs.server.local.base.internal.HMIPTRXInitialResponseListener" level="info"/><!-- occulite:fixed-level -->
+		<!-- openccu-lite: the logger that writes the line about a pairing declined because the
+		     device's local key is wrong stays at debug whatever LOGLEVEL_HMIP says (the same marker), so
+		     occulited can name the cause of a device that will not pair. It writes only while a device
+		     asks to be paired - a few lines per request - and nothing outside a pairing. -->
+		<Logger name="de.eq3.cbcs.server.core.internal.InclusionHandling" level="debug"/><!-- occulite:fixed-level -->
 		<Logger name="de.eq3" level="info"/>
 		<Logger name="org" level="error"/>
 		<Logger name="com" level="error"/>

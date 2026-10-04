@@ -54,7 +54,9 @@ grep -q 'SYSLOG"/>' "$T/out.xml" && fail "upstream without LOGHOST: a SYSLOG ref
 # openccu-lite task 299: the lite template carries the security-counter logger at info with the
 # marker occulited's render honours (S62HMServer's sed does not run on lite; the render does)
 grep -q '<Logger name="de.eq3.cbcs.server.local.base.internal.HMIPTRXInitialResponseListener" level="info"/><!-- occulite:fixed-level -->' "$LITE" && ok "lite: the security-counter logger is fixed at info" || fail "lite: no fixed security-counter logger"
-grep -c 'occulite:fixed-level' "$LITE" | grep -qx 2 && ok "lite: the marker on the logger line and in its comment only" || fail "lite: marker count $(grep -c 'occulite:fixed-level' "$LITE")"
+# openccu-lite task 201: the logger that writes the declined-pairing line is fixed at debug the same way
+grep -q '<Logger name="de.eq3.cbcs.server.core.internal.InclusionHandling" level="debug"/><!-- occulite:fixed-level -->' "$LITE" && ok "lite: the inclusion logger is fixed at debug" || fail "lite: no fixed inclusion logger"
+grep -c 'occulite:fixed-level' "$LITE" | grep -qx 3 && ok "lite: the marker on the two logger lines and in the first comment only" || fail "lite: marker count $(grep -c 'occulite:fixed-level' "$LITE")"
 
 [ "$fails" -eq 0 ] && echo "hmipserver-log4j2-test: all passed" || echo "hmipserver-log4j2-test: $fails failed"
 [ "$fails" -eq 0 ]
