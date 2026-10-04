@@ -191,24 +191,24 @@ query_rf_parameters() {
     GREEN_GPIO_PIN=$(cat "/sys/class/raw-uart/${HBRF_DEVNODE}/green_gpio_pin")
     BLUE_GPIO_PIN=$(cat "/sys/class/raw-uart/${HBRF_DEVNODE}/blue_gpio_pin")
 
-    # make sure to unbind the gpio-leds driver first
-    if [[ -e /sys/class/leds/rpi_rf_mod:blue ]]; then
-      if [[ -e /sys/bus/platform/drivers/leds-gpio/gpio-leds ]]; then
-        GPIO_LEDS=gpio-leds
-      else
-        GPIO_LEDS=leds
-      fi
-
-      echo ${GPIO_LEDS} >/sys/bus/platform/drivers/leds-gpio/unbind 2>/dev/null
+    # make sure to unbind the driver that holds the rpi_rf_mod:* names first: openccu-lite's
+    # header overlay gives them to leds_pwm's rpi_rf_mod_leds, upstream's to leds-gpio's leds -
+    # whichever it is, it is the LED's device's driver
+    LED_DEV=
+    LED_DRV=
+    if [[ -e /sys/class/leds/rpi_rf_mod:blue/device/driver ]]; then
+      LED_DEV=$(basename "$(readlink -f /sys/class/leds/rpi_rf_mod:blue/device)")
+      LED_DRV=$(readlink -f /sys/class/leds/rpi_rf_mod:blue/device/driver)
+      echo "${LED_DEV}" >"${LED_DRV}/unbind" 2>/dev/null
     fi
 
     # load the rpi_rf_mod_led kernel module
     modprobe rpi_rf_mod_led red_gpio_pin="${RED_GPIO_PIN}" green_gpio_pin="${GREEN_GPIO_PIN}" blue_gpio_pin="${BLUE_GPIO_PIN}"
 
-    # rebind the gpio-leds so that numeration of the rpi-rf-mod leds are correct
-    if [[ -n "${GPIO_LEDS}" ]] &&
-       [[ ! -e /sys/bus/platform/drivers/leds-gpio/${GPIO_LEDS} ]]; then
-      echo "${GPIO_LEDS}" >/sys/bus/platform/drivers/leds-gpio/bind 2>/dev/null
+    # rebind that driver so that numeration of the rpi-rf-mod leds are correct
+    if [[ -n "${LED_DRV}" ]] &&
+       [[ ! -e "${LED_DRV}/${LED_DEV}" ]]; then
+      echo "${LED_DEV}" >"${LED_DRV}/bind" 2>/dev/null
     fi
 
     # setup the LEDs to show a slowly blinking magenta light
