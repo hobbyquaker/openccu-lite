@@ -59,15 +59,20 @@ jobs:
           sh scripts/testcases/lite-syslog-forward-test.sh
           sh scripts/testcases/multimacd-loglevel-test.sh
           sh scripts/testcases/lite-recovery-log-test.sh
+          sh scripts/testcases/lite-recovery-hbrf-led-test.sh
       - name: The out-of-tree modules carry the kernel's key
         # the guard the lite post-build runs on the image: an updates/ module signed with another key
         # than the kernel's is refused at boot (CONFIG_MODULE_SIG_FORCE), the radio drivers first
         run: sh scripts/testcases/lite-module-sig-guard-test.sh
+      - name: The boot script is the product's boot.cmd
+        # task 325: images/boot.scr made from an older boot.cmd (a warm tree does not rerun
+        # host-uboot-tools' mkimage step) is found before the build - the Makefile rebuilds the
+        # package - and stops the lite post-build; mkimage's own output on this runner
+        run: sh scripts/testcases/lite-bootscr-check-test.sh
       - name: The binaries carry the build's hardening flags
         run: sh scripts/testcases/lite-hardening-guard-test.sh
-      - name: occulited reports the image's version
-        # the guard the lite post-build runs on the image: a build round whose occulited pin carries
-        # another release than the image version, or none, stops
+      - name: occulited in the image is the pinned commit
+        # the guard the lite post-build runs on the image: a binary of another pin stops the build
         run: sh scripts/testcases/lite-occulited-version-guard-test.sh
       - name: The boot order is a dependency graph
         # the units' After= edges against the intended graph (no serial SysV chain coming back, no

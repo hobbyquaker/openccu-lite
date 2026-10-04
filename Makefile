@@ -73,6 +73,12 @@ build-$(PRODUCT)/show-info.json: build-$(PRODUCT)/.config | buildroot-$(BUILDROO
 build: | buildroot-$(BUILDROOT_VERSION) build-$(PRODUCT)/.config $(if $(filter true,$(FAKE_BUILD)),,build-$(PRODUCT)/legal-info build-$(PRODUCT)/show-info.json)
 	@echo "[build: $(PRODUCT)]"
 ifneq ($(FAKE_BUILD),true)
+	# openccu-lite (task 325): host-uboot-tools makes images/boot.scr from board/<board>/boot.cmd in
+	# its build step, which a warm tree never reruns - a changed boot.cmd needs the package rebuilt
+	rc=0; sh scripts/lite-bootscr-check.sh $(shell pwd)/build-$(PRODUCT) $(shell pwd)/$(BUILDROOT_EXTERNAL) || rc=$$?; \
+	if [ $$rc = 10 ]; then \
+		cd $(shell pwd)/build-$(PRODUCT) && $(MAKE) O=$(shell pwd)/build-$(PRODUCT) -C ../buildroot-$(BUILDROOT_VERSION) BR2_EXTERNAL=../$(BUILDROOT_EXTERNAL) BR2_DL_DIR=$(BR2_DL_DIR) BR2_CCACHE_DIR=$(BR2_CCACHE_DIR) BR2_JLEVEL=$(BR2_JLEVEL) PRODUCT=$(PRODUCT) PRODUCT_VERSION=$(PRODUCT_VERSION) PRODUCT_PLATFORM=$(PLATFORM) host-uboot-tools-rebuild; \
+	elif [ $$rc != 0 ]; then exit $$rc; fi
 	cd $(shell pwd)/build-$(PRODUCT) && $(MAKE) O=$(shell pwd)/build-$(PRODUCT) -C ../buildroot-$(BUILDROOT_VERSION) BR2_EXTERNAL=../$(BUILDROOT_EXTERNAL) BR2_DL_DIR=$(BR2_DL_DIR) BR2_CCACHE_DIR=$(BR2_CCACHE_DIR) BR2_JLEVEL=$(BR2_JLEVEL) PRODUCT=$(PRODUCT) PRODUCT_VERSION=$(PRODUCT_VERSION) PRODUCT_PLATFORM=$(PLATFORM)
 else
 	$(eval BOARD := $(shell echo $(PRODUCT)))

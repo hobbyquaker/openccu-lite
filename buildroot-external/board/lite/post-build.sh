@@ -288,12 +288,15 @@ fi
 # the build here rather than shipping.
 "$(cd "$(dirname "$0")/../../.." && pwd)/scripts/lite-hardening-guard.sh" "${TARGET_DIR}"
 
-# And occulited reports the version of this image (occulited task 9): a build round tags occulited's
-# pinned commit with the image version and sets OCCULITED_RELEASE in package/occulited/occulited.mk;
-# a round whose pin names another release - the previous round's, or none - stops here. A build
-# outside a round (no LITE_VERSION=, so LITE-VERSION's bare VERSION) only checks that the binary
-# carries the pin.
+# And occulited is the pinned commit (its version, occulited task 16): a warm tree that kept the
+# binary of an earlier pin stops here.
 lite_top="$(cd "$(dirname "$0")/../../.." && pwd)"
 "${lite_top}/scripts/lite-occulited-version-guard.sh" "${TARGET_DIR}" \
-	"${lite_top}/buildroot-external/package/occulited/occulited.mk" \
-	"${LITE_VERSION:-}" "$(sed -n 's/^VERSION=//p' "${lite_top}/LITE-VERSION")"
+	"${lite_top}/buildroot-external/package/occulited/occulited.mk"
+
+# And the boot partition's U-Boot script is this commit's boot.cmd (task 325): host-uboot-tools
+# makes images/boot.scr in its build step, which a warm tree does not rerun for a changed boot.cmd
+# (the first dev.39 images kept rootdelay). The top-level Makefile rebuilds the package when they
+# differ; a build started past it (make -C build-<product>) stops here instead of shipping the old
+# script. Products without a boot script (the ova) pass.
+"${lite_top}/scripts/lite-bootscr-check.sh" --guard "${BASE_DIR}"

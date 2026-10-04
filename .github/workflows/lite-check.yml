@@ -48,11 +48,14 @@ jobs:
           sh scripts/testcases/lite-syslog-forward-test.sh
           sh scripts/testcases/multimacd-loglevel-test.sh
           sh scripts/testcases/lite-recovery-log-test.sh
+          sh scripts/testcases/lite-recovery-hbrf-led-test.sh
       - name: The out-of-tree modules carry the kernel's key
         run: sh scripts/testcases/lite-module-sig-guard-test.sh
+      - name: The boot script is the product's boot.cmd
+        run: sh scripts/testcases/lite-bootscr-check-test.sh
       - name: The binaries carry the build's hardening flags
         run: sh scripts/testcases/lite-hardening-guard-test.sh
-      - name: occulited reports the image's version
+      - name: occulited in the image is the pinned commit
         run: sh scripts/testcases/lite-occulited-version-guard-test.sh
       - name: The boot order and the boot path
         run: |

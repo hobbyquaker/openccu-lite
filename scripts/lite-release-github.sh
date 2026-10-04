@@ -59,12 +59,10 @@ PRE=false
 [[ "$V" == *-* ]] && PRE=true
 PIN=$(git show "$SHA:buildroot-external/package/occulited/occulited.mk" | sed -n 's/^OCCULITED_VERSION *= *//p')
 [ -n "$PIN" ] || fail "no occulited pin in $SHA"
-# occulited is versioned like the image (occulited task 9): the round tagged the pinned commit v$V and
-# the pin carries the release; a pin from before that carries none, and occulited's version is its commit
-OREL=$(git show "$SHA:buildroot-external/package/occulited/occulited.mk" | sed -n 's/^OCCULITED_RELEASE *= *//p')
-[ -z "$OREL" ] || [ "$OREL" = "$V" ] || fail "occulited's pin in $SHA says release $OREL, not $V"
-OVER="${OREL:-$PIN}"
-say "release $TAG from $SHA (base $BASE, occulited ${OREL:+$OREL at }$PIN, prerelease $PRE), products: $PRODUCTS"
+# occulited's version is its commit (occulited task 16); the round tagged the pinned commit v$V, which
+# names the occulited of this image and is checked on GitHub below
+OVER="$PIN"
+say "release $TAG from $SHA (base $BASE, occulited $PIN, prerelease $PRE), products: $PRODUCTS"
 
 # ---- the round in the warm tree is this commit and this version --------------------------------
 [ -d "$TREE/.git" ] || fail "$TREE is not the build tree"
@@ -105,7 +103,7 @@ done
 # ---- occulited's API documents (task 298): from the pinned occulited's source in the build tree ----
 # docs/openapi.json, docs/asyncapi.json and docs/lite-rpc-methods.json are generated in occulited's
 # repository and checked by its CI; the release carries the pinned commit's, with the version the
-# system serves (occulited's version: the release, or the commit for a pin without one) and the release's.
+# system serves (occulited's version, the pinned commit) and the release's.
 set -- $PRODUCTS
 OSRC="$TREE/build-$1/build/occulited-$PIN/docs"
 DOCS="openapi asyncapi lite-rpc-methods"
@@ -168,21 +166,19 @@ python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d["status"] i
   || fail "GitHub's main does not contain $SHA"
 say "GitHub's main contains $SHA"
 
-# occulited's tag goes to GitHub with the release, before it: the notes link it
-if [ -n "$OREL" ]; then
-  OREPO="${OCCULITED_REPO:-hobbyquaker/occulited}"
-  oref=$(api GET "/repos/$OREPO/git/ref/tags/v$OREL") || fail "$OREPO has no tag v$OREL on GitHub: push occulited's tag first"
-  otarget=$(python3 -c '
+# occulited's tag v$V goes to GitHub with the release, before it: the notes link it
+OREPO="${OCCULITED_REPO:-hobbyquaker/occulited}"
+oref=$(api GET "/repos/$OREPO/git/ref/tags/v$V") || fail "$OREPO has no tag v$V on GitHub: push occulited's tag first"
+otarget=$(python3 -c '
 import json, sys
 o = json.load(sys.stdin)["object"]
 print(o["type"], o["sha"])' <<< "$oref")
-  if [ "${otarget%% *}" = tag ]; then
-    otag=$(api GET "/repos/$OREPO/git/tags/${otarget#* }") || fail "$OREPO's tag object v$OREL cannot be read"
-    otarget=$(python3 -c 'import json,sys; o=json.load(sys.stdin)["object"]; print(o["type"], o["sha"])' <<< "$otag")
-  fi
-  [ "$otarget" = "commit $PIN" ] || fail "$OREPO's tag v$OREL is ${otarget:-nothing}, not the pinned commit $PIN"
-  say "$OREPO's tag v$OREL is the pinned commit"
+if [ "${otarget%% *}" = tag ]; then
+  otag=$(api GET "/repos/$OREPO/git/tags/${otarget#* }") || fail "$OREPO's tag object v$V cannot be read"
+  otarget=$(python3 -c 'import json,sys; o=json.load(sys.stdin)["object"]; print(o["type"], o["sha"])' <<< "$otag")
 fi
+[ "$otarget" = "commit $PIN" ] || fail "$OREPO's tag v$V is ${otarget:-nothing}, not the pinned commit $PIN"
+say "$OREPO's tag v$V is the pinned commit"
 
 # a draft of this tag from an earlier, broken run is reused; a published release is never touched
 rel=$(api GET "/repos/$GH_REPO/releases?per_page=100" | python3 -c '
@@ -201,11 +197,7 @@ if [ "$dry" = 1 ]; then
 fi
 
 if [ -z "$ID" ]; then
-  if [ -n "$OREL" ]; then
-    OCC_NOTE="occulited [$OREL](https://github.com/hobbyquaker/occulited/tree/v$OREL) (\`${PIN:0:7}\`)"
-  else
-    OCC_NOTE="occulited [\`${PIN:0:7}\`](https://github.com/hobbyquaker/occulited/commit/$PIN)"
-  fi
+  OCC_NOTE="occulited [\`${PIN:0:7}\`](https://github.com/hobbyquaker/occulited/tree/v$V)"
   body=$(cat <<EOF
 openccu-lite $V: a Homematic CCU firmware without ReGaHSS, built on OpenCCU $BASE, with $OCC_NOTE. **Alpha software** — read the [README](https://github.com/$GH_REPO/blob/$SHA/README.en.md) first.
 
