@@ -37,6 +37,10 @@ StartLimitIntervalSec=0
 # failing or starting (an addon's Wants= pulls it in during a connection change, before the
 # new plan is written) would restart forever. An ExecCondition= "no" ends it as skipped.
 ExecCondition=/bin/sh -c 'test -e /run/occulite/radio/multimacd.enabled'
+# A radio change holds the unit: between its stop and its new plan a start from
+# outside it - an addon's Wants=, occulited's addon supervisor, a Restart= - would run on the old
+# plan's files; the change starts the unit itself once the plan is written. See the script.
+ExecCondition=+/usr/libexec/occu/lite-radio-gate multimacd
 Type=exec
 ExecStartPre=+/usr/bin/occulited radio prep multimacd
 ExecStartPre=-+/usr/libexec/occu/lite-psplash boot S60multimacd

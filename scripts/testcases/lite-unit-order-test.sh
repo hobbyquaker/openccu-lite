@@ -187,6 +187,12 @@ for d in rfd hmipserver multimacd hmlangw hs485d; do
   else
     bad "$d.service lacks ExecCondition on /run/occulite/radio/$d.enabled"
   fi
+  # B-307: and refuses a start while a radio change holds the units (lite-radio-gate-test.sh)
+  if grep -qx "ExecCondition=+/usr/libexec/occu/lite-radio-gate $d" "$U/$d.service"; then
+    ok "$d.service waits out a radio change (ExecCondition lite-radio-gate)"
+  else
+    bad "$d.service lacks ExecCondition=+/usr/libexec/occu/lite-radio-gate $d"
+  fi
 done
 # and nothing the other way round: multimacd's stop must not wait for, or pull in, its dependants
 if partof multimacd.service | grep -qx 'rfd.service\|hmipserver.service\|hmlangw.service'; then bad "multimacd is PartOf a dependant"; else ok "multimacd is PartOf none of its dependants"; fi

@@ -1,0 +1,52 @@
+#!/bin/sh
+# openccu-lite: the radio units' gate against starts from outside a radio change - an
+# ExecCondition= of multimacd, rfd, hmipserver, hs485d and hmlangw:
+#
+#   ExecCondition=+/usr/libexec/occu/lite-radio-gate <unit>
+#
+# A connection change (occulited) and the hotplug's re-plan (occulited radio hotplug) stop the
+# daemons, write a new plan and start them again. Between the stop and the new plan the run
+# directory still holds the old plan's files: a start that is not the change's own - an addon unit's
+# Wants=rfd.service hmipserver.service, occulited's addon supervisor, a user's systemctl, systemd's
+# own Restart= - used them (on the way back from HmIP only, hmipserver opened the raw UART multimacd
+# was given by the new plan and hung for five minutes). The change writes
+# /run/occulite/radio/changing before it stops the daemons and removes it once the new plan is
+# written, before its own starts; while it is there this check says no, and systemd skips the start
+# (Result=exec-condition, inactive, no failure and no further Restart=).
+#
+# The marker's one line is a deadline in whole seconds of /proc/uptime (the monotonic clock: a box
+# without an RTC steps its wall clock). After it the gate no longer holds, should the change have
+# died without removing it (occulited's next start removes it too, and /run is gone at a reboot).
+# A marker without a readable deadline holds - it is never written that way.
+set -u
+
+DIR=${OCCU_RADIO_RUN_DIR:-/run/occulite/radio}
+UPTIME=${OCCU_UPTIME:-/proc/uptime}
+unit=${1:-the unit}
+gate="$DIR/changing"
+
+[ -e "$gate" ] || exit 0
+
+deadline=
+read -r deadline _ <"$gate" 2>/dev/null
+case "$deadline" in
+  '' | *[!0-9]*)
+    echo "lite-radio-gate: a radio change is running (no deadline in $gate); $unit is started by the change once the new plan is written"
+    exit 1
+    ;;
+esac
+up=
+read -r up _ <"$UPTIME" 2>/dev/null
+up=${up%%.*}
+case "$up" in
+  '' | *[!0-9]*)
+    echo "lite-radio-gate: a radio change is running; $unit is started by the change once the new plan is written"
+    exit 1
+    ;;
+esac
+if [ "$up" -ge "$deadline" ]; then
+  echo "lite-radio-gate: $gate is past its deadline (${deadline}s of uptime, now ${up}s); $unit starts"
+  exit 0
+fi
+echo "lite-radio-gate: a radio change is running (until ${deadline}s of uptime at the latest, now ${up}s); $unit is started by the change once the new plan is written"
+exit 1
