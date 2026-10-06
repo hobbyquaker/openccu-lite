@@ -21,9 +21,7 @@ Die alte CCU-WebUI wurde durch eine [neu entwickelte Oberfläche](docs/walkthrou
 Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https://github.com/hobbyquaker/openccu-lite/releases).
 
 - **Neuinstallation auf einem Raspberry Pi 3/4:** die `.zip` des Releases entpacken und die `.img` darin auf die SD-Karte schreiben.
-- **Neuinstallation als VM:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.). Das VM-Image ist zum Testen
-  gedacht, nicht für den Produktivbetrieb, siehe
-  [Empfehlungen](docs/recommendations.de.md#virtualisierung).
+- **Neuinstallation als VM:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.).
 
 ## Wechsel von (Open)CCU zu openccu-lite
 

@@ -30,9 +30,6 @@ The `.zip` is the wrong package for a CCU3-shaped system; take the `-ccu3.tgz`.
 import the `.ova` (Proxmox, VMware, VirtualBox). Then bring your old system's devices across with a
 [restore or a device import](#bringing-the-devices-into-a-new-installation).
 
-The VM (the `.ova`, and the package for the OpenCCU VM) is meant for testing, not for production; see the
-[recommendations](recommendations.de.md#virtualisierung) (in German).
-
 ### The space the update needs
 
 The recovery unpacks the update on the userfs (`/usr/local`) before it writes anything. **You need at least 2.8 GB

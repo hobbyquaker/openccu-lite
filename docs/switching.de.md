@@ -30,9 +30,6 @@ Die `.zip` ist für ein System mit CCU3-Layout das falsche Paket; dort die `-ccu
 (Raspberry Pi 3/4) oder die `.ova` importieren (Proxmox, VMware, VirtualBox). Die Geräte des alten Systems kommen dann
 per [Restore oder Geräte-Import](#geräte-in-eine-neuinstallation-übernehmen) dazu.
 
-Die VM (`.ova` und das Paket für die OpenCCU-VM) ist zum Testen gedacht, nicht für den Produktivbetrieb; siehe
-[Empfehlungen](recommendations.de.md#virtualisierung).
-
 ### Der Platz, den das Update braucht
 
 Das Recovery entpackt das Update auf dem userfs (`/usr/local`), bevor es etwas schreibt. **Nötig sind mindestens

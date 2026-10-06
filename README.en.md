@@ -28,8 +28,7 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
 - **Switching from a CCU3:** upload `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` in the CCU3's software update.
 - **New install on a Raspberry Pi 3/4:** unpack the release `.zip` and write the `.img` inside it to the SD card.
 - **New install as a VM:** import the `.ova` (Proxmox, VMware, VirtualBox and so on); the LXC container is described
-  in [install-lxc.md](docs/install-lxc.md). The VM image is meant for testing, not for production (nor as the switch of an
-  OpenCCU VM), see the [recommendations](docs/recommendations.de.md#virtualisierung) (in German).
+  in [install-lxc.md](docs/install-lxc.md).
 - a new install can (as long as no devices are paired yet) import paired devices, keys, names and rooms from an
   (Open)CCU backup in one step. The backup's BidCos security key comes along as it is (its passphrase is asked as a
   check only, never as a gate; later key changes need it); an HmIP identity bound to another radio module is taken over
