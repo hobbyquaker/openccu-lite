@@ -29,6 +29,9 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
 - **New install on a Raspberry Pi 3/4:** unpack the release `.zip` and write the `.img` inside it to the SD card.
 - **New install as a VM:** import the `.ova` (Proxmox, VMware, VirtualBox and so on); the LXC container is described
   in [install-lxc.md](docs/install-lxc.md).
+- **Proxmox VM by script:** as root on the Proxmox VE host, a script creates the VM in one step (`--help` lists
+  the options):
+  `bash -c "$(wget -qLO - https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh)"`
 - a new install can (as long as no devices are paired yet) import paired devices, keys, names and rooms from an
   (Open)CCU backup in one step. The backup's BidCos security key comes along as it is (its passphrase is asked as a
   check only, never as a gate; later key changes need it); an HmIP identity bound to another radio module is taken over
@@ -36,6 +39,14 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
   ([switching.md](docs/switching.md)).
 - **Pairing and configuring devices, managing direct links:** install
   [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) from the addon catalogue.
+
+## Updating
+
+On the web interface's *Updates* page: *Check now*, *Download and stage*, *Reboot and install*. Or as root over SSH:
+`occulited update check` says whether a newer release is out, `occulited update install` installs it - after a backup
+to the configured backup targets, with its sha256 checked; `occulited update install <version>` installs a given
+version, an older one too. The commands and their options (`--yes` for scripts, `--no-backup`, `--file`, …) are in
+[occulited's docs/config.md](https://github.com/hobbyquaker/occulited/blob/master/docs/config.md).
 
 ## Documentation
 

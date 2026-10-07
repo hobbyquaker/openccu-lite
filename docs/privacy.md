@@ -49,13 +49,14 @@ Everything else stays on your local network, unless you point it elsewhere yours
 
 - **To:** `GET https://api.github.com/repos/hobbyquaker/openccu-lite/releases?per_page=20` (the feed can be changed
   in `occulited.json`, `system_update.feed`).
-- **When:** *Check now* on the Updates page, always. With *Check daily* on (off by default; the welcome page's GitHub
-  checkbox): 2–7 minutes after the start, then every 24–26 hours.
+- **When:** *Check now* on the Updates page, always, and `occulited update check` or `install` on the command line. With
+  *Check daily* on (off by default; the welcome page's GitHub checkbox): 2–7 minutes after the start, then every 24–26
+  hours.
 - **Sends:** the request line, `Accept: application/vnd.github+json`, `If-None-Match` with the last answer's ETag, the
   User-Agent. **Not sent:** the system's version, product or platform - the system picks the matching release from
   the list itself.
 - **The download** of an update (the image and its `.sha256` file, from GitHub's release assets) happens only when you
-  start it; a plain `GET` of the two files.
+  start it (on the Updates page, or with `occulited update install`); a plain `GET` of the two files.
 - **Off:** the default; clear *Check daily* to switch it off again. *Check now* still works.
 
 ### Device firmware check and download

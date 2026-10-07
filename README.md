@@ -22,6 +22,9 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
 
 - **Neuinstallation auf einem Raspberry Pi 3/4:** die `.zip` des Releases entpacken und die `.img` darin auf die SD-Karte schreiben.
 - **Neuinstallation als VM:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.).
+- **Proxmox-VM per Skript:** als root auf dem Proxmox-VE-Host legt ein Skript die VM in einem Schritt an (`--help`
+  zeigt die Optionen):
+  `bash -c "$(wget -qLO - https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh)"`
 
 ## Wechsel von (Open)CCU zu openccu-lite
 
@@ -29,6 +32,15 @@ In der OpenCCU-WebUI unter *Einstellungen → Systemsteuerung → Zentralen-Wart
 `openccu-lite-<produkt>-<version>.zip` hochladen. Beim Update von einer original CCU3 Firmware die `-ccu3.tgz`
 verwenden. Anlernungen, Schlüssel, Addons, Namen, Räume und Gewerke werden übernommen [switching.de.md](docs/switching.de.md). WebUI-Programme und Variablen entfallen ersatzlos. Für den Weg zurück unbedingt vorher ein
 Backup anlegen!
+
+## Update
+
+Auf der Seite *Updates* der Weboberfläche: *Jetzt prüfen*, *Herunterladen und bereitstellen*, *Neu starten und
+installieren*. Oder als root per SSH: `occulited update check` zeigt, ob es ein neueres Release gibt,
+`occulited update install` installiert es – nach einer Sicherung auf die eingerichteten Sicherungsziele und mit
+Prüfung der sha256-Summe; `occulited update install <version>` installiert eine bestimmte Version, auch eine ältere.
+Die Befehle und ihre Optionen (`--yes` für Skripte, `--no-backup`, `--file`, …) beschreibt
+[occulited's docs/config.md](https://github.com/hobbyquaker/occulited/blob/master/docs/config.md).
 
 ## Geräte anlernen und konfigurieren, Direktverknüpfungen verwalten
 
