@@ -50,6 +50,17 @@ expect 1 "a marker that is no number holds"
 printf '900\n' > "$DIR/changing"
 rm -f "$T/uptime"
 expect 1 "no readable uptime: held while the marker is there"
+# the change lets the units through one by one, in boot order, as it starts them
+uptime 100
+printf '900\nmultimacd\n' > "$DIR/changing"
+expect 1 "multimacd let through, rfd still held"
+printf '900\nmultimacd\nrfd\n' > "$DIR/changing"
+expect 0 "rfd let through: the change's own start"
+grep -q 'let through by the radio change' "$T/out" && ok "the journal line says it is the change's start" || bad "the line: $(cat "$T/out")"
+printf '900\nrfd-other\nxrfd\n' > "$DIR/changing"
+expect 1 "only the unit's exact name lets it through"
+printf 'rfd\n' > "$DIR/changing"
+expect 1 "a name on the deadline's line lets nothing through"
 rm -f "$DIR/changing"
 expect 0 "the marker gone: the unit starts"
 

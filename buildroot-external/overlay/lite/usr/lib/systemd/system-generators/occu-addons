@@ -37,13 +37,20 @@
 # never meets a refused connection at boot. "none" starts right after the network, the web server
 # and occulited (an MQTT broker, say), without waiting for the HmIP server's start.
 #
+# The needs are ordering only: no addon unit has Wants= (or Requires=) on an interface unit. The
+# radio daemons are started by the radio stack alone - their own units, enabled by its plan - and an
+# addon's start or restart never starts one; the addon copes with the interfaces there are (rfd
+# alone, rfd and hmipserver, hmipserver alone), as on a CCU. An addon unit that pulled them in
+# started a daemon on the old plan's files in the middle of a radio change, or on a module being
+# flashed. After= on a unit that does not start (not in the plan) orders nothing and waits for
+# nothing.
+#
 # An addon that copes with interfaces that do not answer yet - it retries within seconds and logs no
 # errors while it waits - may start before them (task 119, D-75): its catalogue entry declares
 # runtime.start "early", and occulited writes /usr/local/etc/config/addon-policy/<name>.start with
 # the one line "early" unless the user switched that off on the Addons page. Such a unit is ordered
-# after the network, the web server, occulited and occu-addons only, and Wants= its interface units
-# (its needs, or rfd and hmipserver when it declares none) without After= on them. A missing file or
-# any other content keeps the ordering above.
+# after the network, the web server, occulited and occu-addons only, and not on its interface units
+# at all. A missing file or any other content keeps the ordering above.
 #
 # An addon whose program a backup restore did not bring back (openccu-lite B-267: the addons keep
 # it in .nobackup directories, as on a CCU) is not started: ExecCondition=lite-addon-payload exits 1
@@ -126,22 +133,12 @@ for script in "${RCD}"/*; do
   # daemon-reload that makes these units exist, and a unit with User=addon-<id> fails if its
   # user is not there yet
   after="network.target lighttpd.service occulited.service occu-addons.service"
-  wants=
-  if early_of "${name}"; then
-    # started early: the interfaces are wanted, not waited for
-    case "${needs}" in
-      none) ;;
-      '') wants="Wants=rfd.service hmipserver.service" ;;
-      *) wants="Wants=${needs}" ;;
-    esac
-  else
+  # ordering only, never Wants= (see the top); an early addon is not ordered on its interfaces
+  if ! early_of "${name}"; then
     case "${needs}" in
       none) ;;
       '') after="${after} rfd.service hmipserver.service" ;;
-      *)
-        after="${after} ${needs}"
-        wants="Wants=${needs}"
-        ;;
+      *) after="${after} ${needs}" ;;
     esac
   fi
   # written as a new file: never through a link that might be in the way
@@ -153,7 +150,6 @@ for script in "${RCD}"/*; do
 [Unit]
 Description=Addon ${name} (/usr/local/etc/config/rc.d/${name})
 After=${after}
-${wants}
 PartOf=addons.target
 Before=addons.target
 

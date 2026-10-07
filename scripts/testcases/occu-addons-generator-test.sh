@@ -71,8 +71,8 @@ has addon-broker.service network.target && has addon-broker.service occu-addons.
 grep -q '^Wants=' "$EA/addon-broker.service" && bad "needs none: a Wants= line" || ok "needs none: no Wants="
 has addon-consumer.service rfd.service && has addon-consumer.service hmipserver.service \
   && ok "declared interfaces: after rfd and hmipserver" || bad "declared: $(grep ^After "$EA/addon-consumer.service")"
-grep -qx 'Wants=rfd.service hmipserver.service' "$EA/addon-consumer.service" \
-  && ok "declared interfaces: wanted" || bad "declared Wants: $(grep ^Wants "$EA/addon-consumer.service")"
+# openccu-lite B-308: the needs are ordering only - no addon unit pulls an interface unit in
+grep -q '^Wants=' "$EA/addon-consumer.service" && bad "declared interfaces: a Wants= line: $(grep ^Wants "$EA/addon-consumer.service")" || ok "declared interfaces: ordered after, not wanted"
 has addon-junk.service rfd.service && has addon-junk.service hmipserver.service && ! grep -q '^Wants=' "$EA/addon-junk.service" \
   && ok "an unknown id falls back to the safe default" || bad "unknown id: $(grep '^After\|^Wants' "$EA/addon-junk.service")"
 has addon-later.service rfd.service && has addon-later.service hmipserver.service \
@@ -96,14 +96,14 @@ if [ -f "$EA/addon-own.service" ] && [ ! -L "$EA/addon-own.service" ] && grep -q
 else
   bad "addon-own.service is not the generated unit: $(ls -l "$EA/addon-own.service" 2>&1)"
 fi
-has addon-own.service hmipserver.service && grep -qx 'Wants=hmipserver.service' "$EA/addon-own.service" \
+has addon-own.service hmipserver.service && ! grep -q '^Wants=' "$EA/addon-own.service" \
   && ok "that unit has the interfaces the entry declares" || bad "own: $(grep '^After\|^Wants' "$EA/addon-own.service")"
 [ -e "$EA/addon-own.service.d/05-order.conf" ] && bad "an order drop-in for a shipped unit is still written" || ok "no order drop-in for a shipped unit"
 empty=$(grep -c '^$' "$EA/addon-broker.service")
 [ "$empty" -le 2 ] && ok "no stray blank lines in [Unit]" || bad "blank lines: $empty"
 
-# task 119: an addon occulited lets start early (addon-policy/<name>.start = early) wants its
-# interfaces but is not ordered after them
+# task 119: an addon occulited lets start early (addon-policy/<name>.start = early) is not ordered
+# after its interfaces; since B-308 it does not want them either
 Y="$T/early-start"; RY="$Y/root"; EY="$Y/early"
 mkdir -p "$RY/usr/local/etc/config/rc.d" "$RY/usr/local/etc/config/addon-policy" "$EY"
 for n in eundeclared edeclared enone ewired ejunk eempty eblank late; do
@@ -131,20 +131,14 @@ for n in eundeclared edeclared enone ewired eblank; do
   base_only "addon-$n.service" && ok "early $n: after the network, lighttpd, occulited and occu-addons only" \
     || bad "early $n: After=$(yaft "addon-$n.service" | tr '\n' ' ')"
 done
-grep -qx 'Wants=rfd.service hmipserver.service' "$EY/addon-eundeclared.service" \
-  && ok "early, needs undeclared: wants rfd and hmipserver" || bad "early undeclared: $(grep ^Wants "$EY/addon-eundeclared.service")"
-grep -qx 'Wants=rfd.service hmipserver.service' "$EY/addon-edeclared.service" \
-  && ok "early, needs declared: wants the declared units" || bad "early declared: $(grep ^Wants "$EY/addon-edeclared.service")"
-grep -qx 'Wants=hs485d.service' "$EY/addon-ewired.service" \
-  && ok "early, needs hs485d: wants hs485d" || bad "early wired: $(grep ^Wants "$EY/addon-ewired.service")"
-grep -q '^Wants=' "$EY/addon-enone.service" && bad "early, needs none: a Wants= line" || ok "early, needs none: no Wants="
-grep -qx 'Wants=rfd.service hmipserver.service' "$EY/addon-eblank.service" \
-  && ok "early with blanks and a CR around the word: still early" || bad "early blank: $(grep '^After\|^Wants' "$EY/addon-eblank.service")"
+for n in eundeclared edeclared ewired enone eblank; do
+  grep -q '^Wants=' "$EY/addon-$n.service" && bad "early $n: a Wants= line: $(grep ^Wants "$EY/addon-$n.service")" || ok "early $n: no Wants="
+done
 for n in ejunk eempty; do
   yhas "addon-$n.service" rfd.service && yhas "addon-$n.service" hmipserver.service \
     && ok "$n: a .start without \"early\" keeps the ordering after the needs" || bad "$n: After=$(yaft "addon-$n.service" | tr '\n' ' ')"
 done
-yhas addon-late.service hmipserver.service && grep -qx 'Wants=hmipserver.service' "$EY/addon-late.service" \
+yhas addon-late.service hmipserver.service && ! grep -q '^Wants=' "$EY/addon-late.service" \
   && ok "no .start (switched off): after its needs as before" || bad "switched off: $(grep '^After\|^Wants' "$EY/addon-late.service")"
 for n in eundeclared edeclared enone; do
   grep -q '^Before=addons.target$' "$EY/addon-$n.service" && grep -q '^PartOf=addons.target$' "$EY/addon-$n.service" \
@@ -155,7 +149,7 @@ for f in "$EY"/addon-*.service; do
   sed -n 's/^\(After\|Before\|Requires\|Wants\)=//p' "$f" | tr ' ' '\n' | grep -q '^addon-' && ychained="$ychained ${f##*/}"
 done
 [ -z "$ychained" ] && ok "early: no addon unit is ordered against another addon" || bad "early: chained:$ychained"
-if grep -rqs '^Requires=\|^BindsTo=\|^Requisite=' "$EY"; then bad "early: a hard dependency on an interface: $(grep -rs '^Requires=\|^BindsTo=\|^Requisite=' "$EY")"; else ok "early: Wants= only, no hard dependency"; fi
+if grep -rqs '^Requires=\|^BindsTo=\|^Requisite=\|^Wants=' "$EY" "$EA"; then bad "a dependency that starts an interface: $(grep -rs '^Requires=\|^BindsTo=\|^Requisite=\|^Wants=' "$EY" "$EA")"; else ok "no addon unit pulls in a unit (no Wants=, Requires=, BindsTo=, Requisite=)"; fi
 
 # the ownership step: a confined addon's unit gives the addon's files to its user before every start
 # (an addon that ships a unit file among them); a root addon's unit and one without a policy get none

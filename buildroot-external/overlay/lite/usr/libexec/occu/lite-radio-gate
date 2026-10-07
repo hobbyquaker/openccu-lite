@@ -4,15 +4,18 @@
 #
 #   ExecCondition=+/usr/libexec/occu/lite-radio-gate <unit>
 #
-# A connection change (occulited) and the hotplug's re-plan (occulited radio hotplug) stop the
-# daemons, write a new plan and start them again. Between the stop and the new plan the run
-# directory still holds the old plan's files: a start that is not the change's own - an addon unit's
-# Wants=rfd.service hmipserver.service, occulited's addon supervisor, a user's systemctl, systemd's
-# own Restart= - used them (on the way back from HmIP only, hmipserver opened the raw UART multimacd
-# was given by the new plan and hung for five minutes). The change writes
-# /run/occulite/radio/changing before it stops the daemons and removes it once the new plan is
-# written, before its own starts; while it is there this check says no, and systemd skips the start
-# (Result=exec-condition, inactive, no failure and no further Restart=).
+# A connection change and a coprocessor flash (occulited) and the hotplug's re-plan (occulited
+# radio hotplug) stop the daemons, write a new plan (the flash keeps the old one) and start them
+# again. Between the stop and the new plan the run directory still holds the old plan's files, and a
+# flash holds the module: a start that is not the change's own - a user's systemctl, a unit that
+# wants a radio daemon, systemd's own Restart= - ran on them (on the way back from HmIP only,
+# hmipserver opened the raw UART multimacd was given by the new plan and hung for five minutes).
+# The change writes /run/occulite/radio/changing before it stops the daemons and removes it once
+# its own starts are done; while it is there this check says no, and systemd skips the start
+# (Result=exec-condition, inactive, no failure and no further Restart=). Afterwards the change lets
+# each unit through right before it starts it, in boot order: a line with the unit's name after the
+# deadline. So an outside start of rfd or hmipserver stays held until the change has started
+# multimacd.
 #
 # The marker's one line is a deadline in whole seconds of /proc/uptime (the monotonic clock: a box
 # without an RTC steps its wall clock). After it the gate no longer holds, should the change have
@@ -26,6 +29,10 @@ unit=${1:-the unit}
 gate="$DIR/changing"
 
 [ -e "$gate" ] || exit 0
+if [ -n "${1:-}" ] && tail -n +2 "$gate" 2>/dev/null | grep -qxF "$1"; then
+  echo "lite-radio-gate: $unit is let through by the radio change (its own start, on the new plan)"
+  exit 0
+fi
 
 deadline=
 read -r deadline _ <"$gate" 2>/dev/null
