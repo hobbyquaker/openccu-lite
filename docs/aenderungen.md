@@ -91,6 +91,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - LAN-Geräte: BidCoS-Gateways, HB-RF-ETH, HmIP-Access-Points und Gerätesuche auf einer Seite
 - DHCP mit der Herstellerkennung `openccu-lite` statt `eQ3-CCU3`
 - Hostname ändern ohne Neustart
+- Eine Neuinstallation heißt `openccu-lite-` und die letzten vier Stellen der MAC-Adresse (z. B. `openccu-lite-3f2a`) statt `openccu`; ein umgestiegenes System behält seinen Namen
 - Raspberry Pi 3/CCU3: der USB-Netzwerkchip wird zurückgesetzt, wenn er nach einem Warmstart oder im Recovery-System fehlt
 
 ## Sicherheit

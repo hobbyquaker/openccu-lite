@@ -540,12 +540,16 @@ plus the `addons.target.wants/` symlink. There is no ordering between addons (ta
 hanging start script held back every addon after it by name. `rfd.service hmipserver.service` is the safe default; the catalogue entry's
 `runtime.needs`, which occulited writes to `addon-policy/<name>.needs`, changes it (task 94): `none`
 drops the interfaces (the addon starts right after the network),
-a list of `rfd`, `hmipserver`, `hs485d` becomes `After=` and `Wants=`; anything else keeps the default. An addon
+a list of `rfd`, `hmipserver`, `hs485d` becomes `After=`; anything else keeps the default. **The needs are ordering
+only** (B-308): no addon unit has `Wants=` on an interface unit, so an addon's start or restart never starts a radio
+daemon - those are started by the radio stack alone (their units, enabled by its plan), and an addon copes with the
+interfaces there are (rfd alone, rfd and hmipserver, hmipserver alone), as on a CCU. `After=` on a unit the plan does
+not start waits for nothing. An addon
 whose catalogue entry declares `runtime.start: "early"` (task 119, D-75: it retries within seconds and logs no errors
 while the interfaces come up) gets `addon-policy/<name>.start` with the line `early` from occulited, unless the user
 switched the early start off on the Addons page (globally or for the addon). Its unit is then ordered after
-`network.target lighttpd.service occulited.service occu-addons.service` only and has `Wants=` for its needs (or `rfd.service
-hmipserver.service` when it declares none) without `After=` on them, so it starts before the interfaces are ready; a
+`network.target lighttpd.service occulited.service occu-addons.service` only, not on its interfaces, so it starts
+before they are ready; a
 file with anything else keeps the ordering above. `lite-unit-order-test.sh` checks that none of those four base units
 is itself ordered after an interface daemon. A change of the switches takes effect at the next boot. Safe mode (`/etc/config/safemode`) generates nothing, as
 `S98StartAddons` skipped the addons.

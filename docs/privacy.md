@@ -194,7 +194,7 @@ is then an internet connection you chose.
 
 | Connection | What goes out | When | Switch |
 | --- | --- | --- | --- |
-| DHCP (IPv4) | the host name (default `openccu`), the vendor class `openccu-lite` on Ethernet (option 60; a CCU3 sends `eQ3-CCU3` there), the MAC address as any DHCP client | at boot and at each lease renewal | Network page: static address |
+| DHCP (IPv4) | the host name (on a fresh install `openccu-lite-` and the last four hex digits of the Ethernet MAC address, e.g. `openccu-lite-3f2a`; a system switched from OpenCCU or a CCU3 keeps its own), the vendor class `openccu-lite` on Ethernet (option 60; a CCU3 sends `eQ3-CCU3` there), the MAC address as any DHCP client | at boot and at each lease renewal | Network page: static address |
 | DHCPv6 | the MAC-derived client id, as any DHCPv6 client | when IPv6 is set to DHCPv6 | Network page |
 | SSDP (UPnP) | `NOTIFY` at start (twice, a minute apart) and every 30 minutes, and answers to `M-SEARCH`: `SERVER: Linux UPnP/1.0 openccu-lite/<version>`, the description URL, the board serial or SGTIN as the UUID and serial (the first announcement waits up to 15 s for it; the host name when none is known, taken back with a `byebye` once the serial is), the friendly name `openccu-lite - <host name>`; the description names the web UI as `http://<name the certificate covers>/` | always | firewall |
 | eQ-3 discovery (UDP 43439) | answers to a CCU finder's probe: the type, the serial or SGTIN, the version | always, only when asked | firewall |
