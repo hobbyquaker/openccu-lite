@@ -87,6 +87,7 @@ jobs:
         run: |
           sh scripts/testcases/lite-unit-order-test.sh
           sh scripts/testcases/lite-network-reload-test.sh
+          sh scripts/testcases/lite-default-hostname-test.sh
           sh scripts/testcases/occu-addons-generator-test.sh
           sh scripts/testcases/lite-addon-own-test.sh
           sh scripts/testcases/lite-addon-payload-test.sh

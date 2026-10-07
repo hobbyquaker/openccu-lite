@@ -1,0 +1,87 @@
+#!/bin/sh
+# openccu-lite (task 327, hobbyquaker/openccu-lite#4): the host name of a fresh install.
+#
+# OpenCCU's netconfig template names every system "openccu", so a fresh openccu-lite registered
+# with the router under OpenCCU's name, and two of them under the same one. openccu-lite's
+# template leaves HOSTNAME empty, and this runs before occu-network.service's start
+# (ExecStartPre) to fill it: openccu-lite-<the last four hex digits of eth0's MAC>, lower case,
+# e.g. openccu-lite-3f2a.
+#
+# Only where no host name is configured: a netconfig with a HOSTNAME is never touched - a system
+# switched from OpenCCU or a CCU3 keeps its name (DNS, bookmarks, certificates and passkeys are
+# bound to it), and so does an openccu-lite installed before this, even as "openccu". A network
+# reset (the recovery's, which removes netconfig) starts from the template again and gets the
+# default.
+#
+# eth0 may still be on its way (the Pi 3's smsc95xx is a module udev loads): the script waits for
+# it up to 10 s, on the first boot only, as later boots have a name. Without eth0 the first other
+# Ethernet or WLAN interface with an address gives the digits; with none at all the name is
+# openccu-lite. Never fails the unit.
+#
+# OCCU_NETCONFIG, OCCU_SYSNET and OCCU_HOSTNAME_WAIT (tenths of a second) point it elsewhere for
+# scripts/testcases/lite-default-hostname-test.sh.
+set -u
+NETCONFIG=${OCCU_NETCONFIG:-/etc/config/netconfig}
+SYSNET=${OCCU_SYSNET:-/sys/class/net}
+WAIT=${OCCU_HOSTNAME_WAIT:-100}
+
+if [ ! -f "$NETCONFIG" ]; then
+  echo "<4>no $NETCONFIG: no default host name set"
+  exit 0
+fi
+HOSTNAME=
+# shellcheck disable=SC1090
+. "$NETCONFIG"
+[ -n "$HOSTNAME" ] && exit 0
+
+# the address of an interface, lower case, when it has a real one
+mac() { # <iface>
+  a=$(tr 'A-F' 'a-f' <"$SYSNET/$1/address" 2>/dev/null)
+  case "$a" in
+    ""|00:00:00:00:00:00) return 1 ;;
+    ??:??:??:??:??:??) echo "$a" ;;
+    *) return 1 ;;
+  esac
+}
+
+n=0
+while [ ! -e "$SYSNET/eth0" ] && [ "$n" -lt "$WAIT" ]; do
+  sleep 0.1
+  n=$((n + 1))
+done
+addr=$(mac eth0)
+from=eth0
+if [ -z "$addr" ]; then
+  for i in "$SYSNET"/eth* "$SYSNET"/en* "$SYSNET"/wlan*; do
+    [ -e "$i" ] || continue
+    from=${i##*/}
+    addr=$(mac "$from") && break
+  done
+fi
+if [ -n "$addr" ]; then
+  # aa:bb:cc:dd:3f:2a -> 3f2a
+  suffix=$(echo "$addr" | cut -d: -f5,6 | tr -d :)
+  name="openccu-lite-$suffix"
+else
+  from=none
+  name=openccu-lite
+fi
+
+# the new netconfig beside the old one, with its owner and mode, then moved over it
+tmp="$NETCONFIG.lite-default-hostname"
+if ! cp -p "$NETCONFIG" "$tmp" 2>/dev/null; then
+  echo "<3>cannot write beside $NETCONFIG: the host name stays empty"
+  exit 0
+fi
+if grep -q '^HOSTNAME=' "$NETCONFIG"; then
+  sed "s/^HOSTNAME=.*/HOSTNAME=$name/" "$NETCONFIG" >"$tmp"
+else
+  { echo "HOSTNAME=$name"; cat "$NETCONFIG"; } >"$tmp"
+fi
+if mv -f "$tmp" "$NETCONFIG"; then
+  echo "default host name of a fresh install: $name (from $from)"
+else
+  rm -f "$tmp"
+  echo "<3>could not write $NETCONFIG: the host name stays empty"
+fi
+exit 0

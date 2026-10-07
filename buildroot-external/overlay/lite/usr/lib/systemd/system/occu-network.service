@@ -15,6 +15,9 @@
 # Reload: a new DHCP lease under the current host name (lite-network-reload). occulited asks for it
 # after a rename, so the DHCP server and the router's DNS learn the new name without a reboot; the
 # client stays in this cgroup. A static setup has nothing to tell and the reload does nothing.
+# Before the start, a fresh install's netconfig gets its host name (lite-default-hostname):
+# openccu-lite-<the last four hex digits of eth0's MAC>, only where HOSTNAME is still empty, as
+# openccu-lite's netconfig template leaves it.
 [Unit]
 Description=Network
 After=occu-firewall.service occu-init-system.service
@@ -25,6 +28,7 @@ Wants=network.target
 Type=oneshot
 RemainAfterExit=yes
 ExecStartPre=-/usr/libexec/occu/lite-psplash boot S40network
+ExecStartPre=-/usr/libexec/occu/lite-default-hostname
 ExecStart=/etc/init.d/S40network.script start
 ExecStartPost=-/usr/libexec/occu/lite-psplash done S40network
 ExecStop=/etc/init.d/S40network.script stop
