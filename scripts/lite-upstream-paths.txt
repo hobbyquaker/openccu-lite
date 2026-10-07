@@ -39,6 +39,9 @@ remove release/updatepkg/oci_*
 remove helm/
 remove scripts/install-docker.sh
 
+# the Proxmox installer: lite's own, it installs an openccu-lite VM (task 328)
+ours scripts/install-proxmox.sh
+
 # the ReGa WebUI's update check
 remove release/LATEST-VERSION.js
 
