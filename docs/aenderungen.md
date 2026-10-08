@@ -129,6 +129,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - Addons mit eigener Oberfläche öffnen innerhalb der Weboberfläche und lassen sich anheften
 - Die Seiten eines Addons sind auch mit einem API-Token erreichbar (für Apps und Skripte)
 - `tclrega.so` ist ein Shim, der nur die Sitzungsprüfung beantwortet
+- Von der WebUI bleiben die Dateien, die Addons auf einer CCU lesen, an den Pfaden der CCU: die Gerätebilder (`/www/config/img/devices/50` und `250`), `DEVDB.tcl`, die Übersetzungen `translate.lang*.js` und `stringtable_de.txt`; lighttpd liefert sie wie die CCU ohne Anmeldung und nur lesend aus
 - Nach einer Wiederherstellung zeigt die Seite Zusatzsoftware, welche Addons neu installiert werden müssen
 
 ## Datenschutz

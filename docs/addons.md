@@ -72,6 +72,26 @@ manifest the catalogue in the image carries for it and, for an addon without a m
 
 Enabling such an addon anyway is the user's call and the UI asks first.
 
+## The WebUI's files at the CCU's paths
+
+openccu-lite has no WebUI, but it ships the WebUI's files that addons read on a CCU, at the CCU's
+paths, built from OpenCCU-Base the way OpenCCU builds them (with OpenCCU's patches to the
+translations):
+
+| Path | What it is | URL |
+| --- | --- | --- |
+| `/www/config/img/devices/250/`, `/www/config/img/devices/50/` | the device drawings, 250 and 50 px, and their `coupling/` pictures | `/config/img/devices/…` |
+| `/www/config/devdescr/DEVDB.tcl` | which picture belongs to which device type, and where each channel sits in it (`DEV_PATHS`, `DEV_HIGHLIGHT`) | `/config/devdescr/DEVDB.tcl` |
+| `/www/webui/js/lang/<lang>/translate.lang*.js` | the WebUI's translations, `de` and `en` | `/webui/js/lang/<lang>/translate.lang*.js` |
+| `/www/config/stringtable_de.txt` | the WebUI's stringtable | `/config/stringtable_de.txt` |
+
+An addon reads them from the file system, as on a CCU (they are root's, read-only for everyone),
+or a browser fetches them over HTTP: lighttpd serves exactly these URLs from `/www`, read-only
+(GET and HEAD), without a session, as a CCU does, and with no directory listing. Nothing else of
+the WebUI is there. They change with the system's updates (a new device brings its picture and
+its `DEVDB.tcl` entry), so an addon need not carry its own copy. Their licence is OpenCCU-Base's
+for the WebUI, the Apache License 2.0; the licence page and the SBOM list them.
+
 ## Architecture and addon binaries
 
 `/usr/local` survives a switch, and so do the binaries in it. An addon installed on a machine this
