@@ -113,6 +113,27 @@ rm -f "${TARGET_DIR}/bin/checkInternet"
 rm -f "${TARGET_DIR}/bin/setfirewall.tcl" "${TARGET_DIR}/lib/libfirewall.tcl" \
 	"${TARGET_DIR}/lib/libsecuritylevel.tcl" "${TARGET_DIR}/bin/enforcesecuritylevel.tcl"
 
+# hmipserver runs HMIPServer.jar with the ESHBridge, and on a system without an HmIP module
+# HMServer.jar for the VirtualDevices half alone (occulited's radio plan, as OpenCCU's S62HMServer).
+# openccu-base comes from openccu-lite-base, which has none of HMServer's FreeMarker pages and no
+# measurement templates (task 329), and takes HMServer.jar alone from OpenCCU-Base's release archive
+# (B-313): the overlay's four group pages, which occulited reads, are the only pages. The build stops
+# when HMServer.jar is missing - hmipserver would loop on such a system - or when anything else
+# shows up there again.
+if [ ! -s "${TARGET_DIR}/opt/HMServer/HMServer.jar" ]; then
+	echo "post-build (lite): ERROR: /opt/HMServer/HMServer.jar is missing - a system without an HmIP module needs it for VirtualDevices (B-313)" >&2
+	exit 1
+fi
+if [ -e "${TARGET_DIR}/opt/HMServer/measurement" ]; then
+	echo "post-build (lite): ERROR: /opt/HMServer/measurement is in the image - openccu-base is not openccu-lite-base's" >&2
+	exit 1
+fi
+lite_pages=$(cd "${TARGET_DIR}/opt/HMServer/pages" && ls | sort | tr '\n' ' ')
+if [ "${lite_pages}" != "GroupChooseDialog.ftl GroupConfigureDialog.ftl GroupEditPage.ftl GroupListPage.ftl " ]; then
+	echo "post-build (lite): ERROR: /opt/HMServer/pages holds ${lite_pages}- only the overlay's four group pages belong there" >&2
+	exit 1
+fi
+
 # The CA bundle ships prebuilt (D-89): the boot copies it instead of running
 # update-ca-certificates, unless the user has added certificates (lite-ca-certificates).
 sh "$(dirname "$0")/ca-prebuilt.sh" "${TARGET_DIR}" "${HOST_DIR:-}"
@@ -247,7 +268,8 @@ sh "$(dirname "$0")/psplash-logo.sh" "${BR2_CONFIG}"
 # symbol it does not know without a word. Nothing would fail at build time: the real tclrega asks a
 # ReGaHss that does not run, and every addon settings page would refuse every session. So the build
 # stops here when /lib/tclrega.so is not package/occulited's shim (it names the session directory)
-# or when ReGaHss, its init script or a WebUI tree is in the image.
+# or when ReGaHss, its init script or a WebUI tree is in the image. Of the WebUI, /www/config and
+# /www/webui hold exactly the files addons read on a CCU (task 331), checked below.
 #
 # /www/rega goes as a whole (task 179, the maintainer, 2026-09-19): its one file, OpenCCU-Base's
 # licenseinfo.htm (upstream builds it without the WebUI too, #4183), is eQ-3's CCU3 list of 2018 and
@@ -258,12 +280,15 @@ if [ ! -f "${LITE_TCLREGA}" ] || ! grep -q "/var/run/occulite/sessions" "${LITE_
 	echo "post-build (lite): ERROR: /lib/tclrega.so is missing or not package/occulited's shim" >&2
 	exit 1
 fi
-for lite_rega in bin/ReGaHss etc/init.d/S70ReGaHss www/webui www/config www/api www/ise www/pda; do
+for lite_rega in bin/ReGaHss etc/init.d/S70ReGaHss www/api www/ise www/pda; do
 	if [ -e "${TARGET_DIR}/${lite_rega}" ] || [ -L "${TARGET_DIR}/${lite_rega}" ]; then
 		echo "post-build (lite): ERROR: /${lite_rega} is in the image - ReGaHss or the WebUI came back" >&2
 		exit 1
 	fi
 done
+# The WebUI's files that addons read on a CCU, at the CCU's paths (task 331, package/openccu-base),
+# and nothing else of the WebUI under /www/config and /www/webui.
+sh "$(dirname "$0")/webui-files-guard.sh" "${TARGET_DIR}"
 rm -f "${TARGET_DIR}/www/rega/licenseinfo.htm"
 rmdir "${TARGET_DIR}/www/rega" 2>/dev/null || true
 if [ -e "${TARGET_DIR}/www/rega" ]; then

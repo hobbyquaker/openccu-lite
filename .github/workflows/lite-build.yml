@@ -74,6 +74,15 @@ jobs:
       - name: occulited in the image is the pinned commit
         # the guard the lite post-build runs on the image: a binary of another pin stops the build
         run: sh scripts/testcases/lite-occulited-version-guard-test.sh
+      - name: The WebUI's files for addons
+        # task 331: the post-build guard on fake targets (exactly the device pictures, DEVDB.tcl, the
+        # translations and the stringtable under /www), the patch sections lite_series.py keeps for
+        # them, and stage_lite_www.sh on a made-up source (DEVDB.tcl in sorted order)
+        run: sh scripts/testcases/lite-webui-files-test.sh
+      - name: HMServer.jar for VirtualDevices without an HmIP module
+        # B-313: openccu-base takes HMServer.jar from OpenCCU-Base's release archive (hash, install,
+        # licence step), the post-build guard requires it, and the SBOM lists it
+        run: sh scripts/testcases/lite-hmserver-jar-test.sh
       - name: The boot order is a dependency graph
         # the units' After= edges against the intended graph (no serial SysV chain coming back, no
         # cycle), /var/run a link before any early writer (usbmount's lock under /run, tmpfiles L+),

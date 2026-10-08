@@ -655,6 +655,54 @@ fi
 kill "$ECHO_PID"
 rm -f /etc/config/lighttpd/echo.conf
 
+echo "---- the WebUI's files for addons: device pictures, DEVDB.tcl, translations (task 331)"
+# package/openccu-base installs them under /www at the CCU's paths (root, 0644); the lite
+# webui.conf serves exactly these read-only from the document root, without a session, and
+# everything else under /config/ and /webui/ stays the shell's (the stand-in: 404)
+mkdir -p /www/config/img/devices/250/coupling /www/config/img/devices/50 /www/config/devdescr /www/webui/js/lang/de /www/webui/js/lang/en
+printf '\211PNG\r\n\032\n250' >/www/config/img/devices/250/131_hmip-wrc6.png
+printf '\211PNG\r\n\032\ncpl' >/www/config/img/devices/250/coupling/c_1.png
+printf '\211PNG\r\n\032\n50' >/www/config/img/devices/50/131_hmip-wrc6_thumb.png
+printf '#!/bin/tclsh\nset DEV_LIST {HmIP-WRC6}\n' >/www/config/devdescr/DEVDB.tcl
+printf 'stringtable\n' >/www/config/stringtable_de.txt
+printf 'jQuery.extend(true, langJSON, {"de": {}});\n' >/www/webui/js/lang/de/translate.lang.js
+printf 'jQuery.extend(true, langJSON, {"en": {}});\n' >/www/webui/js/lang/en/translate.lang.extension.js
+printf 'not served\n' >/www/webui/js/lang/translate.js
+printf 'not served\n' >/www/config/devdescr/other.tcl
+chmod 0644 /www/config/img/devices/250/*.png /www/config/img/devices/250/coupling/*.png /www/config/img/devices/50/*.png \
+  /www/config/devdescr/*.tcl /www/config/stringtable_de.txt /www/webui/js/lang/translate.js /www/webui/js/lang/*/*.js
+apply "the WebUI's files"
+# served <label> <path> <content type>: 200 with that type and the file's bytes, over https and http, no session
+served() {
+  label=$1 path=$2 type=$3
+  for url in "$S$path" "http://ccu$path"; do
+    # shellcheck disable=SC2086
+    got=$(curl -sk --max-time 5 -o /tmp/got -w '%{http_code} %{content_type}' $R "$url")
+    if [ "$got" = "200 $type" ] && cmp -s /tmp/got "/www$path"; then ok "$label ($url): $got"; else bad "$label ($url): got '$got', want '200 $type' and the file"; fi
+  done
+}
+served "a device picture, 250 px" /config/img/devices/250/131_hmip-wrc6.png image/png
+served "a coupling picture" /config/img/devices/250/coupling/c_1.png image/png
+served "a device picture, 50 px" /config/img/devices/50/131_hmip-wrc6_thumb.png image/png
+served "DEVDB.tcl" /config/devdescr/DEVDB.tcl text/x-tcl
+served "stringtable_de.txt" /config/stringtable_de.txt text/plain
+served "translate.lang.js (de)" /webui/js/lang/de/translate.lang.js text/javascript
+served "translate.lang.extension.js (en)" /webui/js/lang/en/translate.lang.extension.js text/javascript
+# shellcheck disable=SC2086
+{
+expect "HEAD a device picture" 200 - $R -I $S/config/img/devices/250/131_hmip-wrc6.png
+expect "a missing picture: 404" 404 - $R $S/config/img/devices/250/missing.png
+expect "the pictures' directory: no listing" 403 - $R $S/config/img/devices/
+expect "the 250 px directory: no listing" 403 - $R $S/config/img/devices/250/
+expect "an encoded way out of the pictures: 404" 404 - $R "$S/config/img/devices/250/..%2f..%2fdevdescr%2fother.tcl"
+expect "another file next to DEVDB.tcl stays the shell's" 404 - $R $S/config/devdescr/other.tcl
+expect "the translations' loader stays the shell's" 404 - $R $S/webui/js/lang/translate.js
+expect "/config/devdescr/ stays the shell's" 404 - $R $S/config/devdescr/
+expect "a POST to DEVDB.tcl: 403" 403 - $R -X POST -d a=b $S/config/devdescr/DEVDB.tcl
+expect "a PUT to a picture: 403" 403 - $R -X PUT -d a=b $S/config/img/devices/250/131_hmip-wrc6.png
+}
+if curl -sk --max-time 5 $R $S/config/img/devices/250/ | grep -qi 'index of'; then bad "the 250 px directory is listed"; else ok "the 250 px directory is not listed"; fi
+
 echo "---- what the unprivileged lighttpd touched"
 # the sandboxed unit lets lighttpd write its runtime directory and the upload directories, nothing
 # else: here the user, running with root's file system view, must not have created a file anywhere

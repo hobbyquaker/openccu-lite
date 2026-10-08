@@ -53,3 +53,17 @@ the OpenCCU-Base CMake definitions to generate only WebUI, device-type, and Tcl
 assets with host tools; it does not compile target binaries or libraries. The
 result is then passed to `validate_patches.sh` to verify the complete patch
 series with zero fuzz.
+
+openccu-lite builds from openccu-lite-base, OpenCCU-Base without the WebUI
+sources and without HMServer's FreeMarker pages (task 329), so its build applies
+only the series' sections outside `www/` and `opt/HMServer/pages/`, plus those on
+the WebUI files openccu-lite ships for addons at the CCU's paths (task 331): the
+device pictures under `www/config/img/devices/`, `www/config/devdescr/DEVDB.tcl`,
+`www/config/stringtable_de.txt` and `www/webui/js/lang/<lang>/translate.lang*.js`.
+`stage_lite_www.sh` stages those as the classic build does (DEVDB.tcl generated
+by upstream's `create_devdb_tcl.tcl`, in a sorted order), `lite_series.py` writes
+the sections per patch, 43 of the 162 have any, and the series itself stays as
+OpenCCU keeps it. `check-openccu-base` validates exactly that part with
+`validate_lite_patches.sh`; `stage_validation_rootfs.sh` stages the WebUI only
+from a source that has it. Refreshing the complete series with
+`update_patchfiles.sh` and `validate_patches.sh` still needs OpenCCU-Base itself.

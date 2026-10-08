@@ -3,4 +3,6 @@ sha256  906d7b6e8f3dc649c5716577a33dc1d2fd9afa41622c3d52e00029ba683bb1a6  licens
 sha256  aa9639372555d45bf15b818ae303075ce0c27874a11e1276e48f120718bcb912  licenses/HMSL2.txt
 sha256  edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6  licenses/gpl-2.0.txt
 sha256  20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95  licenses/lgpl-2.1.txt
-sha256  f9ec5ef226b9736259a1d8708924cc193829eada8501a1421669a016f14c53ad  openccu-base-3.89.11-git4.tar.gz
+sha256  7f12b76011e6f3c472ebdcf65c8f51d7288e193724fe31f478d75f5dc13aaea9  openccu-base-3.89.11-lite.1-git4.tar.gz
+# OpenCCU-Base's own release archive, for HMServer.jar alone (B-313); GitHub's archive of the tag
+sha256  6464eab8930c5460a26c126d9191652154c2808dd158e7bfa05c529251206383  OpenCCU-Base-3.89.11.tar.gz

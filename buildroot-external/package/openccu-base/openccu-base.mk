@@ -4,10 +4,33 @@
 #
 ################################################################################
 
-OPENCCU_BASE_VERSION = 3.89.11
+# openccu-lite-base's tag <OpenCCU-Base release>-lite.<N> on its branch lite (task 330); the
+# compat version is the release itself (PRODUCT_VERSION, the recovery's hm-platform)
+OPENCCU_BASE_VERSION = 3.89.11-lite.1
 OPENCCU_BASE_COMPAT_VERSION = 3.89.11
-OPENCCU_BASE_SITE = https://github.com/OpenCCU/OpenCCU-Base
+# openccu-lite-base: OpenCCU-Base filtered to the paths this build uses - without the WebUI,
+# hss_led, eq3configd, ssdpd, HMServer.jar with its pages and the prebuilt binaries - with
+# upstream's tags; every commit links its upstream original (task 329). Its own download directory keeps its tarball apart from upstream's,
+# which has the same name.
+OPENCCU_BASE_SITE = https://github.com/hobbyquaker/openccu-lite-base.git
 OPENCCU_BASE_SITE_METHOD = git
+OPENCCU_BASE_DL_SUBDIR = openccu-lite-base
+
+# HMServer.jar comes from OpenCCU-Base's own release archive at the compat version (B-313): a
+# system without an HmIP module runs hmipserver as HMServer.jar for its VirtualDevices half
+# (occulited's radio plan, as OpenCCU's S62HMServer), and openccu-lite-base does not carry it.
+# Only the jar is taken from the archive - the same file the recovery's hm-platform downloads.
+OPENCCU_BASE_HMSERVER_ARCHIVE = OpenCCU-Base-$(OPENCCU_BASE_COMPAT_VERSION).tar.gz
+OPENCCU_BASE_EXTRA_DOWNLOADS = \
+	https://github.com/OpenCCU/OpenCCU-Base/archive/$(OPENCCU_BASE_COMPAT_VERSION)/$(OPENCCU_BASE_HMSERVER_ARCHIVE)
+
+# openccu-lite-base has neither the WebUI sources nor the prebuilt ReGaHss: a product that wants
+# them needs OpenCCU-Base itself (and the full rootfs patch series) again.
+ifeq ($(BR2_PACKAGE_OPENCCU_BASE),y)
+ifneq ($(BR2_PACKAGE_OPENCCU_BASE_REGAHSS)$(BR2_PACKAGE_OPENCCU_BASE_WEBUI),)
+$(error openccu-base: BR2_PACKAGE_OPENCCU_BASE_REGAHSS and _WEBUI need OpenCCU-Base, not openccu-lite-base (task 329))
+endif
+endif
 OPENCCU_BASE_LICENSE = HMSL-2.0, Apache-2.0 (WebUI), \
 	GPL-2.0+ (kernel modules), LGPL-2.1 (libraries)
 OPENCCU_BASE_LICENSE_FILES = licenses/licenses.md licenses/HMSL2.txt \
@@ -76,30 +99,30 @@ define OPENCCU_BASE_PREPARE_ROOTFS_PATCH_INPUTS
 	done
 	$(INSTALL) -d -m 0755 "$(@D)/build/rootfs/firmware"
 	cp -a "$(@D)/firmware/." "$(@D)/build/rootfs/firmware/"
+	# the WebUI's files addons read on a CCU (task 331): the device pictures, DEVDB.tcl generated
+	# as the classic build generates it, stringtable_de.txt and the translate.lang*.js files
+	$(OPENCCU_BASE_ROOTFS_PATCH_DIR)/stage_lite_www.sh "$(@D)" "$(@D)/build/rootfs" \
+		"$(HOST_DIR)/bin/tclsh8.6" "$(HOST_DIR)/bin/python3"
 endef
 ifneq ($(BR2_PACKAGE_OPENCCU_BASE_COMPAT_LIBS_ONLY),y)
 OPENCCU_BASE_PRE_BUILD_HOOKS += OPENCCU_BASE_PREPARE_ROOTFS_PATCH_INPUTS
 endif
 
-# Apply the OpenCCU rootfs patch stack after CMake has generated the WebUI and
-# device types, but before any files are installed into TARGET_DIR.
+# Apply the OpenCCU rootfs patch stack after CMake has generated the device types and the
+# homematic Tcl package, but before any files are installed into TARGET_DIR. openccu-lite-base
+# has neither the WebUI nor HMServer's pages, so only the patches' sections outside www/ and
+# opt/HMServer/pages/ apply, plus those on the WebUI files staged above (lite_series.py writes
+# them); the series itself stays as OpenCCU keeps it (tasks 329, 331).
 define OPENCCU_BASE_APPLY_ROOTFS_PATCHES
-	test -s "$(@D)/build/rootfs/www/webui/webui.js"
-	test -s "$(@D)/build/rootfs/www/webui/style.css"
-	test -s "$(@D)/build/rootfs/www/config/st_values.cgi"
-	test -s "$(@D)/build/rootfs/opt/HMServer/pages/AvailableFirmware.ftl"
 	test -s "$(@D)/build/rootfs/bin/hm_autoconf"
 	test -s "$(@D)/build/rootfs/usr/lib/tcl8.2/homematic/homematic.tcl"
-	# Legacy patches expect the generated template strings at the beginning of
-	# webui.js to be split into individual lines.
-	$(SHELL) "$(OPENCCU_BASE_ROOTFS_PATCH_DIR)/prepare_patch_input.sh" \
-		"$(@D)/build/rootfs"
+	test -s "$(@D)/build/rootfs/firmware/rftypes/rf_cfm_tw.xml"
+	rm -rf "$(@D)/rootfs-patches-lite"
+	$(HOST_DIR)/bin/python3 "$(OPENCCU_BASE_ROOTFS_PATCH_DIR)/lite_series.py" \
+		"$(OPENCCU_BASE_ROOTFS_PATCH_DIR)" "$(@D)/rootfs-patches-lite"
 	rm -f "$(@D)/build/rootfs/.applied_patches_list"
 	$(APPLY_PATCHES) "$(@D)/build/rootfs" \
-		"$(OPENCCU_BASE_ROOTFS_PATCH_DIR)" \*.patch
-	$(SHELL) "$(OPENCCU_BASE_ROOTFS_PATCH_DIR)/finalize_patch_input.sh" \
-		"$(@D)/build/rootfs"
-	chmod 0755 "$(@D)/build/rootfs/www/config/fileupload.ccc"
+		"$(@D)/rootfs-patches-lite" \*.patch
 endef
 ifeq ($(OPENCCU_BASE_ENABLE_ROOTFS_PATCHING),YES)
 ifneq ($(BR2_PACKAGE_OPENCCU_BASE_COMPAT_LIBS_ONLY),y)
@@ -114,7 +137,7 @@ define OPENCCU_BASE_INSTALL_TARGET_CMDS
 	$(INSTALL) -d -m 0755 $(TARGET_DIR)/bin
 
 	# collect own compiled binaries from $(@D)/build/rootfs/bin
-	for file in SetInterfaceClock crypttool eq3configcmd eq3configd hs485d hs485dLoader hss_led multimacd rfd ssdpd; do \
+	for file in SetInterfaceClock crypttool eq3configcmd hs485d hs485dLoader multimacd rfd; do \
 		$(INSTALL) -m 0755 "$(@D)/build/rootfs/bin/$$file" "$(TARGET_DIR)/bin/$$file"; \
 	done
 	# collect staged scripts/bins from $(@D)/build/rootfs/bin
@@ -125,7 +148,7 @@ define OPENCCU_BASE_INSTALL_TARGET_CMDS
 	$(INSTALL) -d -m 0755 $(TARGET_DIR)/lib
 
 	# collect own compiled libraries from $(@D)/build/rootfs/lib
-	for lib in libLanDeviceUtils.so libUnifiedLanComm.so libXmlRpc.so libelvutils.so libeq3config.so libfirewall.tcl libhsscomm.so libxmlparser.so tclrpc.so; do \
+	for lib in libLanDeviceUtils.so libUnifiedLanComm.so libXmlRpc.so libelvutils.so libeq3config.so libhsscomm.so libxmlparser.so tclrpc.so; do \
 		$(INSTALL) -m 0644 "$(@D)/build/rootfs/lib/$$lib" "$(TARGET_DIR)/lib/$$lib"; \
 	done
 
@@ -146,6 +169,25 @@ define OPENCCU_BASE_INSTALL_TARGET_CMDS
 	# copy the complete staged /opt tree
 	$(INSTALL) -d -m 0755 "$(TARGET_DIR)/opt"
 	cp -av "$(@D)/build/rootfs/opt/." "$(TARGET_DIR)/opt/"
+
+	# HMServer.jar from OpenCCU-Base's release archive, for a system without an HmIP module (B-313)
+	$(TAR) -xzOf "$(OPENCCU_BASE_DL_DIR)/$(OPENCCU_BASE_HMSERVER_ARCHIVE)" \
+		"OpenCCU-Base-$(OPENCCU_BASE_COMPAT_VERSION)/opt/HMServer/HMServer.jar" \
+		> "$(@D)/HMServer.jar"
+	test -s "$(@D)/HMServer.jar"
+	$(INSTALL) -D -m 0644 "$(@D)/HMServer.jar" "$(TARGET_DIR)/opt/HMServer/HMServer.jar"
+
+	# the WebUI's files addons read on a CCU, at the CCU's paths under /www (task 331): staged by
+	# stage_lite_www.sh and patched by the series as in the classic build; root, 0644, dirs 0755
+	rm -rf "$(TARGET_DIR)/www/config" "$(TARGET_DIR)/www/webui"
+	cd "$(@D)/build/rootfs/www" && \
+	find config/img/devices config/devdescr config/stringtable_de.txt webui/js/lang -type f \
+		\( -path 'config/img/devices/*.png' -o -path config/devdescr/DEVDB.tcl \
+		-o -path config/stringtable_de.txt -o -path 'webui/js/lang/*/translate.lang*.js' \) \
+		-print | LC_ALL=C sort | while read -r file; do \
+		$(INSTALL) -D -m 0644 "$$file" "$(TARGET_DIR)/www/$$file" || exit 1; \
+	done
+	find "$(TARGET_DIR)/www/config" "$(TARGET_DIR)/www/webui" -type d -exec chmod 0755 {} +
 endef
 else
 define OPENCCU_BASE_INSTALL_TARGET_CMDS

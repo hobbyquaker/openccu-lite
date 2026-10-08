@@ -143,7 +143,7 @@ check-openccu-base: buildroot-$(BUILDROOT_VERSION) build-$(PRODUCT)/.config
 		python3 scripts/testcases/build/test_version_headers.py "$$openccu_base_dir"; \
 		$(OPENCCU_BASE_ROOTFS_PATCH_DIR)/stage_validation_rootfs.sh \
 			"$$openccu_base_dir" "$$validation_dir/rootfs"; \
-		$(OPENCCU_BASE_ROOTFS_PATCH_DIR)/validate_patches.sh \
+		$(OPENCCU_BASE_ROOTFS_PATCH_DIR)/validate_lite_patches.sh \
 			"$$validation_dir/rootfs" "$$openccu_base_dir"
 
 clean-all: $(addsuffix -clean, $(PRODUCTS))

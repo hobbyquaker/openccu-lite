@@ -40,6 +40,18 @@ tclsh=$(resolve_executable "${TCLSH:-tclsh}")
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/openccu-validation-assets.XXXXXX")
 trap 'rm -rf -- "$build_dir"' EXIT
 
+# openccu-lite-base (task 329) has no WebUI: stage the WebUI's assets only from a source that has
+# them, OpenCCU-Base itself.
+if [[ -f $openccu_base_source/src/webui/CMakeLists.txt ]]; then
+  webui_subdirectory=src/webui
+  webui_targets=(webui-assets)
+  webui_assets=(www/webui/style.css www/webui/webui.js)
+else
+  webui_subdirectory=
+  webui_targets=()
+  webui_assets=()
+fi
+
 # Use the asset subdirectories from OpenCCU-Base directly. A small driver
 # project with no compiled languages keeps CMake from probing a compiler or
 # configuring unrelated C++ targets.
@@ -52,19 +64,22 @@ project(OpenCCUBaseValidationAssets NONE)
 
 add_subdirectory("${OPENCCU_BASE_SOURCE}/src/devicetypes"
   "${CMAKE_BINARY_DIR}/devicetypes")
-add_subdirectory("${OPENCCU_BASE_SOURCE}/src/webui"
-  "${CMAKE_BINARY_DIR}/webui")
+if(WEBUI_SUBDIRECTORY)
+  add_subdirectory("${OPENCCU_BASE_SOURCE}/${WEBUI_SUBDIRECTORY}"
+    "${CMAKE_BINARY_DIR}/webui")
+endif()
 add_subdirectory("${OPENCCU_BASE_SOURCE}/src/tcl_homematic"
   "${CMAKE_BINARY_DIR}/tcl_homematic")
 CMAKE
 
 "$cmake" -S "$build_dir/source" -B "$build_dir/build" \
   -DOPENCCU_BASE_SOURCE="$openccu_base_source" \
+  -DWEBUI_SUBDIRECTORY="$webui_subdirectory" \
   -DROOTFS_DIR="$rootfs" \
   -DOPENCCU_PYTHON_EXECUTABLE="$python" \
   -DOPENCCU_TCLSH_EXECUTABLE="$tclsh"
 "$cmake" --build "$build_dir/build" --target \
-  webui-assets devicetypes-assets tcl-homematic-assets
+  "${webui_targets[@]}" devicetypes-assets tcl-homematic-assets
 
 # Check every generated device before validate_patches.sh can supplement the
 # firmware tree with static files from OpenCCU-Base.
@@ -81,8 +96,7 @@ for generated_asset in \
   firmware/rftypes/rf_cfm_tw.xml \
   usr/lib/tcl8.2/homematic/homematic.tcl \
   www/config/st_values.cgi \
-  www/webui/style.css \
-  www/webui/webui.js; do
+  "${webui_assets[@]}"; do
   [[ -s ${rootfs}/${generated_asset} ]] || \
     die "asset target did not generate: $generated_asset"
 done

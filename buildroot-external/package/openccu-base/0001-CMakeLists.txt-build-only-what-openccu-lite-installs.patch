@@ -1,0 +1,59 @@
+CMakeLists.txt: build only what openccu-lite installs
+
+openccu-lite builds from openccu-lite-base, OpenCCU-Base without the WebUI
+(src/webui) and without the daemons openccu-lite does not ship: hss_led
+(occulited drives the status LED), eq3configd (occulited answers the
+discovery) and ssdpd (occulited announces the system), openccu-lite
+task 329. Stage the device types and the homematic Tcl package as before.
+
+Upstream: Not applicable (openccu-lite only)
+
+Signed-off-by: Sebastian Raff <hobbyquaker@gmail.com>
+
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -74,13 +74,10 @@
+ add_subdirectory(src/libUnifiedLanComm)
+ add_subdirectory(src/libeq3config)
+ add_subdirectory(src/eq3configcmd)
+-add_subdirectory(src/eq3configd)
+-add_subdirectory(src/ssdpd)
+ add_subdirectory(src/crypttool)
+ add_subdirectory(src/multimacd)
+ add_subdirectory(src/hs485d)
+ add_subdirectory(src/hs485dLoader)
+-add_subdirectory(src/hss_led)
+ add_subdirectory(src/rfd)
+ add_subdirectory(src/bcm2835_raw_uart)
+ add_subdirectory(src/eq3_char_loop)
+@@ -105,7 +102,6 @@
+ 
+ if(BUILD_WEBUI_AND_DEVICETYPES)
+   add_subdirectory(src/devicetypes)
+-  add_subdirectory(src/webui)
+   add_subdirectory(src/tcl_homematic)
+ endif()
+ 
+@@ -125,13 +121,10 @@
+     LanDeviceUtils
+     UnifiedLanComm
+     eq3config
+-    eq3configd
+-    ssdpd
+     crypttool
+     multimacd
+     hs485d
+     hs485dLoader
+-    hss_led
+     rfd
+     eq3configcmd
+     SetInterfaceClock
+@@ -156,7 +149,7 @@
+ endif()
+ 
+ if(BUILD_WEBUI_AND_DEVICETYPES)
+-  add_dependencies(core devicetypes-assets webui-assets tcl-homematic-assets)
++  add_dependencies(core devicetypes-assets tcl-homematic-assets)
+ endif()
+ 
+ add_custom_target(package

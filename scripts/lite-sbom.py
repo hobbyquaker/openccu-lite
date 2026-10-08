@@ -406,8 +406,12 @@ def base_group(path):
         return "HMIPServer.jar"
     if path.startswith("opt/HMServer/coupling/"):
         return "ESHBridge.jar"
-    if path.startswith("opt/HMServer/"):
+    if path == "opt/HMServer/HMServer.jar":
+        # from OpenCCU-Base's release archive: VirtualDevices without an HmIP module (B-313)
         return "HMServer.jar"
+    if path.startswith("opt/HMServer/"):
+        # the group definitions hmipserver reads (task 329)
+        return "HMIPServer.jar"
     if path.startswith("opt/HmIP/hmip-copro-update.jar"):
         return "hmip-copro-update.jar"
     if path.startswith("firmware/rftypes/") or path.startswith("firmware/hs485types/"):
@@ -416,6 +420,13 @@ def base_group(path):
         return "radio and device firmware"
     if path.startswith("opt/HmIP/") or path.startswith("etc/"):
         return "configuration files"
+    # the WebUI's files addons read, at the CCU's paths (task 331); Apache-2.0 per licenses.md
+    if path.startswith("www/config/img/devices/"):
+        return "WebUI device pictures"
+    if path.startswith("www/config/devdescr/"):
+        return "WebUI device catalogue"
+    if path == "www/config/stringtable_de.txt" or path.startswith("www/webui/js/lang/"):
+        return "WebUI translations"
     return None
 
 
@@ -491,7 +502,13 @@ def openccu_base(texts, b, errors):
             groups.setdefault(g, []).append(f)
     out = []
     for g in sorted(groups):
-        lic = texts.licence({"id": "LGPL-2.1-only"}, lgpl) if g in lgpl_libs else texts.licence({"name": "HMSL-2.0"}, hmsl)
+        if g in lgpl_libs:
+            lic = texts.licence({"id": "LGPL-2.1-only"}, lgpl)
+        elif g.startswith("WebUI "):
+            # licenses.md: "src/webui | Apache 2.0 if not stated otherwise" (task 331)
+            lic = texts.licence({"id": "Apache-2.0"}, canonical_text("Apache-2.0"))
+        else:
+            lic = texts.licence({"name": "HMSL-2.0"}, hmsl)
         kind = "library" if g.endswith((".so", ".jar")) else "firmware" if "firmware" in g else "data" if " " in g else "application"
         c = {
             "type": kind,
@@ -710,6 +727,8 @@ def nested_build(b, name, errors):
         base = b.info.get("openccu-base", {}).get("version")
         if base:
             args.append(f"OPENCCU_BASE_VERSION={base}")
+            # the release itself, for the recovery's hm-platform (recovery-system.mk; task 330)
+            args.append("OPENCCU_BASE_COMPAT_VERSION=" + re.sub(r"-lite\.\d+$", "", str(base)))
         try:
             r = subprocess.run(["make", "-s", "-C", out, *args, "show-info"], capture_output=True, text=True, env=env, timeout=600)
             if r.returncode != 0 or not r.stdout.strip().startswith("{"):

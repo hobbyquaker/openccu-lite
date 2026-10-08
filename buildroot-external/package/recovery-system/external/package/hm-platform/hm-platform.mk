@@ -5,8 +5,10 @@
 #
 #############################################################
 
-HM_PLATFORM_VERSION = $(OPENCCU_BASE_VERSION)
-HM_PLATFORM_SITE = $(call github,OpenCCU,OpenCCU-Base,$(OPENCCU_BASE_VERSION))
+# OpenCCU-Base's release itself, not openccu-lite-base's -lite.<N> tag: the prebuilt binaries
+# below are not in openccu-lite-base (recovery-system.mk hands the release in; task 330)
+HM_PLATFORM_VERSION = $(OPENCCU_BASE_COMPAT_VERSION)
+HM_PLATFORM_SITE = $(call github,OpenCCU,OpenCCU-Base,$(OPENCCU_BASE_COMPAT_VERSION))
 
 ifeq ($(BR2_TOOLCHAIN_USES_GLIBC),)
 	$(error hm-platform requires a glibc toolchain (BR2_TOOLCHAIN_USES_GLIBC))

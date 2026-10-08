@@ -30,7 +30,7 @@ jobs:
       - name: Tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq rsync openssl python3 shellcheck > /dev/null
+          sudo apt-get install -y -qq rsync openssl python3 shellcheck tcl > /dev/null
       - name: No roadmap ids in the lite overlays
         run: |
           sh scripts/testcases/lite-id-guard-test.sh
@@ -57,6 +57,10 @@ jobs:
         run: sh scripts/testcases/lite-hardening-guard-test.sh
       - name: occulited in the image is the pinned commit
         run: sh scripts/testcases/lite-occulited-version-guard-test.sh
+      - name: The WebUI's files for addons
+        run: sh scripts/testcases/lite-webui-files-test.sh
+      - name: HMServer.jar for VirtualDevices without an HmIP module
+        run: sh scripts/testcases/lite-hmserver-jar-test.sh
       - name: The boot order and the boot path
         run: |
           sh scripts/testcases/lite-unit-order-test.sh
