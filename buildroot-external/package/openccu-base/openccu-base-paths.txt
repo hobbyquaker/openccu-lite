@@ -1,0 +1,63 @@
+# The paths of OpenCCU-Base that openccu-lite builds from.
+#
+# package/openccu-base fetches OpenCCU-Base's release archive from GitHub and prunes it to this
+# list right after the extract (scripts/prune_source.py, a post-extract hook): the build never sees
+# anything else, so a file this list does not name cannot reach the image, and the extract fails
+# when an entry names nothing in the archive - a path upstream moved or dropped shows up here, not
+# as a hole in the image. package/eq3_char_loop extracts the same archive and prunes it the same
+# way. The install lists in openccu-base.mk say which of these files reach the image and where.
+#
+# One path per line. A path matches itself and everything below it (a trailing slash is allowed);
+# a line that starts with "regex:" is a Python regular expression matched at the start of the path.
+# That is git filter-repo's --paths-from-file format, which openccu-lite-base (OpenCCU-Base
+# filtered to these paths, built from 2026-10-07 to 2026-10-09) used; this file replaces it.
+# Blank lines and lines starting with # are ignored.
+#
+# Not here: the recovery system's hm-platform (package/recovery-system/external/package/hm-platform)
+# takes OpenCCU-Base's prebuilt bin/<arch>/{ssdpd,eq3configcmd,eq3configd,crypttool} and
+# lib/<arch>/{libeq3config,libLanDeviceUtils,libUnifiedLanComm,libelvutils}.so from its own
+# download of the same archive.
+
+# the CMake build: the top-level list, the version header generator, the device type stripper
+CMakeLists.txt
+cmake/
+build-tools/
+
+# the licences (HMSL 2.0, GPL 2.0, LGPL 2.1) and their index
+licenses/
+
+# every component under src/ - daemons, libraries, Tcl modules, kernel modules, device types,
+# tcl_homematic - except the WebUI and the daemons openccu-lite does not ship: hss_led (occulited
+# drives the status LED), eq3configd (occulited answers the discovery), ssdpd (occulited
+# announces the system)
+regex:^src/(?!(webui|hss_led|eq3configd|ssdpd)/)
+
+# the startup scripts the image installs to /bin
+bin/hm_autoconf
+bin/hm_deldev
+bin/hm_startup
+
+# installed as they are: /etc, /firmware
+etc/
+firmware/
+
+# hmipserver: HMIPServer.jar with the ESHBridge on its classpath and its group definitions;
+# HMServer.jar, which a system without an HmIP module runs for its VirtualDevices half; the HmIP
+# coprocessor updater with its data. Not the WebUI's FreeMarker pages (openccu-lite brings the four
+# group pages occulited reads) or the diagrams' measurement templates
+opt/HMServer/HMIPServer.jar
+opt/HMServer/HMServer.jar
+opt/HMServer/coupling/
+opt/HMServer/groups/
+opt/HmIP/
+
+# the WebUI's files that addons read on a CCU, which openccu-lite installs at the CCU's paths under
+# /www and serves read-only: the device pictures, the device descriptions with the two scripts that
+# generate DEVDB.tcl from them, as OpenCCU's build does, the WebUI's translations and its
+# stringtable. Nothing else of the WebUI.
+src/webui/www/config/img/devices/
+src/webui/www_source/config/devdescr/
+src/webui/www_source/create_devdb_tcl.tcl
+src/webui/www_source/utf82ansi.py
+regex:^src/webui/www/webui/js/lang/[^/]+/translate\.lang[^/]*\.js$
+src/webui/www/config/stringtable_de.txt

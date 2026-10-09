@@ -115,11 +115,11 @@ rm -f "${TARGET_DIR}/bin/setfirewall.tcl" "${TARGET_DIR}/lib/libfirewall.tcl" \
 
 # hmipserver runs HMIPServer.jar with the ESHBridge, and on a system without an HmIP module
 # HMServer.jar for the VirtualDevices half alone (occulited's radio plan, as OpenCCU's S62HMServer).
-# openccu-base comes from openccu-lite-base, which has none of HMServer's FreeMarker pages and no
-# measurement templates (task 329), and takes HMServer.jar alone from OpenCCU-Base's release archive
-# (B-313): the overlay's four group pages, which occulited reads, are the only pages. The build stops
-# when HMServer.jar is missing - hmipserver would loop on such a system - or when anything else
-# shows up there again.
+# openccu-base is OpenCCU-Base pruned to package/openccu-base/openccu-base-paths.txt, which lists
+# HMServer.jar (B-313) and neither HMServer's FreeMarker pages nor the measurement templates (tasks
+# 329, 335): the overlay's four group pages, which occulited reads, are the only pages. The build
+# stops when HMServer.jar is missing - hmipserver would loop on such a system - or when anything
+# else shows up there again.
 if [ ! -s "${TARGET_DIR}/opt/HMServer/HMServer.jar" ]; then
 	echo "post-build (lite): ERROR: /opt/HMServer/HMServer.jar is missing - a system without an HmIP module needs it for VirtualDevices (B-313)" >&2
 	exit 1

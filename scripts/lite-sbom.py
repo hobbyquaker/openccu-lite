@@ -727,8 +727,11 @@ def nested_build(b, name, errors):
         base = b.info.get("openccu-base", {}).get("version")
         if base:
             args.append(f"OPENCCU_BASE_VERSION={base}")
-            # the release itself, for the recovery's hm-platform (recovery-system.mk; task 330)
-            args.append("OPENCCU_BASE_COMPAT_VERSION=" + re.sub(r"-lite\.\d+$", "", str(base)))
+            # the release itself, for the recovery's hm-platform (recovery-system.mk; task 330):
+            # openccu-base.mk's compat version, as the top Makefile reads it
+            mk = read(os.path.join(env["BR2_EXTERNAL_EQ3_PATH"], "package", "openccu-base", "openccu-base.mk")) or ""
+            m = re.search(r"^OPENCCU_BASE_COMPAT_VERSION = (\S+)", mk, re.M)
+            args.append("OPENCCU_BASE_COMPAT_VERSION=" + (m.group(1) if m else str(base)))
         try:
             r = subprocess.run(["make", "-s", "-C", out, *args, "show-info"], capture_output=True, text=True, env=env, timeout=600)
             if r.returncode != 0 or not r.stdout.strip().startswith("{"):

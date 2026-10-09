@@ -79,9 +79,15 @@ jobs:
         # translations and the stringtable under /www), the patch sections lite_series.py keeps for
         # them, and stage_lite_www.sh on a made-up source (DEVDB.tcl in sorted order)
         run: sh scripts/testcases/lite-webui-files-test.sh
+      - name: openccu-base builds only the paths openccu-base-paths.txt lists
+        # task 335: prune_source.py on a made-up tree (listed paths kept, the rest and the empty
+        # directories gone, an entry that names nothing fails without deleting), the real list's
+        # syntax and what it must and must not match, and the wiring in openccu-base.mk,
+        # eq3_char_loop.mk and openccu-base.hash
+        run: sh scripts/testcases/lite-openccu-base-paths-test.sh
       - name: HMServer.jar for VirtualDevices without an HmIP module
-        # B-313: openccu-base takes HMServer.jar from OpenCCU-Base's release archive (hash, install,
-        # licence step), the post-build guard requires it, and the SBOM lists it
+        # B-313: openccu-base-paths.txt lists HMServer.jar and the install takes it with opt/ (the
+        # licence step runs for it), the post-build guard requires it, and the SBOM lists it
         run: sh scripts/testcases/lite-hmserver-jar-test.sh
       - name: The boot order is a dependency graph
         # the units' After= edges against the intended graph (no serial SysV chain coming back, no

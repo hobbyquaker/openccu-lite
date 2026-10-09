@@ -59,6 +59,8 @@ jobs:
         run: sh scripts/testcases/lite-occulited-version-guard-test.sh
       - name: The WebUI's files for addons
         run: sh scripts/testcases/lite-webui-files-test.sh
+      - name: openccu-base builds only the paths openccu-base-paths.txt lists
+        run: sh scripts/testcases/lite-openccu-base-paths-test.sh
       - name: HMServer.jar for VirtualDevices without an HmIP module
         run: sh scripts/testcases/lite-hmserver-jar-test.sh
       - name: The boot order and the boot path

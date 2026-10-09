@@ -4,31 +4,33 @@
 #
 ################################################################################
 
-# openccu-lite-base's tag <OpenCCU-Base release>-lite.<N> on its branch lite (task 330); the
-# compat version is the release itself (PRODUCT_VERSION, the recovery's hm-platform)
-OPENCCU_BASE_VERSION = 3.89.11-lite.1
+# OpenCCU-Base's release; the compat version is the release's identity (PRODUCT_VERSION, the
+# recovery's hm-platform; the top Makefile reads both lines) and stays a release when the
+# version becomes a commit.
+OPENCCU_BASE_VERSION = 3.89.11
 OPENCCU_BASE_COMPAT_VERSION = 3.89.11
-# openccu-lite-base: OpenCCU-Base filtered to the paths this build uses - without the WebUI,
-# hss_led, eq3configd, ssdpd, HMServer.jar with its pages and the prebuilt binaries - with
-# upstream's tags; every commit links its upstream original (task 329). Its own download directory keeps its tarball apart from upstream's,
-# which has the same name.
-OPENCCU_BASE_SITE = https://github.com/hobbyquaker/openccu-lite-base.git
-OPENCCU_BASE_SITE_METHOD = git
-OPENCCU_BASE_DL_SUBDIR = openccu-lite-base
+# OpenCCU-Base's own release archive from GitHub - the file the recovery's hm-platform downloads
+# too - pruned right after the extract to the paths openccu-base-paths.txt lists: the build sees
+# nothing else, so a file that list does not name cannot reach the image, and the extract fails
+# when an entry names nothing in the archive (openccu-lite task 335). The list is the one place
+# that says what openccu-lite takes from OpenCCU-Base; package/eq3_char_loop prunes the same way.
+OPENCCU_BASE_SITE = $(call github,OpenCCU,OpenCCU-Base,$(OPENCCU_BASE_VERSION))
+OPENCCU_BASE_SITE_METHOD = wget
+OPENCCU_BASE_PATHS_FILE = $(OPENCCU_BASE_PKGDIR)/openccu-base-paths.txt
+# python3 is one of buildroot's own host prerequisites, so it is there before any host package
+OPENCCU_BASE_PRUNE_SOURCE_CMD = \
+	python3 $(OPENCCU_BASE_PKGDIR)/scripts/prune_source.py $(OPENCCU_BASE_PATHS_FILE)
 
-# HMServer.jar comes from OpenCCU-Base's own release archive at the compat version (B-313): a
-# system without an HmIP module runs hmipserver as HMServer.jar for its VirtualDevices half
-# (occulited's radio plan, as OpenCCU's S62HMServer), and openccu-lite-base does not carry it.
-# Only the jar is taken from the archive - the same file the recovery's hm-platform downloads.
-OPENCCU_BASE_HMSERVER_ARCHIVE = OpenCCU-Base-$(OPENCCU_BASE_COMPAT_VERSION).tar.gz
-OPENCCU_BASE_EXTRA_DOWNLOADS = \
-	https://github.com/OpenCCU/OpenCCU-Base/archive/$(OPENCCU_BASE_COMPAT_VERSION)/$(OPENCCU_BASE_HMSERVER_ARCHIVE)
+define OPENCCU_BASE_PRUNE_SOURCE
+	$(OPENCCU_BASE_PRUNE_SOURCE_CMD) $(@D)
+endef
+OPENCCU_BASE_POST_EXTRACT_HOOKS += OPENCCU_BASE_PRUNE_SOURCE
 
-# openccu-lite-base has neither the WebUI sources nor the prebuilt ReGaHss: a product that wants
-# them needs OpenCCU-Base itself (and the full rootfs patch series) again.
+# The WebUI sources and the prebuilt ReGaHss are not in openccu-base-paths.txt: a product that
+# wants them needs the complete OpenCCU-Base (and the full rootfs patch series) again.
 ifeq ($(BR2_PACKAGE_OPENCCU_BASE),y)
 ifneq ($(BR2_PACKAGE_OPENCCU_BASE_REGAHSS)$(BR2_PACKAGE_OPENCCU_BASE_WEBUI),)
-$(error openccu-base: BR2_PACKAGE_OPENCCU_BASE_REGAHSS and _WEBUI need OpenCCU-Base, not openccu-lite-base (task 329))
+$(error openccu-base: BR2_PACKAGE_OPENCCU_BASE_REGAHSS and _WEBUI need paths openccu-base-paths.txt does not list (the WebUI, bin/<platform>/ReGaHss))
 endif
 endif
 OPENCCU_BASE_LICENSE = HMSL-2.0, Apache-2.0 (WebUI), \
@@ -109,10 +111,10 @@ OPENCCU_BASE_PRE_BUILD_HOOKS += OPENCCU_BASE_PREPARE_ROOTFS_PATCH_INPUTS
 endif
 
 # Apply the OpenCCU rootfs patch stack after CMake has generated the device types and the
-# homematic Tcl package, but before any files are installed into TARGET_DIR. openccu-lite-base
+# homematic Tcl package, but before any files are installed into TARGET_DIR. The pruned source
 # has neither the WebUI nor HMServer's pages, so only the patches' sections outside www/ and
 # opt/HMServer/pages/ apply, plus those on the WebUI files staged above (lite_series.py writes
-# them); the series itself stays as OpenCCU keeps it (tasks 329, 331).
+# them); the series itself stays as OpenCCU keeps it (tasks 329, 331, 335).
 define OPENCCU_BASE_APPLY_ROOTFS_PATCHES
 	test -s "$(@D)/build/rootfs/bin/hm_autoconf"
 	test -s "$(@D)/build/rootfs/usr/lib/tcl8.2/homematic/homematic.tcl"
@@ -166,16 +168,12 @@ define OPENCCU_BASE_INSTALL_TARGET_CMDS
 	$(INSTALL) -d -m 0755 "$(TARGET_DIR)/firmware"
 	cp -av "$(@D)/build/rootfs/firmware/." "$(TARGET_DIR)/firmware/"
 
-	# copy the complete staged /opt tree
+	# copy the complete staged /opt tree: what openccu-base-paths.txt lists of opt/, HMServer.jar
+	# among it - a system without an HmIP module runs hmipserver as HMServer.jar for its
+	# VirtualDevices half (B-313)
 	$(INSTALL) -d -m 0755 "$(TARGET_DIR)/opt"
 	cp -av "$(@D)/build/rootfs/opt/." "$(TARGET_DIR)/opt/"
-
-	# HMServer.jar from OpenCCU-Base's release archive, for a system without an HmIP module (B-313)
-	$(TAR) -xzOf "$(OPENCCU_BASE_DL_DIR)/$(OPENCCU_BASE_HMSERVER_ARCHIVE)" \
-		"OpenCCU-Base-$(OPENCCU_BASE_COMPAT_VERSION)/opt/HMServer/HMServer.jar" \
-		> "$(@D)/HMServer.jar"
-	test -s "$(@D)/HMServer.jar"
-	$(INSTALL) -D -m 0644 "$(@D)/HMServer.jar" "$(TARGET_DIR)/opt/HMServer/HMServer.jar"
+	test -s "$(TARGET_DIR)/opt/HMServer/HMServer.jar"
 
 	# the WebUI's files addons read on a CCU, at the CCU's paths under /www (task 331): staged by
 	# stage_lite_www.sh and patched by the series as in the classic build; root, 0644, dirs 0755

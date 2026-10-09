@@ -1,13 +1,12 @@
 #!/bin/sh
 # openccu-lite: HMServer.jar is in the image (B-313). On a system without an HmIP module occulited
 # runs hmipserver as HMServer.jar for its VirtualDevices half (as OpenCCU's S62HMServer); without
-# the jar it loops (dev.44). openccu-lite-base does not carry it, so package/openccu-base takes it
-# alone from OpenCCU-Base's release archive at the compat version.
+# the jar it loops (dev.44). package/openccu-base takes it with the rest of opt/ from OpenCCU-Base's
+# release archive, pruned to openccu-base-paths.txt (task 335).
 #
-# 1. openccu-base.mk downloads that archive (EXTRA_DOWNLOADS at OPENCCU_BASE_COMPAT_VERSION), and
-#    openccu-base.hash has its hash under the same name.
-# 2. The install extracts exactly opt/HMServer/HMServer.jar and installs it 0644, and the JAR
-#    licence step runs for it.
+# 1. openccu-base-paths.txt lists opt/HMServer/HMServer.jar, and neither HMServer's pages nor the
+#    measurement templates.
+# 2. The install copies the staged opt/ and insists on the jar, and the JAR licence step runs for it.
 # 3. board/lite/post-build.sh's HMServer block on fake targets: with the jar and the four pages it
 #    passes; without the jar, with an empty jar, with measurement/ or with a fifth page it stops.
 # 4. scripts/lite-sbom.py groups the jar as HMServer.jar.
@@ -15,11 +14,13 @@
 # Usage: sh scripts/testcases/lite-hmserver-jar-test.sh    (from the fork's checkout)
 set -u
 HERE=$(cd "$(dirname "$0")/../.." && pwd)
-MK="$HERE/buildroot-external/package/openccu-base/openccu-base.mk"
-HASH="$HERE/buildroot-external/package/openccu-base/openccu-base.hash"
+PKG="$HERE/buildroot-external/package/openccu-base"
+MK="$PKG/openccu-base.mk"
+LIST="$PKG/openccu-base-paths.txt"
+PRUNE="$PKG/scripts/prune_source.py"
 PB="$HERE/buildroot-external/board/lite/post-build.sh"
 SBOM="$HERE/scripts/lite-sbom.py"
-for f in "$MK" "$HASH" "$PB" "$SBOM"; do [ -f "$f" ] || { echo "$f not found"; exit 2; }; done
+for f in "$MK" "$LIST" "$PRUNE" "$PB" "$SBOM"; do [ -f "$f" ] || { echo "$f not found"; exit 2; }; done
 
 T=$(mktemp -d) || exit 2
 trap 'rm -rf "$T"' EXIT
@@ -27,22 +28,14 @@ fails=0
 ok()   { echo "ok   $1"; }
 fail() { echo "FAIL $1"; fails=$((fails+1)); }
 
-# --- 1. download and hash
-compat=$(sed -n 's/^OPENCCU_BASE_COMPAT_VERSION = //p' "$MK")
-[ -n "$compat" ] && ok "compat version $compat" || fail "no OPENCCU_BASE_COMPAT_VERSION"
-grep -q '^OPENCCU_BASE_HMSERVER_ARCHIVE = OpenCCU-Base-$(OPENCCU_BASE_COMPAT_VERSION).tar.gz$' "$MK" \
-	&& ok "the archive is named by the compat version" || fail "OPENCCU_BASE_HMSERVER_ARCHIVE"
-grep -q 'https://github.com/OpenCCU/OpenCCU-Base/archive/$(OPENCCU_BASE_COMPAT_VERSION)/$(OPENCCU_BASE_HMSERVER_ARCHIVE)' "$MK" \
-	&& grep -q '^OPENCCU_BASE_EXTRA_DOWNLOADS = ' "$MK" \
-	&& ok "EXTRA_DOWNLOADS fetches OpenCCU-Base's release archive" || fail "EXTRA_DOWNLOADS"
-grep -Eq "^sha256  [0-9a-f]{64}  OpenCCU-Base-$compat\.tar\.gz$" "$HASH" \
-	&& ok "openccu-base.hash has OpenCCU-Base-$compat.tar.gz" || fail "no hash for OpenCCU-Base-$compat.tar.gz"
+# --- 1. the list
+m=$(python3 "$PRUNE" --match "$LIST" opt/HMServer/HMServer.jar opt/HMServer/HMIPServer.jar opt/HMServer/pages/AvailableFirmware.ftl opt/HMServer/measurement/x.ftl opt/HMServer/templates.dit 2>&1 | cut -f2 | tr '\n' ' ')
+[ "$m" = "opt/HMServer/HMServer.jar opt/HMServer/HMIPServer.jar - - - " ] && ok "the list has HMServer.jar and HMIPServer.jar, not the pages, measurement/ or templates.dit" || fail "the list: $m"
 
 # --- 2. install and licence step
-grep -q '"OpenCCU-Base-$(OPENCCU_BASE_COMPAT_VERSION)/opt/HMServer/HMServer.jar"' "$MK" \
-	&& ok "only opt/HMServer/HMServer.jar is extracted" || fail "the extract names another member"
-grep -q 'INSTALL) -D -m 0644 "$(@D)/HMServer.jar" "$(TARGET_DIR)/opt/HMServer/HMServer.jar"' "$MK" \
-	&& ok "installed 0644 at /opt/HMServer/HMServer.jar" || fail "the install line"
+grep -q 'cp -av "$(@D)/build/rootfs/opt/." "$(TARGET_DIR)/opt/"' "$MK" && ok "the staged opt/ is installed as a whole" || fail "the opt/ install line"
+grep -q 'test -s "$(TARGET_DIR)/opt/HMServer/HMServer.jar"' "$MK" && ok "the install insists on /opt/HMServer/HMServer.jar" || fail "no test on the installed jar"
+if grep -v '^[[:space:]]*#' "$MK" | grep -q 'EXTRA_DOWNLOADS\|HMSERVER_ARCHIVE'; then fail "the extra download of the jar is still there"; else ok "no extra download: the jar comes with the archive"; fi
 [ "$(grep -c -- '--jarfile=HMServer.jar' "$MK")" = 1 ] && grep -q 'HMServer.jar-JARLICENSEINFO.txt \\$' "$MK" \
 	&& ok "the JAR licence step for HMServer.jar" || fail "the JAR licence step"
 

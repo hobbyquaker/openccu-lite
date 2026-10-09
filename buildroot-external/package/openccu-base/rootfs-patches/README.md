@@ -54,7 +54,9 @@ assets with host tools; it does not compile target binaries or libraries. The
 result is then passed to `validate_patches.sh` to verify the complete patch
 series with zero fuzz.
 
-openccu-lite builds from openccu-lite-base, OpenCCU-Base without the WebUI
+openccu-lite builds from OpenCCU-Base pruned right after the extract to the
+paths `../openccu-base-paths.txt` lists (task 335; until 2026-10-09 from
+openccu-lite-base, a filtered copy with the same list), without the WebUI
 sources and without HMServer's FreeMarker pages (task 329), so its build applies
 only the series' sections outside `www/` and `opt/HMServer/pages/`, plus those on
 the WebUI files openccu-lite ships for addons at the CCU's paths (task 331): the

@@ -40,8 +40,9 @@ tclsh=$(resolve_executable "${TCLSH:-tclsh}")
 build_dir=$(mktemp -d "${TMPDIR:-/tmp}/openccu-validation-assets.XXXXXX")
 trap 'rm -rf -- "$build_dir"' EXIT
 
-# openccu-lite-base (task 329) has no WebUI: stage the WebUI's assets only from a source that has
-# them, OpenCCU-Base itself.
+# The source openccu-lite builds from has no WebUI (OpenCCU-Base pruned to openccu-base-paths.txt,
+# tasks 329, 335): stage the WebUI's assets only from a source that has them, the complete
+# OpenCCU-Base.
 if [[ -f $openccu_base_source/src/webui/CMakeLists.txt ]]; then
   webui_subdirectory=src/webui
   webui_targets=(webui-assets)

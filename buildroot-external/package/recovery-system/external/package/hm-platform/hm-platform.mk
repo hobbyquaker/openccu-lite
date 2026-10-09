@@ -5,8 +5,9 @@
 #
 #############################################################
 
-# OpenCCU-Base's release itself, not openccu-lite-base's -lite.<N> tag: the prebuilt binaries
-# below are not in openccu-lite-base (recovery-system.mk hands the release in; task 330)
+# OpenCCU-Base's release (recovery-system.mk hands it in; task 330): the prebuilt binaries below
+# exist only in a release archive, and package/openccu-base's openccu-base-paths.txt does not
+# list them - this package takes them from its own download of the same archive
 HM_PLATFORM_VERSION = $(OPENCCU_BASE_COMPAT_VERSION)
 HM_PLATFORM_SITE = $(call github,OpenCCU,OpenCCU-Base,$(OPENCCU_BASE_COMPAT_VERSION))
 

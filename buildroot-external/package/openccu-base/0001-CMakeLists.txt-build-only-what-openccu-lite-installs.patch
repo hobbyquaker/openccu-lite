@@ -1,10 +1,11 @@
 CMakeLists.txt: build only what openccu-lite installs
 
-openccu-lite builds from openccu-lite-base, OpenCCU-Base without the WebUI
-(src/webui) and without the daemons openccu-lite does not ship: hss_led
-(occulited drives the status LED), eq3configd (occulited answers the
-discovery) and ssdpd (occulited announces the system), openccu-lite
-task 329. Stage the device types and the homematic Tcl package as before.
+openccu-lite builds from OpenCCU-Base pruned to openccu-base-paths.txt:
+without the WebUI (src/webui) and without the daemons openccu-lite does not
+ship: hss_led (occulited drives the status LED), eq3configd (occulited
+answers the discovery) and ssdpd (occulited announces the system),
+openccu-lite tasks 329 and 335. Stage the device types and the homematic Tcl
+package as before.
 
 Upstream: Not applicable (openccu-lite only)
 

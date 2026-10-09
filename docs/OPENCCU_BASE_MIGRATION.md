@@ -49,6 +49,16 @@ an explicit script argument.
 `OPENCCU_BASE_COMPAT_VERSION` is the OpenCCU release identity and must be
 reviewed and adjusted manually whenever the imported baseline changes.
 
+openccu-lite fetches OpenCCU-Base's release archive from GitHub (not the git
+tree upstream's updater clones) and prunes it right after the extract to the
+paths `buildroot-external/package/openccu-base/openccu-base-paths.txt` lists
+(`scripts/prune_source.py` there, a post-extract hook of `openccu-base` and
+`eq3_char_loop`): the build sees nothing else, and the extract fails when an
+entry names nothing in the archive. The updater downloads that archive and
+writes its hash and the licence files' hashes into `openccu-base.hash`; a new
+Base release that moved or dropped a listed path then fails at the extract,
+not silently in the image.
+
 ## 32-bit compatibility libraries
 
 The nested `multilib32` build selects the same `openccu-base` package and

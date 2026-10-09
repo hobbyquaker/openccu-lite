@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Validate the part of the series that openccu-lite applies: every patch's sections outside www/
 # and opt/HMServer/pages/ and on the WebUI files openccu-lite ships (lite_series.py), against a
-# rootfs staged from openccu-lite-base, with zero fuzz (tasks 329, 331).
+# rootfs staged from OpenCCU-Base pruned to openccu-base-paths.txt, with zero fuzz (tasks 329,
+# 331, 335).
 # validate_patches.sh stays the check of the complete series against OpenCCU-Base with its
 # WebUI, for update_patchfiles.sh.
 set -Eeuo pipefail

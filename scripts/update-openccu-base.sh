@@ -54,43 +54,32 @@ fi
 
 sed -i "s/^OPENCCU_BASE_VERSION = .*/OPENCCU_BASE_VERSION = ${ID}/g" "buildroot-external/package/${PACKAGE_NAME}/${PACKAGE_NAME}.mk"
 
-ARCHIVE_FILE="${PACKAGE_NAME}-${ID}-git4.tar.gz"
-ARCHIVE_PATH="${DOWNLOAD_DIR}/${ARCHIVE_FILE}"
-
-make PRODUCT=rpi3 build-rpi3/.config >/dev/null
-BUILDROOT_TOPDIR=$(make -C build-rpi3 printvars VARS=TOPDIR QUOTED_VARS=YES | sed -nE "s/^TOPDIR='(.*)'$/\1/p")
-
-if [[ -z "${BUILDROOT_TOPDIR}" ]]; then
-  echo "Failed to resolve Buildroot TOPDIR" >&2
+# openccu-lite (task 335): the package fetches OpenCCU-Base's release archive from GitHub
+# (OPENCCU_BASE_SITE is the github macro, the file openccu-base-<version>.tar.gz) and prunes it to
+# openccu-base-paths.txt at the extract; upstream's git-tree download is not what the build reads.
+# Download that archive, hash it, and hash the licence files out of it.
+if [[ "${PACKAGE_SITE}" != *'$(call github,OpenCCU,OpenCCU-Base,'* ]]; then
+  echo "OPENCCU_BASE_SITE is not the github archive macro: ${PACKAGE_SITE}" >&2
   exit 1
 fi
+ARCHIVE_FILE="${PACKAGE_NAME}-${ID}.tar.gz"
+ARCHIVE_PATH="${DOWNLOAD_DIR}/${ARCHIVE_FILE}"
+ARCHIVE_URL="https://github.com/OpenCCU/OpenCCU-Base/archive/${ID}/${ARCHIVE_FILE}"
 
-REPO_ROOT=$(pwd -P)
-mkdir -p "${REPO_ROOT}/build-rpi3/build"
-(
-  cd "${BUILDROOT_TOPDIR}"
-  BUILD_DIR="${REPO_ROOT}/build-rpi3/build" \
-  BR_NO_CHECK_HASH_FOR="${ARCHIVE_FILE}" \
-  GIT=git \
-  TAR=tar \
-  ./support/download/dl-wrapper \
-    -q \
-    -c "${ID}" \
-    -d "${REPO_ROOT}/${DOWNLOAD_DIR}" \
-    -D "${REPO_ROOT}/download" \
-    -f "${ARCHIVE_FILE}" \
-    -H "${REPO_ROOT}/${PACKAGE_HASH}" \
-    -n "${PACKAGE_NAME}-${ID}" \
-    -N "${PACKAGE_NAME}" \
-    -o "${REPO_ROOT}/${ARCHIVE_PATH}" \
-    -u "git+${PACKAGE_SITE}"
-)
+mkdir -p "${DOWNLOAD_DIR}"
+curl -fsSL --retry 3 -o "${ARCHIVE_PATH}.tmp" "${ARCHIVE_URL}"
+mv -f "${ARCHIVE_PATH}.tmp" "${ARCHIVE_PATH}"
+
+WORK_TMP=$(mktemp -d "${TMPDIR:-/tmp}/openccu-base-update.XXXXXX")
+trap 'rm -rf -- "${WORK_TMP}"' EXIT
+mkdir -p "${WORK_TMP}/source"
+tar -xzf "${ARCHIVE_PATH}" -C "${WORK_TMP}/source" --strip-components=1
 
 ARCHIVE_HASH=$(sha256sum "${ARCHIVE_PATH}" | awk '{ print $1 }')
-LICENSES_MD_HASH=$(sha256sum "${DOWNLOAD_DIR}/git/licenses/licenses.md" | awk '{ print $1 }')
-HMSL2_HASH=$(sha256sum "${DOWNLOAD_DIR}/git/licenses/HMSL2.txt" | awk '{ print $1 }')
-GPL2_HASH=$(sha256sum "${DOWNLOAD_DIR}/git/licenses/gpl-2.0.txt" | awk '{ print $1 }')
-LGPL21_HASH=$(sha256sum "${DOWNLOAD_DIR}/git/licenses/lgpl-2.1.txt" | awk '{ print $1 }')
+LICENSES_MD_HASH=$(sha256sum "${WORK_TMP}/source/licenses/licenses.md" | awk '{ print $1 }')
+HMSL2_HASH=$(sha256sum "${WORK_TMP}/source/licenses/HMSL2.txt" | awk '{ print $1 }')
+GPL2_HASH=$(sha256sum "${WORK_TMP}/source/licenses/gpl-2.0.txt" | awk '{ print $1 }')
+LGPL21_HASH=$(sha256sum "${WORK_TMP}/source/licenses/lgpl-2.1.txt" | awk '{ print $1 }')
 
 if [[ -z "${ARCHIVE_HASH}" || -z "${LICENSES_MD_HASH}" || -z "${HMSL2_HASH}" || -z "${GPL2_HASH}" || -z "${LGPL21_HASH}" ]]; then
   echo "Failed to retrieve one or more hashes for ${PACKAGE_NAME}" >&2
@@ -103,5 +92,10 @@ sha256  ${LICENSES_MD_HASH}  licenses/licenses.md
 sha256  ${HMSL2_HASH}  licenses/HMSL2.txt
 sha256  ${GPL2_HASH}  licenses/gpl-2.0.txt
 sha256  ${LGPL21_HASH}  licenses/lgpl-2.1.txt
+# OpenCCU-Base's release archive from GitHub (the file the recovery's hm-platform downloads too)
 sha256  ${ARCHIVE_HASH}  ${ARCHIVE_FILE}
 EOF
+
+# every listed path must exist in the new release: the prune names the ones that do not, and
+# deletes nothing then
+python3 "${PACKAGE_DIR}/scripts/prune_source.py" "${PACKAGE_DIR}/openccu-base-paths.txt" "${WORK_TMP}/source"

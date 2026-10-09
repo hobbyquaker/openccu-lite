@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Write the part of the rootfs patch series that applies to openccu-lite-base.
+"""Write the part of the rootfs patch series that applies to the OpenCCU-Base openccu-lite builds.
 
 Usage: lite_series.py PATCH_DIR OUTPUT_DIR
 
-openccu-lite builds from openccu-lite-base, OpenCCU-Base without the WebUI sources and without
-HMServer's FreeMarker pages (task 329), so build/rootfs has no opt/HMServer/pages/ to patch and,
+openccu-lite builds from OpenCCU-Base pruned to openccu-base-paths.txt, without the WebUI sources
+and without HMServer's FreeMarker pages (tasks 329, 335), so build/rootfs has no opt/HMServer/pages/ to patch and,
 of the WebUI's www/ tree, only what openccu-lite ships at the CCU's paths for addons (task 331):
 the device pictures (www/config/img/devices/), DEVDB.tcl, stringtable_de.txt and the
 translate.lang*.js files (KEPT_WWW). Nothing else of www/ would reach the image (openccu-lite's

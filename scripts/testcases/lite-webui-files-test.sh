@@ -195,6 +195,12 @@ fi
 # --- 4. the wiring
 if grep -v '^[[:space:]]*#' "$EXT/board/lite/post-build.sh" | grep -q 'webui-files-guard\.sh" "\${TARGET_DIR}"'; then ok "post-build.sh runs the guard"; else fail "post-build.sh does not run webui-files-guard.sh"; fi
 if grep -v '^[[:space:]]*#' "$EXT/package/openccu-base/openccu-base.mk" | grep -q 'stage_lite_www\.sh'; then ok "openccu-base.mk stages the files"; else fail "openccu-base.mk does not run stage_lite_www.sh"; fi
+# the source they are staged from survives the prune to openccu-base-paths.txt (task 335)
+unlisted=$(python3 "$EXT/package/openccu-base/scripts/prune_source.py" --match "$EXT/package/openccu-base/openccu-base-paths.txt" \
+  src/webui/www/config/img/devices/250/x.png src/webui/www/config/img/devices/50/x.png src/webui/www/config/stringtable_de.txt \
+  src/webui/www_source/config/devdescr/x.tcl src/webui/www_source/create_devdb_tcl.tcl src/webui/www_source/utf82ansi.py \
+  src/webui/www/webui/js/lang/de/translate.lang.js src/webui/www/webui/js/lang/en/translate.lang.extension.js 2>&1 | awk -F'\t' '$2=="-"{print $1}' | tr '\n' ' ')
+if [ -z "$unlisted" ]; then ok "openccu-base-paths.txt keeps what stage_lite_www.sh reads"; else fail "openccu-base-paths.txt drops: $unlisted"; fi
 if grep -v '^[[:space:]]*#' "$EXT/overlay/lite/etc/lighttpd/conf.d/webui.conf" | grep -qF 'config/(img/devices/|devdescr/DEVDB\.tcl$|stringtable_de\.txt$)|webui/js/lang/'; then ok "the lite webui.conf serves the paths"; else fail "the lite webui.conf has no block for the paths"; fi
 
 [ "$fails" -eq 0 ] && echo "lite-webui-files-test: all passed" || echo "lite-webui-files-test: $fails failed"
