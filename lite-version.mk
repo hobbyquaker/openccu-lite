@@ -3,9 +3,9 @@
 # longer the OpenCCU base tag with a suffix - the base tag is BASE in the same file and goes into
 # /VERSION's VERSION= line for the recovery. The Makefile includes this after its own
 # PRODUCT_VERSION line, and only the lite products are affected.
-# D-88: every build is 1.0.0-dev.<N>, one number per build round (all products from the same fork
-# commit and pins), N from the project's build list (never reused):
-#   make PRODUCT=... LITE_VERSION=1.0.0-dev.<N> release
+# D-88: every build is 1.0.0-beta.<N> (1.0.0-dev.<N> until dev.45), one number per build round (all
+# products from the same fork commit and pins), N from the project's build list (never reused):
+#   make PRODUCT=... LITE_VERSION=1.0.0-beta.<N> release
 # The -snapshot.<sha> form of D-44 is not used any more.
 LITE_BASE:=$(shell sed -n 's/^BASE=//p' LITE-VERSION)
 LITE_VERSION?=$(shell sed -n 's/^VERSION=//p' LITE-VERSION)

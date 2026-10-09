@@ -46,7 +46,7 @@ The lite products are the ones listed in `LITE_PRODUCTS` in [lite-version.mk](li
 make help                                                   # the targets
 make PRODUCT=x86_64-ova build                               # the images, in build-x86_64-ova/images/
 make PRODUCT=x86_64-ova release                             # plus the release files, in release/
-make PRODUCT=x86_64-ova LITE_VERSION=1.0.0-dev.29 release   # with an explicit version
+make PRODUCT=x86_64-ova LITE_VERSION=1.0.0-beta.0 release   # with an explicit version
 make x86_64-ova-check                                       # buildroot's package checks and the base patches
 scripts/lite-qemu-test.sh build-x86_64-ova/images/sdcard.img 18090   # boot the VM image headless in QEMU
 ```

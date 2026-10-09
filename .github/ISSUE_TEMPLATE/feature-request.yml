@@ -18,7 +18,7 @@ body:
     attributes:
       label: Version
       description: The version you run, if you run one (the Updates page shows it).
-      placeholder: 1.0.0-dev.28
+      placeholder: 1.0.0-beta.0
   - type: dropdown
     id: product
     attributes:
