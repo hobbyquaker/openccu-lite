@@ -54,3 +54,4 @@
 ^hm2mqtt: no MQTT broker configured - open Systemsteuerung -> hm2mqtt$ ## boot 1: the test installs hm2mqtt from the catalogue without a broker; the addon says so at warning
 ^node-red: openccu-lite: the Node-RED editor signs in with the box session from the X-Occulite-Session header$ ## boot 1: the test installs RedMatic from the catalogue; RedMatic logs its session sign-in at warning
 ^systemd: addon-redmatic\.service: Failed with result 'exit-code'\.$ ## boot 1: the test uninstalls RedMatic seconds after its start, and RedMatic's stop exits non-zero while Node-RED still starts
+^occulited: addon supervisor: the addon's daemon ended, restarting its unit addon=hm2mqtt unit=addon-hm2mqtt\.service attempt=[0-9]+$ ## boot 1: the test's hm2mqtt has no broker, its daemon ends and the supervisor restarts it until the test uninstalls it (timing: before or after the uninstall)
