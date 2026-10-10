@@ -5,6 +5,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 ## Entfernt
 
 - ReGaHSS, die CCU-WebUI, WebUI-Programme, Systemvariablen und HM-Script
+- Keine Diagramme: die Diagrammfunktion des hmipserver wird nicht genutzt; openccu-lite hat keine Oberfläche, um Diagramme einzurichten oder anzuzeigen. Die Einstellung `hmipserver.diagrams` gibt es für später, ohne Seite
 - Die ReGa-Ports 1999, 8181 und 8183
 - Node.js, monit, Avahi, logrotate, msmtp, Net-SNMP, NUT, OpenVPN, WireGuard-Tools, Tailscale, ser2net, socat, xinetd, nmap, tcpdump, strace, CloudMatic, mediola NEO Server
 - ntpdate; chrony stellt die Uhr allein
@@ -18,6 +19,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - Home-Assistant-WebUI-Proxy
 - Das OCI-/Docker-Produkt
 - Nach dem Wechsel von einer CCU: ReGa-Datenbank, `measurement`, `userprofiles` und NEO Server auf der Userfs, einmalig, nachdem die Namen übernommen sind
+- Nach dem Wechsel von einer CCU, einmalig beim ersten Start und protokolliert: die mitgebrachten Diagrammdaten (`measurement/` auf dem USB-Stick und in der Userfs), die Konfigurationsverzeichnisse nicht mehr installierter Addons (z. B. `addons/mh`), `homematic.regadom.err` und ein leeres `eQ-3-Backup`; das CCU-Backup von vor dem Wechsel ist der Weg zurück
 
 ## Weboberfläche und Systemdienst
 
@@ -47,6 +49,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - Dienste, Timer und Startablauf auf der Seite Dienste einsehbar und steuerbar
 - Addon-Daemons werden überwacht wie die Systemdienste
 - Ein Dienst, der immer wieder abstürzt, erscheint als Warnung auf der Statusseite
+- Start und Herunterfahren ohne harmlose Warnungen im Protokoll; der Starttest schlägt bei jeder neuen Warnung fehl
 
 ## Funk und Schnittstellen
 
@@ -66,7 +69,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - HmIP-Heizungsgruppen über die API von occulited
 - Gerätebeschreibungen von Addons (`/firmware/rftypes`) in einer beschreibbaren Schicht, auf den Image-Stand zurücksetzbar
 - Angemeldete RPC-Clients einsehbar und abmeldbar
-- Eigene Protokollstufe für multimacd
+- Eigene Protokollstufe für multimacd; seine Zeile für jede Quittung eines Telegramms (`ACK received after …`) landet nicht mehr im Protokoll
 
 ## Fernzugriff
 
@@ -109,7 +112,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - HSTS und Umleitung vom kurzen auf den vollständigen Hostnamen, einschaltbar
 - Vertrauensspeicher für eigene Zertifizierungsstellen
 - Content-Security-Policy für die Oberfläche; das Sitzungs-Cookie der API erreicht die Seiten der Addons nicht
-- Weltbeschreibbare Dateien unter `addons/mh` von der CCU werden beim ersten Start gehärtet
+- Weltbeschreibbare Dateien in Konfigurationsverzeichnissen von der CCU werden beim ersten Start gehärtet; `addons/mh` und andere Verzeichnisse nicht mehr installierter Addons werden vorher einmalig entfernt
 - systemd mit seccomp; Programme mit PIE, Stack-Protector, FORTIFY und RELRO, beim Build geprüft
 
 ## Zusatzsoftware
@@ -121,6 +124,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - Bereits installierte Addons behalten beim Update Root
 - Auch Root-Addons können die Systempartition nicht mehr beschreibbar einhängen; was sie ablegen, landet in beschreibbaren Verzeichnissen
 - Addons, die ReGa brauchen, und Addons mit Binärdateien für eine andere Architektur werden beim Wechsel deaktiviert und angezeigt
+- Skripte in `rc.d` von der CCU kommen als Addons mit; schlägt eines fehl, zeigt die Seite Zusatzsoftware „Von der CCU übernommen“ und bietet an, den rc.d-Eintrag zu entfernen
 - Addons beschreiben sich über ein Manifest (`openccu-lite.json`)
 - Addons können laut Manifest vor den Funkdiensten starten
 - Icons und Logos aus dem Manifest, im hellen und dunklen Design
@@ -150,6 +154,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - Das ganze Protokoll seit dem Start, beim Scrollen nachgeladen
 - USB-Sticks formatieren und sicher entfernen; SMB- und NFS-Freigaben einhängen
 - Die Datenbank von occulited wahlweise auf einem USB-Stick
+- Beim Herunterfahren wird ein USB-Stick erst ausgehängt, wenn alle Dienste, die auf ihn schreiben, beendet sind; normales Aushängen statt "lazy", wer den Stick noch hält, steht im Protokoll; auf Wunsch fsck beim Einhängen eines nicht sauber ausgehängten FAT- oder exFAT-Sticks (`FSCK_AT_DIRTY_MOUNT=1` in `/etc/config/usbstorage`)
 
 ## Sicherung und Updates
 

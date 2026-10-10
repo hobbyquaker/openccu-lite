@@ -49,3 +49,28 @@ while BidCos works): rebooting the system does not help. **Power-cycle the devic
 and in, the fuse off and on for mains devices - or pair them again. Editing the offset in the access
 point file by hand (the workaround in the issue) only postpones the next wrap. The fix belongs in
 eQ-3's HmIP server; openccu-lite ships that binary unchanged and follows the tickets.
+
+## VirtualDevices / heating groups stay down after a busy start
+
+**The symptom:** after a boot the heating groups (the VirtualDevices interface) are unavailable and
+stay so, while HmIP-RF, BidCos-RF and BidCos-Wired work. rfd and hs485d log transport errors to port
+39292 for every event, for the whole boot:
+
+```
+rfd: XmlRpc transport error calling system.listMethods({"BidCos-RF_java"}) on http://127.0.0.1:39292/bidcos
+rfd: Error in XmlRpcClient::writeRequest: write error (error 111).
+```
+
+and hmipserver's journal of that start carries `Could not add interface: HmIP-RF_java`.
+
+**The cause:** a start race inside eQ-3's hmipserver. Its part that serves VirtualDevices and the
+BidCos side (port 39292) connects to hmipserver's own HmIP-RF port while it starts; when the system
+is busy at boot (a Raspberry Pi 3 with many devices and addons starting) that port is not up yet.
+The connection fails, hmipserver does not try again, and port 39292 never listens. hmipserver
+itself keeps running, so systemd sees nothing to restart. It is rare: most boots, and every boot on
+a less loaded system, win the race.
+
+**The workaround:** restart hmipserver - on the **Services** page, or with
+`systemctl restart hmipserver`. The heating groups are back within about two minutes, and the
+transport errors stop. The fix belongs in eQ-3's hmipserver; openccu-lite ships that binary
+unchanged.

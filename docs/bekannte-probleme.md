@@ -54,3 +54,29 @@ Batterie raus und rein, bei Netzgeräten die Sicherung aus und ein - oder sie ne
 in der Access-Point-Datei von Hand zu ändern (der Behelf aus dem Ticket) verschiebt nur den nächsten
 Umlauf. Die Korrektur gehört in eQ-3s HmIP-Server; openccu-lite liefert dieses Binary unverändert aus
 und verfolgt die Tickets.
+
+## VirtualDevices / Heizungsgruppen bleiben nach einem ausgelasteten Start aus
+
+**Das Symptom:** nach einem Start sind die Heizungsgruppen (die Schnittstelle VirtualDevices) nicht
+verfügbar und bleiben es, während HmIP-RF, BidCos-RF und BidCos-Wired laufen. rfd und hs485d
+protokollieren den ganzen Lauf über bei jedem Ereignis Transportfehler zum Port 39292:
+
+```
+rfd: XmlRpc transport error calling system.listMethods({"BidCos-RF_java"}) on http://127.0.0.1:39292/bidcos
+rfd: Error in XmlRpcClient::writeRequest: write error (error 111).
+```
+
+und das Journal von hmipserver enthält für diesen Start `Could not add interface: HmIP-RF_java`.
+
+**Die Ursache:** ein Wettlauf beim Start in eQ-3s hmipserver. Sein Teil, der VirtualDevices und die
+BidCos-Seite bedient (Port 39292), verbindet sich beim Start mit hmipservers eigenem HmIP-RF-Port;
+ist das System beim Booten ausgelastet (ein Raspberry Pi 3 mit vielen Geräten und startenden
+Addons), lauscht dieser Port noch nicht. Die Verbindung scheitert, hmipserver versucht es nicht
+erneut, und Port 39292 lauscht nie. hmipserver selbst läuft weiter, systemd sieht also nichts, was
+neu zu starten wäre. Es ist selten: die meisten Starts, und jeder Start auf einem weniger
+ausgelasteten System, gewinnen den Wettlauf.
+
+**Der Behelf:** hmipserver neu starten - auf der Seite **Dienste** oder mit
+`systemctl restart hmipserver`. Die Heizungsgruppen sind nach etwa zwei Minuten wieder da, und die
+Transportfehler hören auf. Die Korrektur gehört in eQ-3s hmipserver; openccu-lite liefert dieses
+Binary unverändert aus.

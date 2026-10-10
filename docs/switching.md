@@ -113,10 +113,21 @@ Before a restore or an import the Backup page also judges the backup's HmIP secu
   work. Addons that need the ReGa (CUxD, the XML-API, …) are disabled and listed as *disabled, incompatible*. Addons
   with binaries for another architecture are listed as *disabled, needs update*; the catalogue's *Install* /
   *Update* fetches the right build ([addons.md](addons.md#architecture-and-addon-binaries)). Nothing is uninstalled.
+- **Scripts in `/usr/local/etc/config/rc.d/`** come along as addons and are started, your own scripts too. Ones
+  written for the CCU3 mostly fail here; the Addons page then shows *Came from the CCU* with the script's last log
+  line and offers *Remove the rc.d entry*.
 - **mediola's NEO Server** cannot run without the ReGa and is switched off.
 - **The leftovers are removed once the names are imported:** `homematic.regadom` and its `.bak`, the WebUI's
   `measurement` and `userprofiles`, `etc/config/rega` and the NEO Server. The journal line `ccu leftovers removed`
   lists them. The radio identity, the keys, the interface configuration and the addons stay.
+- **The diagram data is removed once, at the first start:** the USB stick's `measurement/` and
+  `/usr/local/etc/config/measurement`. openccu-lite has no diagrams (no page to set them up or show them). The journal
+  line `diagram data: … removed` names each path with its size; other files on the stick stay.
+- **Other CCU remnants are removed once, at the first start:** the configuration directories of addons that are no
+  longer installed (`/usr/local/etc/config/addons/<id>`, e.g. CloudMatic's `mh`), the ReGa's crash dump
+  `homematic.regadom.err` and an empty `eQ-3-Backup`. Each is logged with its path and size (`ccu remnants: removed`).
+
+Everything removed on the first start is in the CCU backup taken before the switch: **that backup is the way back.**
 
 ## openccu-lite → OpenCCU / CCU3
 

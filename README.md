@@ -10,7 +10,7 @@
 
 Openccu-lite ist ein Fork des [OpenCCU-Projekts](https://github.com/OpenCCU/OpenCCU), der einige alte Softwareteile entfernt,
 die für Anwender, die ihre Automation anderswo (z. B. in Home Assistant, ioBroker, Node-RED, ...) betreiben, nicht notwendig sind:
-**Es gibt in openccu-lite keine ReGaHSS, keine WebUI-Programme und keine Homematic-Scripte.**
+**Es gibt in openccu-lite keine ReGaHSS, keine WebUI-Programme, keine Homematic-Scripte und keine Diagramme.**
 Die alte CCU-WebUI wurde durch eine [neu entwickelte Oberfläche](docs/walkthrough/README.md) ersetzt, der neue Daemon ["occulited"](https://github.com/hobbyquaker/occulited)
 übernimmt die Aufgaben der Systemverwaltung. Systeminterna wie u.A. das Init-System, das Logging oder die Funkmodulerkennung wurden von Grund auf neu gestaltet, viele neue Security-Features wurden implementiert.
 

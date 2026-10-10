@@ -118,10 +118,24 @@ siehe [bekannte-probleme.md](bekannte-probleme.md#hmip-geräte-nach-einem-neusta
   inkompatibel* geführt. Addons mit Binaries für eine andere Architektur stehen als *deaktiviert, braucht ein Update*
   da; *Installieren* / *Aktualisieren* im Katalog holt den passenden Build
   ([addons.md](addons.md#architecture-and-addon-binaries)). Deinstalliert wird nichts.
+- **Skripte in `/usr/local/etc/config/rc.d/`** kommen als Addons mit und werden gestartet, auch eigene. Die für die
+  CCU3 geschriebenen schlagen hier meist fehl; die Seite Zusatzsoftware zeigt dann *Von der CCU übernommen* mit der
+  letzten Log-Zeile des Skripts und bietet *rc.d-Eintrag entfernen* an.
 - **Der NEO Server von mediola** läuft ohne die ReGa nicht und wird abgeschaltet.
 - **Die Altlasten werden entfernt, sobald die Namen importiert sind:** `homematic.regadom` und ihre `.bak`, die
   `measurement` und `userprofiles` der WebUI, `etc/config/rega` und der NEO Server. Die Journal-Zeile
   `ccu leftovers removed` nennt sie. Funk-Identität, Schlüssel, Interface-Konfiguration und Addons bleiben.
+- **Die Diagrammdaten werden einmalig beim ersten Start entfernt:** `measurement/` auf dem USB-Stick und
+  `/usr/local/etc/config/measurement`. openccu-lite hat keine Diagramme (keine Seite, um sie einzurichten oder
+  anzuzeigen). Die Journal-Zeile `diagram data: … removed` nennt jeden Pfad mit seiner Größe; andere Dateien auf dem
+  Stick bleiben.
+- **Weitere CCU-Altlasten werden einmalig beim ersten Start entfernt:** die Konfigurationsverzeichnisse nicht mehr
+  installierter Addons (`/usr/local/etc/config/addons/<id>`, z. B. `mh` von CloudMatic), der Absturz-Dump der ReGa
+  `homematic.regadom.err` und ein leeres `eQ-3-Backup`. Jedes wird mit Pfad und Größe protokolliert
+  (`ccu remnants: removed`).
+
+Alles, was beim ersten Start entfernt wird, steckt im vor dem Wechsel angelegten CCU-Backup: **dieses Backup ist der
+Weg zurück.**
 
 ## openccu-lite → OpenCCU / CCU3
 
