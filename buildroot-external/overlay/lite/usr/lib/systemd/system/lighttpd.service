@@ -79,6 +79,14 @@ RestartSteps=8
 RestartMaxDelaySec=300
 StandardOutput=journal+console
 StandardError=journal+console
+# lighttpd is up before its backends at boot (it serves the starting page meanwhile) and stays up
+# after them at a shutdown (until the radio stack is down, see ExecStop=), so every request an open
+# browser tab sends then - to occulited's API, an addon's page - logged three error lines: the refused
+# connection, "all handlers ... are down" and, a second later, "gw-server re-enabled". Dozens at every
+# boot and shutdown, and nothing a user can act on: a backend that stays down is its own unit's
+# failure, which the Services and Status pages show. journald drops exactly these lines for loopback
+# backends; every other error of the proxy (a timeout, a remote backend, a bad answer) stays.
+LogFilterPatterns=~^\(\.\./src/gw_backend\.c\.[0-9]+\) (establishing connection failed: socket: tcp:127\.0\.0\.1:[0-9]+: Connection refused$|all handlers for .* are down\.$|gw-server re-enabled: tcp:127\.0\.0\.1:)
 OOMScoreAdjust=-900
 
 User=www-data

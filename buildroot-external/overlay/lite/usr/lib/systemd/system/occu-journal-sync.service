@@ -26,7 +26,7 @@
 Description=Copy the journal from RAM to the userfs, a USB stick or a network share at intervals and at shutdown
 DefaultDependencies=no
 RequiresMountsFor=/usr/local
-After=local-fs.target remote-fs.target systemd-journald.service occu-clock-save.service
+After=local-fs.target remote-fs.target systemd-journald.service occu-clock-save.service occu-usb-storage.target
 Before=shutdown.target rfd.service hmipserver.service multimacd.service hs485d.service lighttpd.service occulited.service occu-addons.service addons.target crond.service
 Conflicts=shutdown.target
 

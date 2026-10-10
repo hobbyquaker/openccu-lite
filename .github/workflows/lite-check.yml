@@ -104,6 +104,8 @@ jobs:
         run: sh scripts/testcases/lite-qemu-cleanup-test.sh
       - name: The QEMU test's addon e2e waits for GitHub's rate limit
         run: sh scripts/testcases/lite-qemu-ratelimit-test.sh
+      - name: The QEMU test's boot warnings against the allowlist
+        run: sh scripts/testcases/lite-boot-warnings-test.sh
       - name: The overlays and the products
         run: |
           sh scripts/testcases/lite-overlay-prune-test.sh

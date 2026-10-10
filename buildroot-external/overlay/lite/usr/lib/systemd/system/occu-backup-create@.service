@@ -14,7 +14,7 @@
 Description=Backup: create, and copy to the directory and share targets (%i)
 Documentation=https://github.com/hobbyquaker/openccu-lite
 # the timer's catch-up at boot waits for the boot; occulited writes the shares' mount units at its start
-After=multi-user.target occulited.service
+After=multi-user.target occulited.service occu-usb-storage.target
 Wants=occu-backup-deliver@%i.service
 Before=occu-backup-deliver@%i.service
 ConditionPathExists=/usr/bin/occulited

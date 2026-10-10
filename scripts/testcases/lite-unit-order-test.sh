@@ -304,6 +304,36 @@ for cfg in $(grep -l '^BR2_PACKAGE_OCCULITED=y' "$HERE/buildroot-external/config
   if grep -qx '# BR2_PACKAGE_NTP is not set' "$cfg"; then ok "${cfg##*/}: no ntpdate"; else bad "${cfg##*/} must carry '# BR2_PACKAGE_NTP is not set'"; fi
 done
 
+# B-316: a USB stick is unmounted at a shutdown only after the units that write to it have stopped.
+# Each stick's unit is before occu-usb-storage.target (and pulls it in), every writer after it; the
+# addon units get it from the generator (occu-addons-generator-test.sh).
+[ -f "$U/occu-usb-storage.target" ] && ok "occu-usb-storage.target exists" || bad "occu-usb-storage.target does not exist"
+if before occu-usb-mount@.service | grep -qx occu-usb-storage.target && wants occu-usb-mount@.service | grep -qx occu-usb-storage.target; then
+  ok "a stick's unit wants occu-usb-storage.target and is ordered before it"
+else
+  bad "occu-usb-mount@.service must carry Wants= and Before=occu-usb-storage.target"
+fi
+need hmipserver.service occu-usb-storage.target
+need occu-journal-sync.service occu-usb-storage.target
+need occu-backup-create@.service occu-usb-storage.target
+need occu-backup-deliver@.service occu-usb-storage.target
+if cat "$U/occulited.service.d/"*.conf 2>/dev/null | sed -n 's/^After=//p' | tr ' ' '\n' | grep -qx occu-usb-storage.target; then
+  ok "occulited.service (drop-in) after occu-usb-storage.target"
+else
+  bad "occulited.service needs a drop-in with After=occu-usb-storage.target"
+fi
+if grep -q 'occu-usb-storage.target' "$HERE/buildroot-external/overlay/lite/usr/lib/systemd/system-generators/occu-addons"; then
+  ok "the addon generator orders the addons after occu-usb-storage.target"
+else
+  bad "the addon generator must order the addon units after occu-usb-storage.target"
+fi
+# and the target itself orders on nothing, so it never waits for a writer (that would be a cycle)
+if after occu-usb-storage.target | grep -q . || grep -q '^Before=' "$U/occu-usb-storage.target"; then
+  bad "occu-usb-storage.target must order on nothing itself"
+else
+  ok "occu-usb-storage.target orders on nothing itself"
+fi
+
 # the serial links that are gone and must not come back
 never multimacd.service hs485d.service rfd.service hmipserver.service occu-set-lgw-key.service
 never hmipserver.service rfd.service

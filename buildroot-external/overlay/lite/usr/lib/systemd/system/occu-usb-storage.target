@@ -1,0 +1,12 @@
+# openccu-lite: the USB sticks are mounted - an ordering point, nothing else.
+#
+# Every stick's occu-usb-mount@ unit wants this target and is ordered before it; every unit that
+# writes to a stick (occulited's USB mode and backups, hmipserver's diagram copy at its stop, the
+# journal's copies, the addons with their data there) is ordered after it. At a shutdown systemd
+# stops units in the reverse order, so the writers stop first, then this target, then the sticks:
+# a stick is unmounted only after the last writer let go. Without a stick the target is never
+# started and orders nothing; a stick plugged in later starts it, and the order holds at the next
+# shutdown. At boot a writer waits for a stick that is being mounted (and checked, when fsck at a
+# dirty mount is on) - the data it reads from there is in place when it starts.
+[Unit]
+Description=USB sticks mounted

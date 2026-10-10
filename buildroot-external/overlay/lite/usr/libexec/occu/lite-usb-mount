@@ -14,6 +14,19 @@
 # removed before usbmount runs. A usbmount of another partition that is running holds a live lock,
 # and that one is left alone.
 #
+# The unmount: usbmount's remove unmounts lazily (umount -l), which detaches the filesystem at once
+# and leaves the superblock to whoever still holds it. A FAT stick whose last holder never let go
+# before the reboot came up "not properly unmounted" at every boot. So a plain umount comes first
+# (with a short retry: a writer that has just stopped may still close its files), and usbmount's
+# hooks run after it; when it fails, the holders are logged (fuser -m) and usbmount's lazy unmount
+# follows as before. A stick that was pulled (its device node gone) is unmounted lazily at once.
+#
+# fsck at the mount, when it is switched on: FSCK_AT_DIRTY_MOUNT=1 in /etc/config/usbstorage (the
+# userfs; one KEY=VALUE per line, read without running it; occulited's Storage page writes it, off
+# when the file or the line is missing). Then a FAT or exFAT stick whose dirty flag is set (the
+# kernel sets it at the mount and clears it at a clean unmount) is checked and repaired before it is
+# mounted - fsck.fat -a, fsck.exfat -p - and the result is logged. A clean stick is not checked.
+#
 # Usage: lite-usb-mount add|remove <kernel name>   (sda1, sdb, mmcblk1p1)
 set -u
 action=${1:-}
@@ -22,6 +35,14 @@ USBMOUNT=${LITE_USBMOUNT:-/usr/share/usbmount/usbmount}
 UDEVADM=${LITE_UDEVADM:-udevadm}
 LOCK=${LITE_USBMOUNT_LOCK:-/run/usbmount/.mount.lock}
 PROC=${LITE_PROC:-/proc}
+MOUNTS=${LITE_MOUNTS:-/proc/mounts}
+CONFIG=${LITE_USB_CONFIG:-/etc/config/usbstorage}
+UMOUNT=${LITE_UMOUNT:-umount}
+FUSER=${LITE_FUSER:-fuser}
+RUNPARTS=${LITE_RUNPARTS:-run-parts}
+FSCK_FAT=${LITE_FSCK_FAT:-fsck.fat}
+FSCK_EXFAT=${LITE_FSCK_EXFAT:-fsck.exfat}
+UMOUNT_TRIES=${LITE_UMOUNT_TRIES:-5}
 
 # usbmount_alive: a process runs usbmount - its name (a script run by its #! line is named after
 # the file) or its command line (run through sh)
@@ -44,6 +65,96 @@ clear_stale_lock() {
   [ -e "${LOCK}" ] || return 0
   usbmount_alive && return 0
   rm -f "${LOCK}" && echo "removed the stale usbmount lock ${LOCK}: no usbmount process holds it"
+}
+
+# fsck_wanted: FSCK_AT_DIRTY_MOUNT is 1 (or yes/true, quoted or not) in the setting file
+fsck_wanted() {
+  [ -r "${CONFIG}" ] || return 1
+  v=$(sed -n 's/^[[:space:]]*FSCK_AT_DIRTY_MOUNT[[:space:]]*=[[:space:]]*//p' "${CONFIG}" 2>/dev/null | tail -n 1 | tr -d "\"' \t\r")
+  case "${v}" in 1|yes|true|on) return 0 ;; esac
+  return 1
+}
+
+# byte <device> <offset>: one byte of the device, as a number
+byte() { od -An -tu1 -j "$2" -N1 "$1" 2>/dev/null | tr -d ' '; }
+
+# dirty <device> <fstype>: the volume's dirty flag is set. FAT: the boot sector's state byte, at 0x41
+# on FAT32 (whose 16-bit FAT size at 0x16 is 0) and at 0x25 on FAT12/16, bit 0. exFAT: VolumeFlags
+# at 0x6A, bit 1 (VolumeDirty).
+dirty() {
+  case "$2" in
+    vfat)
+      lo=$(byte "$1" 22); hi=$(byte "$1" 23)
+      [ -n "${lo}" ] && [ -n "${hi}" ] || return 1
+      if [ "${lo}" = 0 ] && [ "${hi}" = 0 ]; then st=$(byte "$1" 65); else st=$(byte "$1" 37); fi
+      [ -n "${st}" ] && [ $((st & 1)) = 1 ] ;;
+    exfat)
+      fl=$(byte "$1" 106)
+      [ -n "${fl}" ] && [ $((fl & 2)) = 2 ] ;;
+    *) return 1 ;;
+  esac
+}
+
+# check_at_mount: fsck before the mount, when switched on and the volume is dirty; never fails the mount
+check_at_mount() {
+  case "${ID_FS_TYPE:-}" in vfat|exfat) ;; *) return 0 ;; esac
+  dirty "${LITE_RAWDEV:-${DEVNAME}}" "${ID_FS_TYPE}" || return 0
+  if ! fsck_wanted; then
+    echo "<4>${DEVNAME} (${ID_FS_TYPE}) was not unmounted cleanly; not checked (fsck at a dirty mount is off)"
+    return 0
+  fi
+  if [ "${ID_FS_TYPE}" = vfat ]; then set -- "${FSCK_FAT}" -a -w "${DEVNAME}"; else set -- "${FSCK_EXFAT}" -p "${DEVNAME}"; fi
+  echo "${DEVNAME} (${ID_FS_TYPE}) was not unmounted cleanly; checking it: $*"
+  out=$("$@" 2>&1); frc=$?
+  printf '%s\n' "${out}" | tail -n 20 | sed 's/^/  /'
+  if [ ${frc} = 0 ]; then
+    echo "${DEVNAME}: the check found nothing to repair"
+  elif [ ${frc} = 1 ] && [ "${ID_FS_TYPE}" = vfat ]; then
+    echo "<4>${DEVNAME}: the check repaired the filesystem (exit 1)"
+  else
+    echo "<4>${DEVNAME}: the check ended with exit ${frc}; mounting it anyway"
+  fi
+  return 0
+}
+
+# holders <mountpoint>: the processes that hold the mounted filesystem, "pid(name)"
+holders() {
+  pids=$("${FUSER}" -m "$1" 2>/dev/null | sed 's/^[^:]*://' | tr -s ' \t' '\n' | tr -dc '0-9\n')
+  list=''
+  for p in ${pids}; do
+    n=''
+    [ -r "${PROC}/${p}/comm" ] && read -r n < "${PROC}/${p}/comm" 2>/dev/null
+    list="${list} ${p}(${n:-?})"
+  done
+  echo "${list# }"
+}
+
+# unmount_plain: a plain umount of the device's mountpoint, retried; usbmount's hooks after it.
+# 0 done (or nothing mounted: usbmount's remove then has nothing to do either), 1 left to usbmount
+unmount_plain() {
+  mp=$(awk -v d="${DEVNAME}" '$1 == d { print $2; exit }' "${MOUNTS}" 2>/dev/null)
+  fs=$(awk -v d="${DEVNAME}" '$1 == d { print $3; exit }' "${MOUNTS}" 2>/dev/null)
+  [ -n "${mp}" ] || return 1
+  if [ ! -b "${DEVNAME}" ] && [ -z "${LITE_DEVICE_PRESENT:-}" ]; then
+    echo "${DEVNAME} is gone: ${mp} is unmounted lazily"
+    return 1
+  fi
+  sync
+  i=1
+  while :; do
+    if err=$("${UMOUNT}" "${mp}" 2>&1); then
+      echo "${DEVNAME} unmounted from ${mp}"
+      UM_DEVICE=${DEVNAME} UM_MOUNTPOINT=${mp} UM_FILESYSTEM=${fs}
+      export UM_DEVICE UM_MOUNTPOINT UM_FILESYSTEM
+      "${RUNPARTS}" /etc/usbmount/umount.d || :
+      return 0
+    fi
+    [ "${i}" -ge "${UMOUNT_TRIES}" ] && break
+    i=$((i + 1))
+    sleep 1
+  done
+  echo "<4>${DEVNAME}: umount ${mp} failed (${err:-?}); held by: $(holders "${mp}"); unmounting it lazily"
+  return 1
 }
 
 case "${action}" in
@@ -71,7 +182,13 @@ ${props}
 EOT
 fi
 
-[ "${action}" = add ] && clear_stale_lock
+if [ "${action}" = add ]; then
+  clear_stale_lock
+  check_at_mount
+fi
+if [ "${action}" = remove ] && unmount_plain; then
+  exit 0
+fi
 
 "${USBMOUNT}" "${action}"
 rc=$?

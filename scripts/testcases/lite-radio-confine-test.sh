@@ -122,6 +122,9 @@ grep -qx eq3_char_loop "$EXT/overlay/lite/usr/lib/modules-load.d/openccu-lite-ra
 unit_has rfd.service "Type=exec"; unit_has multimacd.service "Type=exec"; unit_has hmipserver.service "Type=exec"; unit_has hs485d.service "Type=forking"
 unit_has rfd.service 'ExecStart=/bin/rfd -f /var/etc/rfd.conf -l ${LOGLEVEL_RFD}'
 unit_has multimacd.service 'ExecStart=/bin/multimacd -f /var/etc/multimacd.conf -l ${MULTIMACD_LOGLEVEL}'
+# Task 343: the per-telegram ACK lines are dropped by journald, nothing else.
+grep -qxF 'LogFilterPatterns=~^ACK received after [0-9]+ repetitions' "$U/multimacd.service" && ok "multimacd.service: the ACK filter" || bad "multimacd.service must carry the ACK filter"
+[ "$(grep -c '^LogFilterPatterns=' "$U/multimacd.service")" = 1 ] && ok "multimacd.service: one filter only" || bad "multimacd.service: exactly one LogFilterPatterns= line"
 unit_has hs485d.service 'ExecStart=/bin/hs485dLoader -l ${LOGLEVEL_HS485D} -dw /var/etc/hs485d.conf'
 unit_matches hmipserver.service '^ExecStart=/opt/java/bin/java \$HMIP_JAVA_OPTS .*-cp \${HMIP_CLASSPATH} \${HMIP_CLASS} \$HMIP_ARGS$' "the JVM's line from the environment file"
 unit_has rfd.service "SupplementaryGroups=mmd-bidcos status"

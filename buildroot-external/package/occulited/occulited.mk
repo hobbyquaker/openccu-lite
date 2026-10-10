@@ -119,6 +119,9 @@ endef
 # B-34 reason above: the daemons' files on the userfs (rfd's device files and keys, hmipserver's
 # crRFD and eshlight, hs485d's device files) keep these numeric owners across an update, and no
 # upstream account, auto-allocated from 100, can inherit them on a box that goes back to OpenCCU.
+# clock (task 345): systemd's 50-udev-default.rules gives /dev/rtc* and /dev/ptp* the group clock,
+# and udevd said "Unknown group 'clock', ignoring" twice at every boot without it. A system group
+# for a device node like the four above, at 989 below them; nobody is a member.
 define OCCULITED_USERS
 	occulite 8100 occulite 8100 * /usr/local/etc/occulite - usbstorage openccu-lite system service
 	- -1 certs 8101 * - - - TLS certificate readers (D-46)
@@ -132,6 +135,7 @@ define OCCULITED_USERS
 	- -1 eq3loop 991 * - - - eq3loop multiplexer master (D-55)
 	- -1 mmd-bidcos 992 * - - - the multiplexer BidCos-RF endpoint (D-55)
 	- -1 mmd-hmip 993 * - - - the multiplexer HmIP endpoint (D-55)
+	- -1 clock 989 * - - - RTC and PTP device nodes (systemd's udev rules)
 endef
 
 $(eval $(golang-package))

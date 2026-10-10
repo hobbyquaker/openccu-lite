@@ -66,6 +66,7 @@ has() { aft "$1" | grep -qx "$2"; }
 if has addon-broker.service rfd.service || has addon-broker.service hmipserver.service; then
   bad "an addon that needs nothing still waits for the interfaces: $(grep ^After "$EA/addon-broker.service")"
 else ok "needs none: not after rfd or hmipserver"; fi
+has addon-broker.service occu-usb-storage.target && ok "an addon stops before the USB sticks are unmounted (B-316)" || bad "addon-broker.service is not ordered after occu-usb-storage.target"
 has addon-broker.service network.target && has addon-broker.service occu-addons.service \
   && ok "needs none: after the network and occu-addons" || bad "needs none: $(grep ^After "$EA/addon-broker.service")"
 grep -q '^Wants=' "$EA/addon-broker.service" && bad "needs none: a Wants= line" || ok "needs none: no Wants="
@@ -124,11 +125,11 @@ echo hmipserver > "$PD/late.needs"
 OCCU_ADDONS_KMSG="$Y/kmsg" OCCU_ADDONS_ROOT="$RY" sh "$GEN" "$Y/normal" "$EY" "$Y/late" > "$Y/out" 2>&1 || bad "the generator with start files exits $?: $(cat "$Y/out")"
 yaft() { sed -n 's/^After=//p' "$EY/$1" | tr ' ' '\n'; }
 yhas() { yaft "$1" | grep -qx "$2"; }
-base_only() {  # the unit is after exactly the base units
-  [ "$(yaft "$1" | sort | tr '\n' ' ')" = "lighttpd.service network.target occu-addons.service occulited.service " ]
+base_only() {  # the unit is after exactly the base units (and the USB sticks, B-316: an ordering point)
+  [ "$(yaft "$1" | LC_ALL=C sort | tr '\n' ' ')" = "lighttpd.service network.target occu-addons.service occu-usb-storage.target occulited.service " ]
 }
 for n in eundeclared edeclared enone ewired eblank; do
-  base_only "addon-$n.service" && ok "early $n: after the network, lighttpd, occulited and occu-addons only" \
+  base_only "addon-$n.service" && ok "early $n: after the network, lighttpd, occulited, occu-addons and the sticks only" \
     || bad "early $n: After=$(yaft "addon-$n.service" | tr '\n' ' ')"
 done
 for n in eundeclared edeclared ewired enone eblank; do

@@ -7,7 +7,7 @@
 [Unit]
 Description=Backup: upload to the SSH targets and clean up (%i)
 Documentation=https://github.com/hobbyquaker/openccu-lite
-After=occu-backup-create@%i.service
+After=occu-backup-create@%i.service occu-usb-storage.target
 ConditionPathExists=/usr/local/tmp/occulite-backup/run.json
 
 [Service]

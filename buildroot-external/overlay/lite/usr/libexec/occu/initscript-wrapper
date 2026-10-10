@@ -66,6 +66,15 @@ case "${action}" in
   *) exec "${real}" "$@" ;;
 esac
 
+# While the system shuts down, a start, restart or reload asked for from outside the unit is
+# dropped without a word: S99SetupLEDs' stop reloads lighttpd as its start does, and systemd refused
+# that with "Transaction ... is destructive" against the queued stop - three lines at every
+# shutdown. Nothing started now would outlive the shutdown anyway.
+case "${action}" in
+  start|restart|reload)
+    [ "$(/usr/bin/systemctl is-system-running 2>/dev/null)" = stopping ] && exit 0 ;;
+esac
+
 # openccu-lite: "start" on a oneshot unit that is already active
 # (RemainAfterExit=yes) is a no-op for systemd, while the caller wants the script to run again -
 # S48UpdateRFHardware's REINIT path calls "/etc/init.d/S47InitRFHardware start" after flashing a

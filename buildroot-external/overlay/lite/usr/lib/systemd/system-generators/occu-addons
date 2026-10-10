@@ -132,7 +132,7 @@ for script in "${RCD}"/*; do
   # occu-addons.service first: it creates the confined addons' users (addon-users) before the
   # daemon-reload that makes these units exist, and a unit with User=addon-<id> fails if its
   # user is not there yet
-  after="network.target lighttpd.service occulited.service occu-addons.service"
+  after="network.target lighttpd.service occulited.service occu-addons.service occu-usb-storage.target"
   # ordering only, never Wants= (see the top); an early addon is not ordered on its interfaces
   if ! early_of "${name}"; then
     case "${needs}" in

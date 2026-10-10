@@ -41,6 +41,8 @@ exit \${FAKE_RC:-0}
 EOS
 chmod +x "$T/udevadm" "$T/usbmount"
 export LITE_UDEVADM="$T/udevadm" LITE_USBMOUNT="$T/usbmount"
+# never this machine's mounts: the remove would unmount what it finds there
+: > "$T/mounts"; export LITE_MOUNTS="$T/mounts" LITE_USB_CONFIG="$T/usbstorage"
 
 sh "$TOOL" add sda1 >/dev/null; rc=$?
 [ $rc = 0 ] && grep -qx 'action=add' "$T/got" && grep -qx 'DEVNAME=/dev/sda1' "$T/got" && grep -qx 'ID_FS_TYPE=vfat' "$T/got" && grep -qx 'ID_FS_USAGE=filesystem' "$T/got" && grep -qx 'DEVPATH=/devices/platform/usb/sda/sda1' "$T/got" && ok "add: udev's facts reach usbmount" || bad "add: rc $rc, $(cat "$T/got")"
@@ -105,6 +107,80 @@ rm -f "$T/got"
 sh "$TOOL" add sda1 >/dev/null; rc=$?
 [ $rc = 0 ] && [ ! -e "$LITE_USBMOUNT_LOCK" ] && grep -qx 'action=add' "$T/got" && ok "after a killed mount the stick mounts again" || bad "after a killed mount: rc $rc"
 unset LITE_USBMOUNT_LOCK
+
+# B-316: the unmount - a plain umount first, usbmount's hooks after it; the holders logged and the
+# lazy unmount (usbmount) when it fails; a pulled stick lazily at once
+cat > "$T/umount" <<EOS
+#!/bin/sh
+echo "umount \$*" >> $T/umount.log
+[ -n "\${FAKE_UMOUNT_FAIL:-}" ] && { echo "target is busy" >&2; exit 32; }
+exit 0
+EOS
+cat > "$T/fuser" <<EOS
+#!/bin/sh
+echo "/media/usb1:  4711  4712" 
+EOS
+cat > "$T/run-parts" <<EOS
+#!/bin/sh
+echo "run-parts \$* \$UM_DEVICE \$UM_MOUNTPOINT \$UM_FILESYSTEM" >> $T/hooks.log
+EOS
+chmod +x "$T/umount" "$T/fuser" "$T/run-parts"
+mkdir -p "$T/proc/4711"; echo node-red > "$T/proc/4711/comm"
+export LITE_UMOUNT="$T/umount" LITE_FUSER="$T/fuser" LITE_RUNPARTS="$T/run-parts" LITE_UMOUNT_TRIES=2
+echo "/dev/sda1 /media/usb1 vfat rw,nosuid 0 0" > "$T/mounts"
+rm -f "$T/got" "$T/umount.log" "$T/hooks.log"
+out=$(LITE_DEVICE_PRESENT=1 sh "$TOOL" remove sda1); rc=$?
+[ $rc = 0 ] && grep -qx 'umount /media/usb1' "$T/umount.log" && [ ! -e "$T/got" ] && ok "remove: a plain umount, usbmount's lazy one not run" || bad "remove plain: rc $rc, $(cat "$T/umount.log" "$T/got" 2>&1)"
+grep -qx 'run-parts /etc/usbmount/umount.d /dev/sda1 /media/usb1 vfat' "$T/hooks.log" && ok "remove: usbmount's hooks run after the plain umount" || bad "hooks: $(cat "$T/hooks.log" 2>&1)"
+case "$out" in *"/dev/sda1 unmounted from /media/usb1"*) ok "remove: says which unmount it was" ;; *) bad "remove message: $out" ;; esac
+rm -f "$T/got" "$T/umount.log" "$T/hooks.log"
+out=$(FAKE_UMOUNT_FAIL=1 LITE_DEVICE_PRESENT=1 LITE_PROC="$T/proc" sh "$TOOL" remove sda1); rc=$?
+[ "$(grep -c 'umount /media/usb1' "$T/umount.log")" = 2 ] && ok "remove: the plain umount is retried" || bad "retries: $(cat "$T/umount.log")"
+grep -qx 'action=remove' "$T/got" && [ ! -e "$T/hooks.log" ] && ok "remove: the lazy unmount (usbmount) when the plain one fails" || bad "fallback: $(cat "$T/got" "$T/hooks.log" 2>&1)"
+case "$out" in *"<4>/dev/sda1: umount /media/usb1 failed (target is busy); held by: 4711(node-red) 4712(?); unmounting it lazily"*) ok "remove: the holders logged as a warning" ;; *) bad "holders: $out" ;; esac
+rm -f "$T/got" "$T/umount.log"
+echo "/dev/sdz9 /media/usb2 vfat rw 0 0" > "$T/mounts"
+out=$(sh "$TOOL" remove sdz9)
+[ ! -e "$T/umount.log" ] && grep -qx 'action=remove' "$T/got" && ok "remove: a pulled stick goes to the lazy unmount at once" || bad "pulled: $(cat "$T/umount.log" "$T/got" 2>&1)"
+case "$out" in *"/dev/sdz9 is gone"*) ok "remove: says the stick is gone" ;; *) bad "pulled message: $out" ;; esac
+: > "$T/mounts"; rm -f "$T/got"
+sh "$TOOL" remove sda1 >/dev/null; grep -qx 'action=remove' "$T/got" && ok "remove: nothing mounted - usbmount as before" || bad "not mounted"
+
+# B-316: fsck at a dirty mount, only when switched on in /etc/config/usbstorage
+cat > "$T/fsck" <<EOS
+#!/bin/sh
+echo "\$(basename \$0) \$*" >> $T/fsck.log
+echo "fsck says hello"
+exit \${FAKE_FSCK_RC:-0}
+EOS
+chmod +x "$T/fsck"; cp "$T/fsck" "$T/fsck.fat"; cp "$T/fsck" "$T/fsck.exfat"
+export LITE_FSCK_FAT="$T/fsck.fat" LITE_FSCK_EXFAT="$T/fsck.exfat"
+# boot sectors: FAT32 (16-bit FAT size 0, state at 0x41), FAT16 (state at 0x25), exFAT (flags at 0x6A)
+mkimg() { dd if=/dev/zero of="$1" bs=512 count=1 2>/dev/null; printf "$3" | dd of="$1" bs=1 seek="$2" conv=notrunc 2>/dev/null; }
+mkimg "$T/fat32-dirty" 65 '\001'; mkimg "$T/fat32-clean" 65 '\000'
+mkimg "$T/fat16-dirty" 22 '\040'; printf '\001' | dd of="$T/fat16-dirty" bs=1 seek=37 conv=notrunc 2>/dev/null
+mkimg "$T/exfat-dirty" 106 '\002'
+fsckrun() { rm -f "$T/fsck.log" "$T/got"; LITE_RAWDEV="$T/$1" sh "$TOOL" add sda1; }
+rm -f "$T/usbstorage"
+out=$(fsckrun fat32-dirty); [ ! -e "$T/fsck.log" ] && grep -qx 'action=add' "$T/got" && ok "fsck off (no file): not checked, mounted" || bad "off: $(cat "$T/fsck.log" 2>&1)"
+case "$out" in *"<4>/dev/sda1 (vfat) was not unmounted cleanly; not checked"*) ok "a dirty stick is said, as a warning" ;; *) bad "dirty message: $out" ;; esac
+printf 'FSCK_AT_DIRTY_MOUNT=0\n' > "$T/usbstorage"
+fsckrun fat32-dirty >/dev/null; [ ! -e "$T/fsck.log" ] && ok "fsck off (=0): not checked" || bad "=0 checked"
+printf '# the Storage page\nFSCK_AT_DIRTY_MOUNT="1"\n' > "$T/usbstorage"
+out=$(fsckrun fat32-dirty); grep -qx 'fsck.fat -a -w /dev/sda1' "$T/fsck.log" && grep -qx 'action=add' "$T/got" && ok "fsck on: a dirty FAT32 is checked with fsck.fat -a, then mounted" || bad "on fat32: $(cat "$T/fsck.log" "$T/got" 2>&1)"
+case "$out" in *"fsck says hello"*"found nothing to repair"*) ok "the check's output and result are logged" ;; *) bad "fsck log: $out" ;; esac
+fsckrun fat32-clean >/dev/null; [ ! -e "$T/fsck.log" ] && ok "fsck on: a clean FAT is not checked" || bad "clean checked"
+fsckrun fat16-dirty >/dev/null; grep -qx 'fsck.fat -a -w /dev/sda1' "$T/fsck.log" && ok "fsck on: a dirty FAT16 (state at 0x25)" || bad "fat16"
+out=$(FAKE_FSCK_RC=4 fsckrun fat32-dirty); rc=$?
+[ $rc = 0 ] && grep -qx 'action=add' "$T/got" && ok "a failed check still mounts the stick" || bad "fsck failure: rc $rc"
+case "$out" in *"<4>/dev/sda1: the check ended with exit 4"*) ok "a failed check is a warning" ;; *) bad "fsck failure message: $out" ;; esac
+sed -i 's/ID_FS_TYPE=vfat/ID_FS_TYPE=exfat/' "$T/udevadm"
+fsckrun exfat-dirty >/dev/null; grep -qx 'fsck.exfat -p /dev/sda1' "$T/fsck.log" && ok "fsck on: a dirty exFAT is checked with fsck.exfat -p" || bad "exfat: $(cat "$T/fsck.log" 2>&1)"
+fsckrun fat32-clean >/dev/null; [ ! -e "$T/fsck.log" ] && ok "fsck on: a clean exFAT is not checked" || bad "exfat clean checked"
+sed -i 's/ID_FS_TYPE=exfat/ID_FS_TYPE=ntfs/' "$T/udevadm"
+fsckrun fat32-dirty >/dev/null; [ ! -e "$T/fsck.log" ] && ok "fsck: only FAT and exFAT" || bad "ntfs checked"
+sed -i 's/ID_FS_TYPE=ntfs/ID_FS_TYPE=vfat/' "$T/udevadm"
+rm -f "$T/usbstorage"
 
 # usbmount.conf: nosuid, and the usbstorage group (B-259) on FAT, exFAT and NTFS, read and write
 printf 'root:x:0:\nocculite:x:8100:\ncerts:x:8101:\nusbstorage:x:8102:occulite\n' > "$T/group"

@@ -565,6 +565,16 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   say "guest (boot 2): the addon unit came back from the generator at boot, the journal remembers boot 1"
   guest 'systemctl is-system-running; systemctl --failed --no-legend --plain --no-pager; systemctl status addon-litetest.service --no-pager -n0 | sed -n 1,8p; journalctl --list-boots --no-pager; cat /etc/machine-id; cat /usr/local/etc/machine-id; journalctl -b --no-pager -o short-monotonic | grep -m1 "Startup finished"'
   boot_checks "boot 2"
+  # the warnings of both boots, boot 1 with its shutdown, against the allowlist: a new one fails
+  # until it is fixed or allowlisted with its reason (scripts/lite-boot-warnings.sh).
+  # LITE_BOOT_WARNINGS=report prints them without failing (to make an allowlist).
+  for b in -1 0; do
+    say "guest (boot 2): the warnings of journal boot $b"
+    guest "journalctl -b $b -p warning -q --no-pager -o short" >"$WORK/warnings$b.txt"
+    if ! sh "$(dirname "$0")/lite-boot-warnings.sh" "${LITE_BOOT_WARNINGS_ALLOW:-$(dirname "$0")/lite-boot-warnings.allow}" "$WORK/warnings$b.txt"; then
+      if [ "${LITE_BOOT_WARNINGS:-}" = report ]; then say "(report only: LITE_BOOT_WARNINGS=report)"; else fail "journal boot $b: a warning that is not in lite-boot-warnings.allow (above)"; fi
+    fi
+  done
   # the seeded gateway is a documentation address nobody answers: the firmware update skips it with
   # a line, a success - it used to run eq3configcmd into three timeouts and fail the unit
   R=$(guest 'systemctl show -p Result --value occu-lgw-firmware-update.service; journalctl -b -u occu-lgw-firmware-update.service --no-pager -o cat | grep -c "no RF LAN gateway answers (10.0.2.200)"'); case "$R" in *'| success'*'| 1'*) ;; *) fail "occu-lgw-firmware-update did not skip the silent gateway as a success: $R";; esac

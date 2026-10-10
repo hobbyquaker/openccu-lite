@@ -165,6 +165,11 @@ jobs:
         # task 310: the addon e2e reads GitHub's budget for the address first and waits for the reset
         # within a bound, instead of failing on the rate limit
         run: sh scripts/testcases/lite-qemu-ratelimit-test.sh
+      - name: The QEMU test's boot warnings against the allowlist
+        # the boot test checks journalctl -b -p warning of both boots (boot 1 with its shutdown)
+        # against scripts/lite-boot-warnings.allow: a new warning fails until it is fixed or
+        # allowlisted with its reason. Here: the check on made-up journals and the list's syntax
+        run: sh scripts/testcases/lite-boot-warnings-test.sh
       - name: A file that leaves an overlay leaves the target
         # the merged-overlay step on an incremental build: removed from the target, and a package
         # that installs the same path is marked for reinstall

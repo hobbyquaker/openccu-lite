@@ -59,6 +59,13 @@ RestartMaxDelaySec=300
 UMask=0002
 StandardOutput=journal+console
 StandardError=journal+console
+# multimacd logs every acknowledged telegram at info ("ACK received after N repetitions: ...") -
+# dozens a minute on a system with many devices, which floods the RAM journal and its copy on the
+# stick. Its own level cannot drop them: it takes only 1 debug or 2 info (at 3 and above it does not
+# log its start, which the ready check reads). journald drops them instead; the
+# filter applies to its syslog lines too. "No ACK received", the coprocessor's errors and the start
+# lines stay.
+LogFilterPatterns=~^ACK received after [0-9]+ repetitions
 OOMScoreAdjust=-900
 
 User=multimacd

@@ -1,0 +1,50 @@
+# openccu-lite: the warnings the two boots of lite-qemu-test.sh may log (the ova image under QEMU, boot 1
+# with its shutdown, and boot 2 on the seeded userfs). Format: scripts/lite-boot-warnings.sh. Every line
+# says why the warning stays; a warning that is fixed leaves this list, so it fails when it comes back.
+# Made from 1.0.0-beta.0's boot test (2026-10-10, task 345), less the lines task 345 removed at their
+# cause (udev's clock group, nfs-utils' rules, dbus's user switch, tmpfiles' /root/.ssh, the lighttpd
+# reload at a shutdown, lighttpd's refused loopback backends, the kernel audit records).
+
+# --- the virtual machine (QEMU, TCG, the qemu64 CPU) ---
+^kernel: tsc: Unable to calibrate against PIT$ ## QEMU's emulated timer under TCG
+^kernel: mtrr: your CPUs had inconsistent (fixed|variable) MTRR settings$ ## QEMU's virtual CPUs
+^kernel: mtrr: your CPUs had inconsistent MTRRdefType settings$ ## QEMU's virtual CPUs
+^kernel: acpi PNP0A03:00: fail to add MMCONFIG information, can't access extended configuration space under this bridge$ ## QEMU's i440fx machine has no MMCONFIG
+^kernel: hyperv_fb: Deprecated: use Hyper-V DRM driver instead$ ## the ova kernel carries the Hyper-V drivers; the driver says so at load
+^kernel: amd_pstate: the _CPC object is not present in SBIOS or ACPI disabled$ ## QEMU's firmware has no CPPC tables
+^systemd: Failed to open any watchdog device before the initial transaction completed: No such file or directory$ ## QEMU without a watchdog device; a VM with one, and the boards, have it
+^\(udev-worker\): cpu[0-9]+: Process '/bin/sh -c '\[ -e /dev/xen/xenbus \] && \[ -e /sys/devices/system/cpu/cpu[0-9]+/online \] && echo 1 > /sys/devices/system/cpu/cpu[0-9]+/online'' failed with exit code 1\.$ ## a Xen CPU hotplug rule; its test is false outside Xen and udev reports the false test as a failure
+^systemd: systemd-udevd\.service: unit configures an IP firewall, but the local system does not support BPF/cgroup firewalling\.$ ## udevd's upstream IPAddressDeny=; the kernel has no cgroup BPF firewall, and udevd needs none
+^systemd: systemd-udevd\.service: \(This warning is only shown for the first unit using IP firewalling\.\)$ ## the line above's second half
+
+# --- the kernel and the boot (every image) ---
+^kernel: check access for rdinit=/init failed: -2, ignoring$ ## no initramfs; the kernel looks for one first
+^kernel: eq3_char_loop: loading out-of-tree module taints kernel\.$ ## eQ-3's multiplexer module is out of tree by nature
+^systemd: Dependency failed for Start psplash-systemd progress communication helper\.$ ## headless QEMU has no framebuffer, so psplash-start fails (B-130)
+^lighttpd: \(\.\./src/server\.c\.[0-9]+\) reducing server\.max-connections \([0-9]+\) to 1/10 server\.max-fds \([0-9]+\)$ ## lighttpd's own notice of its fd limit (B-254), logged at warning by lighttpd
+^irqbalance: Cannot change IRQ [0-9]+ affinity: Operation not permitted$ ## irqbalance meets an IRQ whose affinity the kernel fixes; to be looked at (filed after task 345)
+^irqbalance: IRQ [0-9]+ affinity is now unmanaged$ ## the line above's consequence
+
+# --- occulited (its levels are occulited's: rows 7 and 11 of task 345 are occulited task 34) ---
+^occulited: no users yet: the web UI asks for the administrator password on first visit$ ## a fresh image has no account by design
+^occulited-helper: helper: firewall loaded \(confirm window [0-9]+ ms\)$ ## occulited's helper logs its firewall load at warning; occulited's to lower
+^occulited: rpc: interface down interface=[A-Za-z-]+ err=.*connection refused" retry_in=[0-9]+s$ ## occulited starts before the interface daemons (occulited task 34)
+^occulited: rpc: deregistration failed interface=[A-Za-z-]+ err= ## occulited stops after the interface daemons (occulited task 34)
+^occulited: boot timeline: this boot could not be read err="systemctl show: context (deadline exceeded|canceled)"$ ## systemctl answers slowly under TCG on a loaded runner, or the shutdown cancels the read
+
+# --- hmipserver ---
+^hmipserver: de\.eq3\.lib\.measurement\.MeasurementService \[[^]]+\] The configuration file path "(/etc/config|/opt/HMServer)/measurement" doen't exist or is not a directory\.$ ## the diagram feature without its configuration (occulited tasks 32, 33)
+^hmipserver: io\.vertx\.core\.impl\.BlockedThreadChecker \[vertx-blocked-thread-checker\] Thread Thread\[#[0-9]+,vert\.x-eventloop-thread-[0-9]+,[0-9]+,main\] has been blocked for [0-9]+ ms, time limit is [0-9]+ ms$ ## hmipserver's event loop is slow under TCG while occulited's init runs (B-270's shape)
+^hmipserver: io\.vertx\.core\.VertxException: Thread blocked$ ## the line above's exception
+^hmipserver: de\.eq3\.cbcs\.server\.core\.vertx\.KeyServerWorker \[[^]]+\] Missing or invalid key server configuration parameter ## the key server mode without its network key (occulited B-63)
+
+# --- what the test itself provokes ---
+^systemd: lighttpd\.service: Main process exited, code=killed, status=9/KILL$ ## the test kills lighttpd to see the unit restart it
+^systemd: lighttpd\.service: Failed with result 'signal'\.$ ## the same kill
+^systemd: Failed to start crond\.service\.$ ## boot 2: the test masks crond through unit-switch.json
+^rfd: UnifiedLanCommController::connect\(\): Unable to connect\.$ ## boot 2: the test seeds an unreachable LAN gateway
+^rfd: CCU2LGWCommController::init\(\): Cannot connect to HomeMatic Lan Gateway with serial number KEQ0123456\.$ ## boot 2: the seeded gateway
+^rfd: No BidCoS-Interface available$ ## boot 2: the seeded gateway is rfd's only interface
+^systemd: rfd\.service: Failed with result 'exit-code'\.$ ## boot 2: rfd without its seeded gateway
+^systemd: Failed to start BidCos-RF Interface\.$ ## boot 2: the same
+^hmipserver: de\.eq3\.ccu\.bidcos\.dispatcher\.BidCosRpcDispatcher \[[^]]+\] (BidCosCache could not be initialized|java\.net\.ConnectException: Connection refused|Could not register BidCos-RF_java)$ ## boot 2: rfd is down without its seeded gateway

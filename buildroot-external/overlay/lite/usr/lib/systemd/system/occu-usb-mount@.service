@@ -15,10 +15,18 @@
 # be written, and the journal carries on in RAM until the stick is back. At shutdown that step
 # waits for occu-journal-sync's own last copy, so the stick is still there for it. Both steps are
 # "-": the journal never keeps a stick from being mounted or unmounted.
+#
+# The order at a shutdown: Before= occu-usb-storage.target, which every writer is ordered after, so
+# the stick is unmounted after occulited, hmipserver, the addons, the backups and the journal's copies
+# have stopped (see the target). The unmount is a plain umount first, the lazy one only when that
+# fails or the stick is gone (lite-usb-mount). The start may take longer than a mount: a dirty FAT or
+# exFAT stick is checked first when fsck at a dirty mount is on.
 [Unit]
 Description=USB storage /dev/%I
 BindsTo=dev-%i.device
 After=dev-%i.device local-fs.target
+Wants=occu-usb-storage.target
+Before=occu-usb-storage.target
 ConditionVirtualization=!container
 
 [Service]
@@ -28,6 +36,7 @@ ExecStart=/usr/libexec/occu/lite-usb-mount add %I
 ExecStartPost=-/usr/libexec/occu/lite-journal-sync attach %I
 ExecStop=-/usr/libexec/occu/lite-journal-sync detach %I
 ExecStop=/usr/libexec/occu/lite-usb-mount remove %I
-TimeoutSec=90
+TimeoutStartSec=600
+TimeoutStopSec=90
 StandardOutput=journal
 StandardError=journal

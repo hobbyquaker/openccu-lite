@@ -37,6 +37,53 @@ sh "$(dirname "$0")/usbmount-run-dir.sh" "${TARGET_DIR}"
 # udevd's private mounts, where the mount helps nobody and holds the stick.
 rm -f "${TARGET_DIR}/lib/udev/rules.d/usbmount.rules" "${TARGET_DIR}/usr/lib/udev/rules.d/usbmount.rules"
 
+# openccu-lite (task 345): lines at warning level at every boot that are nobody's fault, removed at
+# their cause.
+#
+# nfs-utils' udev rules: 60-nfs.rules runs "sysctl --pattern ... --system" when the sunrpc, lockd and
+# nfs modules load, to apply sysctl.d settings for their keys; this image's sysctl is busybox's,
+# which has no --pattern ("failed with exit code 1", four times), and no sysctl.d file sets an nfs
+# key. 99-nfs.rules runs nfsrahead for every block device to set an NFS mount's read-ahead from
+# nfs.conf, which has no such setting here ("skipping non-NFS device" for each disk and partition).
+# Shares are mounted by occulited with the kernel's defaults; neither rule does anything for them.
+rm -f "${TARGET_DIR}/usr/lib/udev/rules.d/60-nfs.rules" "${TARGET_DIR}/usr/lib/udev/rules.d/99-nfs.rules"
+
+# dbus: the unit starts dbus-daemon as the dbus user already (User=dbus), and system.conf's
+# <user>dbus</user> made the daemon switch to that user once more: its setgroups() needs CAP_SETGID,
+# which an unprivileged process does not have ("Failed to drop supplementary groups: Operation not
+# permitted" at every boot; the setgid/setuid to its own ids then succeed, so nothing else changed).
+# Without the element the daemon does not switch; it runs as dbus all the same, from systemd. The
+# launch helper, which reads the element, is not used: the bus activates services through systemd.
+lite_dbus_conf="${TARGET_DIR}/usr/share/dbus-1/system.conf"
+if [ -f "${lite_dbus_conf}" ] && grep -q '^User=dbus$' "${TARGET_DIR}/usr/lib/systemd/system/dbus.service" 2>/dev/null; then
+	sed -i '/^[[:space:]]*<user>dbus<\/user>[[:space:]]*$/d' "${lite_dbus_conf}"
+	if grep -q '<user>' "${lite_dbus_conf}"; then
+		echo "post-build-systemd: ERROR: ${lite_dbus_conf} still names a <user> for dbus-daemon" >&2
+		exit 1
+	fi
+fi
+
+# systemd-tmpfiles: provision.conf's "d- /root/.ssh" wants a directory where this image has a link
+# to /usr/local/etc/ssh (the root keys live on the userfs): '"/root/.ssh" already exists and is not a
+# directory' at every boot. The line goes; its neighbour, which writes authorized_keys from a
+# credential, still works through the link.
+lite_provision="${TARGET_DIR}/usr/lib/tmpfiles.d/provision.conf"
+if [ -f "${lite_provision}" ] && [ -L "${TARGET_DIR}/root/.ssh" ]; then
+	sed -i '/^d-\{0,1\}[[:space:]][[:space:]]*\/root\/\.ssh[[:space:]]/d' "${lite_provision}"
+fi
+
+# The clock's floor at the very start of the boot: PID 1 sets the clock forward to the mtime of
+# /usr/lib/clock-epoch when it is behind it. Without the file the floor is systemd's own built-in
+# epoch, months before the image, and on a board without a real-time clock the first seconds of the
+# journal (until occu-clock-save puts the saved time back) carried that date: the boot list showed
+# boots starting in March. The image's build time is the floor now: /VERSION's mtime, the time
+# lite-clock-valid counts from.
+if [ -f "${TARGET_DIR}/VERSION" ]; then
+	touch -r "${TARGET_DIR}/VERSION" "${TARGET_DIR}/usr/lib/clock-epoch"
+else
+	touch "${TARGET_DIR}/usr/lib/clock-epoch"
+fi
+
 # Busybox.config is shared with the busybox-init products and keeps the
 # init applet, so busybox installs an /sbin/init of its own; systemd's
 # install links it to systemd afterwards, but PID 1 is not something to
