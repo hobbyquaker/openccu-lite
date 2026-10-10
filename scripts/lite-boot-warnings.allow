@@ -24,6 +24,9 @@
 ^lighttpd: \(\.\./src/server\.c\.[0-9]+\) reducing server\.max-connections \([0-9]+\) to 1/10 server\.max-fds \([0-9]+\)$ ## lighttpd's own notice of its fd limit (B-254), logged at warning by lighttpd
 ^irqbalance: Cannot change IRQ [0-9]+ affinity: Operation not permitted$ ## irqbalance meets an IRQ whose affinity the kernel fixes; to be looked at (filed after task 345)
 ^irqbalance: IRQ [0-9]+ affinity is now unmanaged$ ## the line above's consequence
+^chronyd: System clock wrong by -?[0-9.]+ seconds$ ## chronyd's makestep at the start corrects a clock that ran without NTP (no RTC, the VM's drift across the test's reboot); the size depends on timing
+^chronyd: System clock was stepped by -?[0-9.]+ seconds$ ## the line above's step
+^lighttpd: \(\.\./src/server\.c\.[0-9]+\) warning: clock jumped [0-9]+ secs$ ## lighttpd notices chronyd's step above when it is large
 
 # --- occulited (its levels are occulited's: rows 7 and 11 of task 345 are occulited task 34) ---
 ^occulited: no users yet: the web UI asks for the administrator password on first visit$ ## a fresh image has no account by design
@@ -48,3 +51,6 @@
 ^systemd: rfd\.service: Failed with result 'exit-code'\.$ ## boot 2: rfd without its seeded gateway
 ^systemd: Failed to start BidCos-RF Interface\.$ ## boot 2: the same
 ^hmipserver: de\.eq3\.ccu\.bidcos\.dispatcher\.BidCosRpcDispatcher \[[^]]+\] (BidCosCache could not be initialized|java\.net\.ConnectException: Connection refused|Could not register BidCos-RF_java)$ ## boot 2: rfd is down without its seeded gateway
+^hm2mqtt: no MQTT broker configured - open Systemsteuerung -> hm2mqtt$ ## boot 1: the test installs hm2mqtt from the catalogue without a broker; the addon says so at warning
+^node-red: openccu-lite: the Node-RED editor signs in with the box session from the X-Occulite-Session header$ ## boot 1: the test installs RedMatic from the catalogue; RedMatic logs its session sign-in at warning
+^systemd: addon-redmatic\.service: Failed with result 'exit-code'\.$ ## boot 1: the test uninstalls RedMatic seconds after its start, and RedMatic's stop exits non-zero while Node-RED still starts
