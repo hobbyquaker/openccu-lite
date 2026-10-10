@@ -4,11 +4,9 @@
 
 > [!CAUTION]
 > openccu-lite ist in Entwicklung. Vieles ist noch ungetestet.
-> **Bitte nur auf Testsystemen einsetzen.**
 >
-> **Die -dev Releases richten sich an erfahrene Homematic Anwender**, die wissen, was sie tun und sich im Fall der Fälle 
-> selbst helfen können: Leute, die eine CCU von innen kennen (`rfd`, `hs485d`, der `hmipserver`,
-> Funkmodule und Key-Handling, das RPC-Protokoll, die Paramsets, ...).
+> **Die Beta-Versionen richten sich an erfahrene Homematic-Anwender**, die wissen, was sie tun, sich im
+> Fall der Fälle selbst helfen können und keine Scheu vor Bugs haben.
 
 Openccu-lite ist ein Fork des [OpenCCU-Projekts](https://github.com/OpenCCU/OpenCCU), der einige alte Softwareteile entfernt,
 die für Anwender, die ihre Automation anderswo (z. B. in Home Assistant, ioBroker, Node-RED, ...) betreiben, nicht notwendig sind:
