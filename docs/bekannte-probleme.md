@@ -50,9 +50,18 @@ Von da an verwerfen sie jeden Frame des Systems als Wiederholung.
 
 **Wenn es doch passiert ist** (die Status-Seite sagt *backwards*, oder jedes HmIP-Gerät schweigt,
 während BidCos läuft): ein Neustart des Systems hilft nicht. **Die Geräte stromlos machen** -
-Batterie raus und rein, bei Netzgeräten die Sicherung aus und ein - oder sie neu anlernen. Den Offset
-in der Access-Point-Datei von Hand zu ändern (der Behelf aus dem Ticket) verschiebt nur den nächsten
-Umlauf. Die Korrektur gehört in eQ-3s HmIP-Server; openccu-lite liefert dieses Binary unverändert aus
+Batterie raus und rein, bei Netzgeräten die Sicherung aus und ein - oder sie neu anlernen. **Oder das
+System den Zähler anheben lassen:** `occulited radio repair-counter`, als root auf der Konsole des
+Systems (SSH), zeigt die Zahlen jedes Access Points und beantragt nach einer Bestätigung, dass der
+nächste Start von hmipserver den Zähler um einen Abstand (10 Millionen) über den höchsten Wert setzt,
+den die Geräte bekanntermaßen gesehen haben - aus den Zählerständen früherer Starts, oder aus dem
+Offset des Access Points, wenn keine aufgezeichnet sind. `systemctl restart hmipserver` (oder ein
+Neustart) wendet das an, nur mit einer vertrauenswürdigen Uhr; die Geräte nehmen das System danach
+wieder an, ohne angefasst zu werden. `--dry-run` zeigt nur die Zahlen, `--cancel` zieht einen Antrag
+zurück, und die ursprüngliche Access-Point-Datei bleibt als `<SGTIN>.ap.bak` erhalten. Nicht helfen
+kann es, wenn die Geräte einen Wert zu nahe an 2³² gesehen haben: dann die Geräte stromlos machen. Den
+Offset in der Access-Point-Datei von Hand zu ändern (der Behelf aus dem Ticket) verschiebt nur den
+nächsten Umlauf. Die Korrektur gehört in eQ-3s HmIP-Server; openccu-lite liefert dieses Binary unverändert aus
 und verfolgt die Tickets.
 
 ## VirtualDevices / Heizungsgruppen bleiben nach einem ausgelasteten Start aus

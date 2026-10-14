@@ -46,8 +46,16 @@ the system as a replay.
 
 **When it has happened anyway** (the Status page says *backwards*, or every HmIP device is silent
 while BidCos works): rebooting the system does not help. **Power-cycle the devices** - battery out
-and in, the fuse off and on for mains devices - or pair them again. Editing the offset in the access
-point file by hand (the workaround in the issue) only postpones the next wrap. The fix belongs in
+and in, the fuse off and on for mains devices - or pair them again. **Or let the system raise the
+counter:** `occulited radio repair-counter`, as root on the system's console (SSH), shows each access
+point's numbers and, once confirmed, requests that hmipserver's next start sets the counter a margin
+(10 million) above the highest value the devices are known to have seen - the counter readings of
+earlier starts, or the access point's offset when none were recorded. `systemctl restart hmipserver`
+(or a reboot) applies it, with a trusted clock only; the devices then accept the system again
+without being touched. `--dry-run` shows the numbers only, `--cancel` withdraws a request, and the
+original access point file is kept as `<SGTIN>.ap.bak`. It cannot help when the devices saw a value
+too close to 2³²: power-cycle them then. Editing the offset in the access point file by hand (the
+workaround in the issue) only postpones the next wrap. The fix belongs in
 eQ-3's HmIP server; openccu-lite ships that binary unchanged and follows the tickets.
 
 ## VirtualDevices / heating groups stay down after a busy start
