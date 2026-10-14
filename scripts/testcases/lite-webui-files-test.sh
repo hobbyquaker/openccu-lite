@@ -136,7 +136,7 @@ else
 fi
 rm -rf "$T/lite2"
 if python3 "$RP/lite_series.py" "$RP" "$T/lite2" >"$T/out" 2>&1; then
-  for p in 0003-rftypes-Fix.patch 0034-WebUI-Addon-Config.patch 0072-WebUI-Fix-hm_autoconf.patch 0109-WebUI-Fix-SystemLanguageDefaultNames.patch; do
+  for p in 0034-WebUI-Addon-Config.patch 0072-WebUI-Fix-hm_autoconf.patch 0109-WebUI-Fix-SystemLanguageDefaultNames.patch; do
     if grep -qx "$p" "$T/lite2/series"; then ok "the real series keeps $p"; else fail "the real series lost $p"; fi
   done
   if grep -h '^+++ ' "$T/lite2"/*.patch | sed 's/^+++ b\///' | grep '^www/' | grep -Ev '^www/(config/devdescr/DEVDB\.tcl|config/stringtable_de\.txt|webui/js/lang/[^/]+/translate\.lang[^/]*\.js|config/img/devices/(50|250)/.*)$'; then
@@ -185,6 +185,13 @@ EOF
     if [ -z "$(cd "$T/r/www" && { find . -type f ! -perm 0644; find . -type d ! -perm 0755; })" ]; then ok "files 0644, directories 0755"; else fail "modes: $(cd "$T/r/www" && find . ! -perm 0644 ! -perm 0755)"; fi
   else
     fail "stage_lite_www.sh: $(cat "$T/out")"
+  fi
+  # B-314: under a caller's umask 002 the directories the script creates are 0755 all the same,
+  # the parents mkdir -p makes (www/, www/config/, www/webui/js/) included
+  if (umask 002 && bash "$RP/stage_lite_www.sh" "$S" "$T/r3" "$TCLSH" python3 >"$T/out" 2>&1); then
+    if [ -z "$(cd "$T/r3/www" && { find . -type f ! -perm 0644; find . -type d ! -perm 0755; })" ]; then ok "under umask 002: files 0644, directories 0755"; else fail "under umask 002: $(cd "$T/r3/www" && find . ! -perm 0644 ! -perm 0755)"; fi
+  else
+    fail "stage_lite_www.sh under umask 002: $(cat "$T/out")"
   fi
   rm -rf "$S/src/webui/www/config/img/devices/50"
   if bash "$RP/stage_lite_www.sh" "$S" "$T/r2" "$TCLSH" python3 >"$T/out" 2>&1; then fail "a source without the small pictures was staged"; else ok "a source without the small pictures is refused: $(cat "$T/out")"; fi

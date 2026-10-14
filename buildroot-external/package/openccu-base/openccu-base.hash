@@ -3,5 +3,5 @@ sha256  906d7b6e8f3dc649c5716577a33dc1d2fd9afa41622c3d52e00029ba683bb1a6  licens
 sha256  aa9639372555d45bf15b818ae303075ce0c27874a11e1276e48f120718bcb912  licenses/HMSL2.txt
 sha256  edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6  licenses/gpl-2.0.txt
 sha256  20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95  licenses/lgpl-2.1.txt
-# OpenCCU-Base's release archive from GitHub (the file the recovery's hm-platform downloads too)
-sha256  6464eab8930c5460a26c126d9191652154c2808dd158e7bfa05c529251206383  openccu-base-3.89.11.tar.gz
+# GitHub's archive of hobbyquaker/OpenCCU-Base at the pinned tag (tasks 348, 352; the branch lite)
+sha256  6eb5390e25b3cda77774af56caff31be6c8676177e547343f0b00ef84886ad71  openccu-base-v1.0.0-beta.4.tar.gz

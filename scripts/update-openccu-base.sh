@@ -27,6 +27,15 @@ function pin_type() {
 }
 
 CURRENT_PIN_TYPE=$(pin_type "${CURRENT_ID}")
+# checked before anything is changed: the archive below is OpenCCU/OpenCCU-Base's. While
+# openccu-base is pinned to the fork hobbyquaker/OpenCCU-Base (openccu-lite tasks 348, 352: the
+# build round's tag v1.0.0-<pre>.<N> on the fork's branch lite, set by the round, see the .mk),
+# set OPENCCU_BASE_SITE back to OpenCCU's archive macro by hand first.
+if [[ "${PACKAGE_SITE}" != *'$(call github,OpenCCU,OpenCCU-Base,'* ]]; then
+  echo "OPENCCU_BASE_SITE is not OpenCCU/OpenCCU-Base's github archive macro: ${PACKAGE_SITE}" >&2
+  echo "(pinned to the fork's openccu-lite tag? a build round sets that pin; to go back to OpenCCU's release set it to \$(call github,OpenCCU,OpenCCU-Base,\$(OPENCCU_BASE_VERSION)) first)" >&2
+  exit 1
+fi
 if [[ "${CURRENT_PIN_TYPE}" == "unknown" ]]; then
   echo "Unsupported ${PACKAGE_NAME} pin format '${CURRENT_ID}'. Expected release version or 40-char commit SHA." >&2
   exit 1
@@ -58,10 +67,6 @@ sed -i "s/^OPENCCU_BASE_VERSION = .*/OPENCCU_BASE_VERSION = ${ID}/g" "buildroot-
 # (OPENCCU_BASE_SITE is the github macro, the file openccu-base-<version>.tar.gz) and prunes it to
 # openccu-base-paths.txt at the extract; upstream's git-tree download is not what the build reads.
 # Download that archive, hash it, and hash the licence files out of it.
-if [[ "${PACKAGE_SITE}" != *'$(call github,OpenCCU,OpenCCU-Base,'* ]]; then
-  echo "OPENCCU_BASE_SITE is not the github archive macro: ${PACKAGE_SITE}" >&2
-  exit 1
-fi
 ARCHIVE_FILE="${PACKAGE_NAME}-${ID}.tar.gz"
 ARCHIVE_PATH="${DOWNLOAD_DIR}/${ARCHIVE_FILE}"
 ARCHIVE_URL="https://github.com/OpenCCU/OpenCCU-Base/archive/${ID}/${ARCHIVE_FILE}"

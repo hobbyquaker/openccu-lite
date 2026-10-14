@@ -15,7 +15,9 @@
 #    eq3configd, ssdpd, HMServer's pages and measurement templates, the prebuilt www/, bin/<arch>/
 #    and lib/<arch>/, usr/, tests/, the repository's own files).
 # 3. The wiring: openccu-base.mk fetches OpenCCU/OpenCCU-Base's archive at OPENCCU_BASE_VERSION,
-#    the compat version is that release, the hook runs the prune with the list, no extra download
+#    the compat version is that release (or, while task 348's fork is pinned, the archive of
+#    hobbyquaker/OpenCCU-Base at an openccu-lite tag v1.0.0-<pre>.<N> of its branch lite, task 352,
+#    the compat version a release), the hook runs the prune with the list, no extra download
 #    and no openccu-lite-base are left; eq3_char_loop.mk prunes too; openccu-base.hash names the
 #    archive and nothing of openccu-lite-base.
 #
@@ -95,8 +97,18 @@ grep -Eq '^regex:\^src/' "$LIST" && grep -q 'hss_led|eq3configd|ssdpd' "$LIST" &
 
 # --- 3. the wiring
 ver=$(sed -n 's/^OPENCCU_BASE_VERSION = //p' "$MK"); compat=$(sed -n 's/^OPENCCU_BASE_COMPAT_VERSION = //p' "$MK")
-[ -n "$ver" ] && [ "$ver" = "$compat" ] && echo "$ver" | grep -Eq '^[0-9]+(\.[0-9]+)+$' && ok "OPENCCU_BASE_VERSION $ver is OpenCCU-Base's release and the compat version" || fail "version '$ver', compat '$compat'"
-grep -q '^OPENCCU_BASE_SITE = $(call github,OpenCCU,OpenCCU-Base,$(OPENCCU_BASE_VERSION))$' "$MK" && ok "the site is OpenCCU/OpenCCU-Base's archive of that release" || fail "OPENCCU_BASE_SITE"
+echo "$compat" | grep -Eq '^[0-9]+(\.[0-9]+)+$' && ok "OPENCCU_BASE_COMPAT_VERSION $compat is a release" || fail "compat version '$compat'"
+if echo "$ver" | grep -Eq '^v'; then
+	# tasks 348, 352: OpenCCU-Base's release plus cherry-picks on the fork's branch lite, pinned by the
+	# openccu-lite tag of the build round (never a branch name or a bare hash)
+	echo "$ver" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$' && ok "OPENCCU_BASE_VERSION $ver is an openccu-lite tag" || fail "OPENCCU_BASE_VERSION '$ver' is not an openccu-lite tag v<x.y.z>[-<pre>.<N>]"
+	grep -q '^OPENCCU_BASE_SITE = $(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))$' "$MK" && ok "the site is the fork hobbyquaker/OpenCCU-Base's archive of that tag" || fail "OPENCCU_BASE_SITE for the tag $ver"
+	grep -q "the branch\$" "$MK" && grep -q "^# lite of the fork hobbyquaker/OpenCCU-Base" "$MK" && ok "openccu-base.mk names the fork's branch lite" || fail "openccu-base.mk does not name the fork's branch lite"
+	if grep -q 'lite-[0-9]' "$MK"; then fail "openccu-base.mk still names a branch lite-<release>"; else ok "no branch lite-<release> in openccu-base.mk"; fi
+else
+	[ -n "$ver" ] && [ "$ver" = "$compat" ] && echo "$ver" | grep -Eq '^[0-9]+(\.[0-9]+)+$' && ok "OPENCCU_BASE_VERSION $ver is OpenCCU-Base's release and the compat version" || fail "version '$ver', compat '$compat'"
+	grep -q '^OPENCCU_BASE_SITE = $(call github,OpenCCU,OpenCCU-Base,$(OPENCCU_BASE_VERSION))$' "$MK" && ok "the site is OpenCCU/OpenCCU-Base's archive of that release" || fail "OPENCCU_BASE_SITE"
+fi
 grep -q '^OPENCCU_BASE_PATHS_FILE = $(OPENCCU_BASE_PKGDIR)/openccu-base-paths.txt$' "$MK" && ok "the list is openccu-base-paths.txt" || fail "OPENCCU_BASE_PATHS_FILE"
 grep -q 'python3 $(OPENCCU_BASE_PKGDIR)/scripts/prune_source.py $(OPENCCU_BASE_PATHS_FILE)' "$MK" && grep -q '^OPENCCU_BASE_POST_EXTRACT_HOOKS += OPENCCU_BASE_PRUNE_SOURCE$' "$MK" \
 	&& awk '/^define OPENCCU_BASE_PRUNE_SOURCE$/,/^endef$/' "$MK" | grep -q '$(OPENCCU_BASE_PRUNE_SOURCE_CMD) $(@D)' \

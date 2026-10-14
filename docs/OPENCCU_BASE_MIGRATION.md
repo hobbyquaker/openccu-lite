@@ -59,6 +59,19 @@ writes its hash and the licence files' hashes into `openccu-base.hash`; a new
 Base release that moved or dropped a listed path then fails at the extract,
 not silently in the image.
 
+While a fix from OpenCCU-Base's `main` is needed before its next release, the
+package is built from the branch `lite` of the fork `hobbyquaker/OpenCCU-Base`
+(the release tag plus `git cherry-pick -x` of the fixes and fixes of our own;
+task 348, since 2026-10-12; named `lite-3.89.11` until 2026-10-13). Every build
+round tags the fork commit it builds with the image version, annotated
+(`v1.0.0-<pre>.<N>`, e.g. `v1.0.0-beta.2`), and pins that tag (task 352):
+`OPENCCU_BASE_SITE` is
+`$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))`,
+`OPENCCU_BASE_VERSION` the tag, `openccu-base.hash` the hash of GitHub's
+archive of that tag, and `OPENCCU_BASE_COMPAT_VERSION` stays the release. A tag
+never moves once pushed. The updater refuses to run then; at the next release
+set the site back to OpenCCU's and run it with the tag as its argument.
+
 ## 32-bit compatibility libraries
 
 The nested `multilib32` build selects the same `openccu-base` package and
@@ -67,6 +80,13 @@ targets the package automatically builds only the OpenCCU-Base
 `compat-libraries` target and installs `libxmlparser.so` and `libXmlRpc.so`.
 The outer `multilib32` package then relocates these libraries from `/lib` to
 `/lib32` together with the other 32-bit runtime libraries.
+
+The nested build's directory is not named by OpenCCU-Base's version (task 353):
+the version is one of the package's inputs, kept in `.lite_inputs` there, and
+a change reruns the nested build in the same directory, which then rebuilds
+only its own `openccu-base` (a directory named by the version) and the
+32-bit root filesystem tar, not the 32-bit toolchain. The recovery system
+takes the same approach for what it passes to its nested build.
 
 ## Source patches and fast validation
 

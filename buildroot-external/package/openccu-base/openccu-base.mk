@@ -4,17 +4,33 @@
 #
 ################################################################################
 
-# OpenCCU-Base's release; the compat version is the release's identity (PRODUCT_VERSION, the
-# recovery's hm-platform; the top Makefile reads both lines) and stays a release when the
-# version becomes a commit.
-OPENCCU_BASE_VERSION = 3.89.11
+# OpenCCU-Base 3.89.11 plus five fixes from its main branch, cherry-picked (-x) onto the branch
+# lite of the fork hobbyquaker/OpenCCU-Base (openccu-lite task 348): libXmlRpc #138 (nested
+# system.multicall) and #140 (BIN-RPC length fields), rfd #115 and #116 (serial read errors),
+# eq3_char_loop 1.6 #112 (hang up slaves when their master closes); and four fixes of our own for
+# OpenCCU-Base's issues, offered upstream: rfd and hs485d end cleanly on SIGTERM, rfd's USB and
+# LAN receive threads stopped first (#164), rfd keeps a channel's AES policy when the coprocessor
+# is re-initialised (#165), libhsscomm's init and event callbacks are bounded by a timeout (#170,
+# #171). Since 1.0.0-beta.3 also from OpenCCU-Base's main: libXmlRpc's nesting limit (#189) and
+# its regenerated prebuilts (#190, unused here), the CFM-TW LED linkset (#63, formerly rootfs patch
+# 0003) and the component switches (#56); and rfd's receive thread no longer deadlocks on its exit
+# mutex when stopped (B-319). Since 1.0.0-beta.4 two more of our own: rfd no longer flushes the
+# serial input before every command (#173) and treats end of file on the serial device as a read
+# error (#162). Back to OpenCCU/OpenCCU-Base at its next tag.
+# The version is a tag of the fork: every build round tags the commit of the fork's lite branch
+# it builds with the image version (v1.0.0-<pre>.<N>, annotated) and pins that tag here
+# (task 352); a tag never moves once pushed. The compat version is the release's identity
+# (PRODUCT_VERSION, the recovery's hm-platform; the top Makefile reads both lines) and stays the
+# release while the version is a tag of the fork.
+OPENCCU_BASE_VERSION = v1.0.0-beta.4
 OPENCCU_BASE_COMPAT_VERSION = 3.89.11
-# OpenCCU-Base's own release archive from GitHub - the file the recovery's hm-platform downloads
-# too - pruned right after the extract to the paths openccu-base-paths.txt lists: the build sees
-# nothing else, so a file that list does not name cannot reach the image, and the extract fails
-# when an entry names nothing in the archive (openccu-lite task 335). The list is the one place
-# that says what openccu-lite takes from OpenCCU-Base; package/eq3_char_loop prunes the same way.
-OPENCCU_BASE_SITE = $(call github,OpenCCU,OpenCCU-Base,$(OPENCCU_BASE_VERSION))
+# GitHub's archive of that tag (the recovery's hm-platform downloads OpenCCU-Base's own
+# release archive of the compat version), pruned right after the extract to the paths
+# openccu-base-paths.txt lists: the build sees nothing else, so a file that list does not name
+# cannot reach the image, and the extract fails when an entry names nothing in the archive
+# (openccu-lite task 335). The list is the one place that says what openccu-lite takes from
+# OpenCCU-Base; package/eq3_char_loop prunes the same way.
+OPENCCU_BASE_SITE = $(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))
 OPENCCU_BASE_SITE_METHOD = wget
 OPENCCU_BASE_PATHS_FILE = $(OPENCCU_BASE_PKGDIR)/openccu-base-paths.txt
 # python3 is one of buildroot's own host prerequisites, so it is there before any host package
@@ -49,13 +65,32 @@ OPENCCU_BASE_DEPENDENCIES = \
 OPENCCU_BASE_BUILD_OPTS = \
 	--target $(if $(BR2_PACKAGE_OPENCCU_BASE_COMPAT_LIBS_ONLY),compat-libraries,package)
 
+# Build only what openccu-lite installs, with OpenCCU-Base's component switches (#56): nothing by
+# default, then the programs, the Tcl modules, the device types, the homematic Tcl package and the
+# hmipserver/HmIP files. Not the WebUI, nor the daemons openccu-lite does not ship: hss_led
+# (occulited drives the status LED), eq3configd (occulited answers the discovery), ssdpd (occulited
+# announces the system) - their sources are pruned (openccu-base-paths.txt). Not ReGaHss (pruned),
+# the firmware and hm_* scripts (the pre-build hook stages them), the kernel modules (eq3_char_loop
+# is its own package). The libraries follow the programs' link graph. The compat-libs build
+# (multilib32) selects nothing and builds the compat-libraries target.
 OPENCCU_BASE_CONF_OPTS = \
 	-DDEPLOY_TO_REPO=OFF \
+	-DBUILD_DEFAULT_COMPONENTS=OFF \
 	-DBUILD_TCL_MODULES=$(if $(BR2_PACKAGE_OPENCCU_BASE_COMPAT_LIBS_ONLY),OFF,ON) \
 	-DBUILD_WEBUI_AND_DEVICETYPES=$(if $(BR2_PACKAGE_OPENCCU_BASE_COMPAT_LIBS_ONLY),OFF,ON) \
 	-DHAS_USB_SUPPORT=$(if $(BR2_PACKAGE_OPENCCU_BASE_COMPAT_LIBS_ONLY),OFF,ON) \
 	-DROOTFS_DIR=$(@D)/build/rootfs \
 	$(if $(BR2_PACKAGE_OPENCCU_BASE_COMPAT_LIBS_ONLY),,\
+	-DBUILD_SETINTERFACECLOCK=ON \
+	-DBUILD_CRYPTTOOL=ON \
+	-DBUILD_EQ3CONFIGCMD=ON \
+	-DBUILD_HS485D=ON \
+	-DBUILD_HS485DLOADER=ON \
+	-DBUILD_MULTIMACD=ON \
+	-DBUILD_RFD=ON \
+	-DBUILD_WEBUI=OFF \
+	-DBUILD_HMSERVER=ON \
+	-DBUILD_HMIP_TOOLS=ON \
 	-DOPENCCU_PYTHON_EXECUTABLE=$(HOST_DIR)/bin/python3 \
 	-DOPENCCU_TCLSH_EXECUTABLE=$(HOST_DIR)/bin/tclsh8.6)
 

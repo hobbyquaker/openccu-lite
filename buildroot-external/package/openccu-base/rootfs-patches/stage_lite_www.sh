@@ -19,6 +19,9 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
+# the parent directories mkdir -p creates (www/, www/config/, www/webui/js/) are not in the chmod
+# below; a caller's umask 002 left them group-writable (B-314)
+umask 022
 
 die() {
   printf 'ERROR: %s\n' "$*" >&2
