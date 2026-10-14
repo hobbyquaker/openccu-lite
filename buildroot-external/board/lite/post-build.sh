@@ -306,6 +306,11 @@ fi
 # built so boots without its radio (1.0.0-dev.21). Rebuild those packages after a kernel dirclean.
 "$(cd "$(dirname "$0")/../../.." && pwd)/scripts/lite-module-sig-guard.sh" "${TARGET_DIR}"
 
+# And the Pi kernel maps USB buffers directly (task 333): B-91's dwc_otg patch copies received bytes
+# below the DMA mapping layer, which a kernel with CONFIG_DMA_BOUNCE_UNALIGNED_KMALLOC would undo
+# with stale bounce-buffer data. A kernel bump that brings the option back stops here.
+"$(cd "$(dirname "$0")/../../.." && pwd)/scripts/lite-kernel-dma-guard.sh" "${BUILD_DIR}"
+
 # And the binaries carry what the build flags promise: PIE, RELRO (full for lighttpd and its
 # modules, busybox, chronyd, sshd, systemd, the tclrega shim), a non-executable stack, the stack
 # protector and FORTIFY; occulited a static executable. A package rebuilt without them - a bump, a

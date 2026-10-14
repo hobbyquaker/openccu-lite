@@ -64,6 +64,12 @@ jobs:
         # the guard the lite post-build runs on the image: an updates/ module signed with another key
         # than the kernel's is refused at boot (CONFIG_MODULE_SIG_FORCE), the radio drivers first
         run: sh scripts/testcases/lite-module-sig-guard-test.sh
+      - name: The Pi kernel maps USB buffers directly (B-91's assumption)
+        # task 333: dwc_otg's kernel without CONFIG_DMA_BOUNCE_UNALIGNED_KMALLOC, which B-91's patch cannot handle
+        run: sh scripts/testcases/lite-kernel-dma-guard-test.sh
+      - name: irqbalance leaves the IRQs alone whose affinity the kernel fixes
+        # task 346: lite-irqbalance bans what refuses a write of its own mask; no boot warning per IRQ
+        run: sh scripts/testcases/lite-irqbalance-test.sh
       - name: The boot script is the product's boot.cmd
         # task 325: images/boot.scr made from an older boot.cmd (a warm tree does not rerun
         # host-uboot-tools' mkimage step) is found before the build - the Makefile rebuilds the
@@ -89,6 +95,11 @@ jobs:
         # B-313: openccu-base-paths.txt lists HMServer.jar and the install takes it with opt/ (the
         # licence step runs for it), the post-build guard requires it, and the SBOM lists it
         run: sh scripts/testcases/lite-hmserver-jar-test.sh
+      - name: The nested builds are keyed on their own inputs
+        # task 353: multilib32's and the recovery's build directories do not name OpenCCU-Base's
+        # version, every variable they pass to their nested build is one of their inputs, and a
+        # changed input reruns the nested build in the same directory (LITE_INPUTS_STAMP, in make)
+        run: sh scripts/testcases/lite-nested-build-keys-test.sh
       - name: The boot order is a dependency graph
         # the units' After= edges against the intended graph (no serial SysV chain coming back, no
         # cycle), /var/run a link before any early writer (usbmount's lock under /run, tmpfiles L+),
@@ -161,6 +172,9 @@ jobs:
         # task 308: a stub QEMU that fails, dies or outlives a TERM - the work dir goes every time,
         # QEMU's death is noticed at once, and the work dir stays off a tmpfs /tmp
         run: sh scripts/testcases/lite-qemu-cleanup-test.sh
+      - name: The GitHub release script removes its staging dir
+        # B-306: a STAGE of its own goes on every exit, a failure while staging too; one given stays
+        run: sh scripts/testcases/lite-release-stage-test.sh
       - name: The QEMU test's addon e2e waits for GitHub's rate limit
         # task 310: the addon e2e reads GitHub's budget for the address first and waits for the reset
         # within a bound, instead of failing on the rate limit

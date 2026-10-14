@@ -51,6 +51,10 @@ jobs:
           sh scripts/testcases/lite-recovery-hbrf-led-test.sh
       - name: The out-of-tree modules carry the kernel's key
         run: sh scripts/testcases/lite-module-sig-guard-test.sh
+      - name: The Pi kernel maps USB buffers directly (B-91's assumption)
+        run: sh scripts/testcases/lite-kernel-dma-guard-test.sh
+      - name: irqbalance leaves the IRQs alone whose affinity the kernel fixes
+        run: sh scripts/testcases/lite-irqbalance-test.sh
       - name: The boot script is the product's boot.cmd
         run: sh scripts/testcases/lite-bootscr-check-test.sh
       - name: The binaries carry the build's hardening flags
@@ -63,6 +67,8 @@ jobs:
         run: sh scripts/testcases/lite-openccu-base-paths-test.sh
       - name: HMServer.jar for VirtualDevices without an HmIP module
         run: sh scripts/testcases/lite-hmserver-jar-test.sh
+      - name: The nested builds are keyed on their own inputs
+        run: sh scripts/testcases/lite-nested-build-keys-test.sh
       - name: The boot order and the boot path
         run: |
           sh scripts/testcases/lite-unit-order-test.sh
@@ -102,6 +108,8 @@ jobs:
         run: sh scripts/testcases/lite-qemu-settle-test.sh
       - name: The QEMU test cleans up however it ends
         run: sh scripts/testcases/lite-qemu-cleanup-test.sh
+      - name: The GitHub release script removes its staging dir
+        run: sh scripts/testcases/lite-release-stage-test.sh
       - name: The QEMU test's addon e2e waits for GitHub's rate limit
         run: sh scripts/testcases/lite-qemu-ratelimit-test.sh
       - name: The QEMU test's boot warnings against the allowlist
