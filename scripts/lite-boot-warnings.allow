@@ -22,15 +22,15 @@
 ^kernel: eq3_char_loop: loading out-of-tree module taints kernel\.$ ## eQ-3's multiplexer module is out of tree by nature
 ^systemd: Dependency failed for Start psplash-systemd progress communication helper\.$ ## headless QEMU has no framebuffer, so psplash-start fails (B-130)
 ^lighttpd: \(\.\./src/server\.c\.[0-9]+\) reducing server\.max-connections \([0-9]+\) to 1/10 server\.max-fds \([0-9]+\)$ ## lighttpd's own notice of its fd limit (B-254), logged at warning by lighttpd
-^irqbalance: Cannot change IRQ [0-9]+ affinity: Operation not permitted$ ## irqbalance meets an IRQ whose affinity the kernel fixes; to be looked at (filed after task 345)
-^irqbalance: IRQ [0-9]+ affinity is now unmanaged$ ## the line above's consequence
-^chronyd: System clock wrong by -?[0-9.]+ seconds$ ## chronyd's makestep at the start corrects a clock that ran without NTP (no RTC, the VM's drift across the test's reboot); the size depends on timing
+^chronyd: System clock wrong by -?[0-9.]+ seconds$ ## chronyd's makestep at the start corrects a clock that ran without NTP (no RTC, the VM's drift across the test's reboot); the size depends on timing. chronyd logs both lines at warning with no setting for it: `logchange` would quiet this one but also a later real jump, and the step line has no threshold (task 346)
 ^chronyd: System clock was stepped by -?[0-9.]+ seconds$ ## the line above's step
 ^lighttpd: \(\.\./src/server\.c\.[0-9]+\) warning: clock jumped [0-9]+ secs$ ## lighttpd notices chronyd's step above when it is large
+^irqbalance: WARNING: MSI interrupts found in /proc/interrupts$ ## irqbalance's notice on a Raspberry Pi 4 whose PCIe MSIs (the VL805 USB controller) are in /proc/interrupts but have no msi_irqs/ entries in sysfs; it only means irqbalance classifies them by guess, which costs nothing on 4 cores; seen at every boot of a Pi 4 on 1.0.0-beta.2 (task 346)
+^irqbalance: But none found in sysfs, you need to update your kernel$ ## the line above's second line
+^irqbalance: Until then, IRQs will be improperly classified$ ## the line above's third line
 
 # --- occulited (its levels are occulited's: rows 7 and 11 of task 345 are occulited task 34) ---
 ^occulited: no users yet: the web UI asks for the administrator password on first visit$ ## a fresh image has no account by design
-^occulited-helper: helper: firewall loaded \(confirm window [0-9]+ ms\)$ ## occulited's helper logs its firewall load at warning; occulited's to lower
 ^occulited: rpc: interface down interface=[A-Za-z-]+ err=.*connection refused" retry_in=[0-9]+s$ ## occulited starts before the interface daemons (occulited task 34)
 ^occulited: rpc: deregistration failed interface=[A-Za-z-]+ err= ## occulited stops after the interface daemons (occulited task 34)
 ^occulited: boot timeline: this boot could not be read err="systemctl show: context (deadline exceeded|canceled)"$ ## systemctl answers slowly under TCG on a loaded runner, or the shutdown cancels the read

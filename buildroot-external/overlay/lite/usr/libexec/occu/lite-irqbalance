@@ -1,0 +1,28 @@
+#!/bin/sh
+# openccu-lite (task 346): irqbalance.service's ExecStart - irqbalance without the IRQs whose
+# affinity the kernel fixes.
+#
+# On the Pi 4 and in QEMU irqbalance tried to move IRQs the kernel does not let user space move
+# (managed or per-CPU interrupts: the write to /proc/irq/N/smp_affinity fails with EIO), and logged
+# "Cannot change IRQ N affinity: Operation not permitted" plus "IRQ N affinity is now unmanaged" at
+# warning, four times each on every boot. Before irqbalance starts, every IRQ's current mask is
+# written back to it - for an IRQ that can move, that changes nothing - and each IRQ that refuses the
+# write is handed to irqbalance as --banirq=N, so it never tries.
+#
+# LITE_IRQ_PROC (/proc/irq) and IRQBALANCE (/usr/sbin/irqbalance) are for the test.
+set -u
+PROC=${LITE_IRQ_PROC:-/proc/irq}
+banned=
+set --
+for d in "$PROC"/[0-9]*; do
+	[ -f "$d/smp_affinity" ] || continue
+	n=${d##*/}
+	cur=$(cat "$d/smp_affinity" 2>/dev/null) || continue
+	[ -n "$cur" ] || continue
+	if ! (printf '%s\n' "$cur" >"$d/smp_affinity") 2>/dev/null; then
+		set -- "$@" "--banirq=$n"
+		banned="$banned $n"
+	fi
+done
+[ -z "$banned" ] || echo "lite-irqbalance: the kernel fixes the affinity of IRQ$banned; irqbalance leaves them alone"
+exec "${IRQBALANCE:-/usr/sbin/irqbalance}" --foreground "$@"

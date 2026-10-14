@@ -38,6 +38,21 @@
 		     occulited can name the cause of a device that will not pair. It writes only while a device
 		     asks to be paired - a few lines per request - and nothing outside a pairing. -->
 		<Logger name="de.eq3.cbcs.server.core.internal.InclusionHandling" level="debug"/><!-- occulite:fixed-level -->
+		<!-- openccu-lite: the loggers of the background firmware transfer to HmIP devices (OTAU) keep
+		     their levels the same way, so occulited's Updates page can show that a device's firmware
+		     is being transferred, and how far. The scheduler at info writes the start, continuation
+		     and abort of a transfer, one line each (not its queue and utilization lines, four every
+		     five minutes, which say nothing); the transfer handlers at debug write the progress every
+		     hundred frames and the attempts on a device that does not answer, a dozen lines per
+		     attempt - tens of lines per device and transfer, nothing while no transfer is pending.
+		     The whole package at debug would write a six-line round every fifteen seconds for as long
+		     as any update is pending, which is why it is scoped. The access points' live update
+		     (live_otau) logs its few lines at info. -->
+		<Logger name="de.eq3.cbcs.server.core.otau" level="info"><!-- occulite:fixed-level -->
+			<RegexFilter regex=".*(Accesspoints in (RF|Wired) Queue|Handler utilization: [0-9]+/[0-9]+ used).*" onMatch="DENY" onMismatch="NEUTRAL"/>
+		</Logger>
+		<Logger name="de.eq3.cbcs.server.core.otau.handler" level="debug"/><!-- occulite:fixed-level -->
+		<Logger name="de.eq3.cbcs.server.core.live_otau" level="info"/><!-- occulite:fixed-level -->
 		<Logger name="de.eq3" level="info"/>
 		<Logger name="org" level="error"/>
 		<Logger name="com" level="error"/>

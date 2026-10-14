@@ -56,7 +56,13 @@ grep -q 'SYSLOG"/>' "$T/out.xml" && fail "upstream without LOGHOST: a SYSLOG ref
 grep -q '<Logger name="de.eq3.cbcs.server.local.base.internal.HMIPTRXInitialResponseListener" level="info"/><!-- occulite:fixed-level -->' "$LITE" && ok "lite: the security-counter logger is fixed at info" || fail "lite: no fixed security-counter logger"
 # openccu-lite task 201: the logger that writes the declined-pairing line is fixed at debug the same way
 grep -q '<Logger name="de.eq3.cbcs.server.core.internal.InclusionHandling" level="debug"/><!-- occulite:fixed-level -->' "$LITE" && ok "lite: the inclusion logger is fixed at debug" || fail "lite: no fixed inclusion logger"
-grep -c 'occulite:fixed-level' "$LITE" | grep -qx 3 && ok "lite: the marker on the two logger lines and in the first comment only" || fail "lite: marker count $(grep -c 'occulite:fixed-level' "$LITE")"
+# the scoped OTAU loggers of the background firmware transfer are fixed the same way: the scheduler at
+# info (its queue and utilization lines denied), the transfer handlers at debug, the live update at info
+grep -q '<Logger name="de.eq3.cbcs.server.core.otau" level="info"><!-- occulite:fixed-level -->' "$LITE" && ok "lite: the OTAU scheduler logger is fixed at info" || fail "lite: no fixed OTAU scheduler logger"
+grep -q '<Logger name="de.eq3.cbcs.server.core.otau.handler" level="debug"/><!-- occulite:fixed-level -->' "$LITE" && ok "lite: the OTAU handler logger is fixed at debug" || fail "lite: no fixed OTAU handler logger"
+grep -q '<Logger name="de.eq3.cbcs.server.core.live_otau" level="info"/><!-- occulite:fixed-level -->' "$LITE" && ok "lite: the live OTAU logger is fixed at info" || fail "lite: no fixed live OTAU logger"
+sed -n '/<Logger name="de.eq3.cbcs.server.core.otau" /,/<\/Logger>/p' "$LITE" | grep -q 'RegexFilter regex=".*Accesspoints in (RF|Wired) Queue.*Handler utilization.*" onMatch="DENY" onMismatch="NEUTRAL"' && ok "lite: the scheduler's queue and utilization lines are denied" || fail "lite: no DENY filter on the OTAU scheduler logger"
+grep -c 'occulite:fixed-level' "$LITE" | grep -qx 6 && ok "lite: the marker on the five logger lines and in the first comment only" || fail "lite: marker count $(grep -c 'occulite:fixed-level' "$LITE")"
 
 [ "$fails" -eq 0 ] && echo "hmipserver-log4j2-test: all passed" || echo "hmipserver-log4j2-test: $fails failed"
 [ "$fails" -eq 0 ]
