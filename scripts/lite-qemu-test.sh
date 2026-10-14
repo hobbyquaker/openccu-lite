@@ -433,7 +433,11 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   R=$(guest 'sleep 4; systemctl is-active lighttpd.service'); case "$R" in *'| active'*) ;; *) fail "lighttpd.service did not come back after its daemon was killed (B-3)";; esac
   wait_http "after killing lighttpd"
   # B-3: an init script called by hand goes to systemctl, not around it
-  say "guest: the init-script wrapper"; guest 'ls -l /etc/init.d/S50lighttpd /etc/init.d/S50lighttpd.script; P=$(systemctl show -p MainPID --value lighttpd.service); /etc/init.d/S50lighttpd restart; sleep 6; Q=$(systemctl show -p MainPID --value lighttpd.service); echo "main pid $P -> $Q"; systemctl show -p ControlGroup --value lighttpd.service; pgrep -x lighttpd-angel | wc -l'
+  # B-317: no fixed sleeps. Under runner load the restart came while lighttpd was still in its
+  # restart backoff from the kill above, and 6 s were not enough for it to come back: the restart
+  # waits for the unit to be settled and active, and the checks wait (up to 30 s) for it to be
+  # active again with exactly one lighttpd-angel. Each wait says how long it took.
+  say "guest: the init-script wrapper"; guest 'ls -l /etc/init.d/S50lighttpd /etc/init.d/S50lighttpd.script; i=0; while [ $i -lt 30 ] && [ "$(systemctl is-active lighttpd.service)" != active ]; do sleep 1; i=$((i+1)); done; echo "active before the restart after ${i}s: $(systemctl show -p ActiveState -p SubState -p NRestarts --value lighttpd.service | tr "\n" " ")"; P=$(systemctl show -p MainPID --value lighttpd.service); /etc/init.d/S50lighttpd restart; i=0; while [ $i -lt 30 ]; do [ "$(systemctl is-active lighttpd.service)" = active ] && [ "$(pgrep -x lighttpd-angel | wc -l)" = 1 ] && break; sleep 1; i=$((i+1)); done; Q=$(systemctl show -p MainPID --value lighttpd.service); echo "main pid $P -> $Q, settled after ${i}s"; systemctl show -p ControlGroup --value lighttpd.service; pgrep -x lighttpd-angel | wc -l'
   R=$(guest 'pgrep -x lighttpd-angel | wc -l'); case "$R" in *'| 1'*) ;; *) fail "a hand-invoked S50lighttpd restart left the daemon outside its unit (B-3)";; esac
   R=$(guest 'systemctl is-active lighttpd.service'); case "$R" in *'| active'*) ;; *) fail "lighttpd.service not active after a hand-invoked restart";; esac
   # B-5: the end-of-boot hint

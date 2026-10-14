@@ -202,13 +202,16 @@ EOF
 
 # --- the sandbox ---------------------------------------------------------------------------------
 # rewrite <script> <output>: the script with its absolute paths inside $R and every device-node
-# test turned into a plain existence test
+# test turned into a plain existence test. Every /tmp/ path goes first, before the other rules put
+# $R (itself under /tmp) into the line: S62HMServer's `cp -a /media/usb0/measurement /tmp/` wrote
+# into the host's /tmp, and a run as root left a /tmp/measurement that broke builder's next one (B-312).
 rewrite() {
-  sed -e 's/\[\[ -c /[[ -e /g' -e 's/\[\[ ! -c /[[ ! -e /g' -e 's|/proc/\$\$/oom_score_adj|/dev/null|g' \
+  sed -e "s|\([^A-Za-z0-9_.-]\)/tmp/|\1$R/tmp/|g" \
+      -e 's/\[\[ -c /[[ -e /g' -e 's/\[\[ ! -c /[[ ! -e /g' -e 's|/proc/\$\$/oom_score_adj|/dev/null|g' \
       -e "s| /etc/HMServer.conf| $R/etc/HMServer.conf|g" -e "s| /etc/hmipserver.default| $R/etc/hmipserver.default|g" \
       -e "s|/etc/config_templates|$R/etc/config_templates|g" -e "s|/etc/config\([^_a-zA-Z0-9]\)|$R/etc/config\1|g" -e "s|/etc/config\$|$R/etc/config|" \
       -e "s|/sys/|$R/sys/|g" -e "s|/proc/|$R/proc/|g" -e "s|/var/|$R/var/|g" \
-      -e "s|/usr/local/|$R/usr/local/|g" -e "s|/media/usb0|$R/media/usb0|g" -e "s|/tmp/measurement|$R/tmp/measurement|g" \
+      -e "s|/usr/local/|$R/usr/local/|g" -e "s|/media/usb0|$R/media/usb0|g" \
       -e "s|/firmware/|$R/firmware/|g" -e "s|/opt/|$R/opt/|g" \
       -e "s|/dev/\${|$R/dev/\${|g" -e "s|/dev/ttyAMA0|$R/dev/ttyAMA0|g" -e "s|/dev/mmd_|$R/dev/mmd_|g" -e "s|/dev/eq3loop|$R/dev/eq3loop|g" \
       -e "s|/bin/detect_radio_module|$R/bin/detect_radio_module|g" -e "s|/bin/setserial|$R/bin/setserial|g" \
@@ -369,7 +372,8 @@ run_chain() {
            "$EXT/package/hmlangw/S61hmlangw"; do
     rewrite "$s" "$R/bin/$(basename "$s")"
   done
-  sed -e "s|^CONF=/etc/config/rfd.conf|CONF=$R/etc/config/rfd.conf|" "$HERE/scripts/testcases/radio-oracle/lite-rfd-listen" > "$R/bin/lite-rfd-listen"
+  sed -e "s|^CONF=/etc/config/rfd.conf|CONF=$R/etc/config/rfd.conf|" -e "s|mktemp /tmp/|mktemp $R/tmp/|" \
+    "$HERE/scripts/testcases/radio-oracle/lite-rfd-listen" > "$R/bin/lite-rfd-listen"
   chmod 755 "$R/bin/lite-rfd-listen"
   for s in S47InitRFHardware S49hs485d S60hs485d lite-rfd-listen S60multimacd S61rfd S62HMServer S61hmlangw; do
     if [ "$s" = lite-rfd-listen ]; then
@@ -681,6 +685,16 @@ run_case rpi3-rpi-rf-mod-ids-zero-userfs c_rpi3_rpi_rf_mod_ids_zero_userfs
 run_case rpi3-rpi-rf-mod-wired-userfs c_rpi3_rpi_rf_mod_wired_userfs
 run_case rpi4-hmip-rfusb-usb2-gone-userfs c_rpi4_hmip_rfusb_usb2_gone_userfs
 run_case rpi3-rpi-rf-mod-hmlgw-mode c_rpi3_rpi_rf_mod_hmlgw_mode
+
+# B-312: no script of the chain writes into the host's /tmp - every /tmp/ path is the sandbox's
+R="$T/tmp-check"; mkdir -p "$R"
+for s in "$BASE/etc/init.d/S47InitRFHardware" "$BASE/etc/init.d/S49hs485d" "$BASE/etc/init.d/S60hs485d" \
+         "$RFDO/etc/init.d/S60multimacd" "$RFDO/etc/init.d/S61rfd" "$BASE/etc/init.d/S62HMServer" \
+         "$EXT/package/hmlangw/S61hmlangw"; do
+  rewrite "$s" "$R/$(basename "$s")"
+  left=$(sed -e "s|$R/tmp/|<sandbox-tmp>|g" -e "s|$R/|<sandbox>/|g" "$R/$(basename "$s")" | grep -v '^ *#' | grep -n '/tmp/' | head -3)
+  [ -z "$left" ] && ok "$(basename "$s"): every /tmp/ path is in the sandbox" || bad "$(basename "$s") writes outside the sandbox: $left"
+done
 
 echo "$cases cases, $fails failures"
 [ "$fails" -eq 0 ]

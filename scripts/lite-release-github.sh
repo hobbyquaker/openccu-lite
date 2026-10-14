@@ -27,7 +27,8 @@
 #
 # Environment (defaults for the build host): TREE (/ssd/build/openccu-lite-3899), PRODUCTS
 # ("aarch64-rpi3 aarch64-rpi4 x86_64-ova"), GH_REPO (hobbyquaker/openccu-lite), GH_API
-# (https://api.github.com), GH_UPLOADS (https://uploads.github.com), STAGE (a new temporary directory).
+# (https://api.github.com), GH_UPLOADS (https://uploads.github.com), STAGE (a new temporary
+# directory, removed on exit; a STAGE given is kept).
 set -euo pipefail
 
 dry=0
@@ -40,7 +41,15 @@ PRODUCTS="${PRODUCTS:-aarch64-rpi3 aarch64-rpi4 x86_64-ova}"
 GH_REPO="${GH_REPO:-hobbyquaker/openccu-lite}"
 GH_API="${GH_API:-https://api.github.com}"
 GH_UPLOADS="${GH_UPLOADS:-https://uploads.github.com}"
-STAGE="${STAGE:-$(mktemp -d)}"
+# a STAGE of our own goes on every exit (B-306: each release left a few MB in the runner's /tmp);
+# one the caller names is the caller's and stays
+if [ -n "${STAGE:-}" ]; then
+  own_stage=0
+else
+  STAGE=$(mktemp -d)
+  own_stage=1
+fi
+trap 'if [ "$own_stage" = 1 ]; then rm -rf "$STAGE"; fi' EXIT
 TAG="v$V"
 
 fail() { echo "lite-release-github: ERROR: $*" >&2; exit 1; }
