@@ -23,6 +23,9 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
 - **Proxmox-VM per Skript:** als root auf dem Proxmox-VE-Host legt ein Skript die VM in einem Schritt an (`--help`
   zeigt die Optionen):
   `bash -c "$(wget -qLO - https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh)"`
+  Im Dialog oder per Option lassen sich VM-ID (`--vmid`), MAC-Adresse (`--mac`, z. B. die der alten VM, damit der
+  DHCP-Server dieselbe IP vergibt), Maschinentyp (`--machine`, Standard `q35`), CPU-Typ (`--cpu`, Standard `kvm64`,
+  z. B. `host`), Plattengröße, Speicher, Kerne, Bridge und VLAN festlegen (Danke an @Baxxy13).
 
 ## Wechsel von (Open)CCU zu openccu-lite
 

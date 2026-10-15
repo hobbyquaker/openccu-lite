@@ -30,6 +30,9 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
 - **Proxmox VM by script:** as root on the Proxmox VE host, a script creates the VM in one step (`--help` lists
   the options):
   `bash -c "$(wget -qLO - https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh)"`
+  The dialog or options set the VM id (`--vmid`), the MAC address (`--mac`, e.g. the old VM's, so the DHCP server
+  hands out the same address), the machine type (`--machine`, default `q35`), the CPU type (`--cpu`, default `kvm64`,
+  e.g. `host`), disk size, memory, cores, bridge and VLAN (thanks to @Baxxy13).
 - a new install can (as long as no devices are paired yet) import paired devices, keys, names and rooms from an
   (Open)CCU backup in one step. The backup's BidCos security key comes along as it is (its passphrase is asked as a
   check only, never as a gate; later key changes need it); an HmIP identity bound to another radio module is taken over
