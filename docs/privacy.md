@@ -14,6 +14,7 @@ occulited repository). A change to what leaves the system fails those tests, and
 | --- | --- | --- | --- | --- |
 | [System release check](#system-release-check) | GitHub (`api.github.com`) | on *Check now*; daily with *Check daily* (**off by default**) | nothing but the IP address | Updates page: *Check daily*; asked on the welcome page |
 | [Device firmware check](#device-firmware-check-and-download) | eQ-3 (`ccu3-update.homematic.com`) | on *Check now*; daily with *Check daily* (**off by default**) | the system's base firmware version; the device **types** that need an update | Updates page: *Check daily*; asked on the welcome page |
+| [Older device firmware](#older-device-firmware) | GitHub (`api.github.com`, `raw.githubusercontent.com`) | only on *Versions* and *Download* in the Updates page's dialog | nothing but the IP address; a download names one device **type** | none needed: nothing happens without the click |
 | [Addon catalogue](#addon-catalogue) | GitHub (`raw.githubusercontent.com`, `api.github.com`) | on *Check now*; daily with *Check daily* (**off by default**); at an install | nothing but the IP address | Addons page: *Check daily*; asked on the welcome page |
 | [Addon update checks](#addon-update-checks) | each addon's own `Update:` URL | on the addon's check; daily with the Addons page's *Check daily* (**off by default**) | the addon's installed version | Addons page: *Check daily*; asked on the welcome page |
 | [ACME certificates](#acme-certificates) | the chosen CA (e.g. Let's Encrypt), a DNS provider | only in ACME mode: at the order, then a renewal when due | the system's names, the contact mail if given | Certificate page (default: self-signed, no calls) |
@@ -73,9 +74,25 @@ The firmware of paired Homematic and HmIP devices comes from eQ-3's update serve
 - **The download, in the same run:** for every paired device type whose firmware on the server is newer than what
   the system already holds, `GET …/firmware/download?cmd=download&product=<DEVICE TYPE>&serial=0`. So eQ-3 learns
   which device types (e.g. `HmIP-BBL`) are paired and not up to date. The serial is always `0`: **no device serial
-  number is sent.** Installing a downloaded firmware onto a device stays your action in your frontend.
+  number is sent.** A downloaded firmware reaches the devices only when you deliver it on the Updates page
+  (*Deploy automatically*, off by default), and installing it onto a device stays your action in your frontend.
 - **Not sent:** device serial numbers, the system's serial or SGTIN, the host name, how many devices there are.
 - **Off:** the default; clear *Check daily* to switch it off again. Firmware files can be uploaded by hand instead.
+
+### Older device firmware
+
+eQ-3's update server serves only the newest firmware of a device type. Older HmIP device firmware - to go back to
+the version a device ran before an update - comes from the OpenCCU firmware archive
+(`github.com/OpenCCU/HMDeviceFirmware`), which keeps eQ-3's past update files.
+
+- **To:** `GET https://api.github.com/repos/OpenCCU/HMDeviceFirmware/git/trees/master?recursive=1` - the archive's
+  file list - when you open *Versions* for a device type on the Updates page (kept for an hour); and
+  `GET https://raw.githubusercontent.com/OpenCCU/HMDeviceFirmware/master/<path>` when you press *Download* for one
+  version.
+- **Sends:** nothing of the system; the User-Agent. The file list is the same for everyone; a download names one
+  device type and version in its path. A downloaded file is checked like one from eQ-3 and waits on the system
+  until you deliver it.
+- **Off:** there is no switch: nothing is fetched unless you open the dialog or press *Download*.
 
 ### Addon catalogue
 

@@ -82,3 +82,20 @@ a less loaded system, win the race.
 `systemctl restart hmipserver`. The heating groups are back within about two minutes, and the
 transport errors stop. The fix belongs in eQ-3's hmipserver; openccu-lite ships that binary
 unchanged.
+
+## Device firmware that is not delivered shows as up to date in other apps
+
+**What you see:** the Updates page lists a device firmware as *Downloaded, not delivered*, while
+the WebUI, homematic-manager, Home Assistant and other apps show the same devices as up to date.
+
+**Why:** openccu-lite downloads device firmware but does not hand it to the devices until you say
+so: with *Deploy automatically* off - the default since 1.0.0-beta.5, also on systems updated from
+an earlier version - a download waits on the system until you press *Deliver to devices* for its
+type. hmipserver and rfd report an available firmware only for firmware that is delivered, so
+every app that asks them sees none. Firmware delivered before the update stays delivered.
+
+**What to do:** nothing, if you want to decide when a firmware reaches your devices. Deliver it on
+the Updates page when you want it; HmIP devices then receive it in the background (this can take
+hours and uses the radio's airtime), BidCos devices when you start the update in your frontend.
+The install itself is always your step in the frontend. Switch *Deploy automatically* on to deliver
+every download at once, as before.

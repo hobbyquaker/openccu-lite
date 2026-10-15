@@ -89,3 +89,22 @@ ausgelasteten System, gewinnen den Wettlauf.
 `systemctl restart hmipserver`. Die Heizungsgruppen sind nach etwa zwei Minuten wieder da, und die
 Transportfehler hören auf. Die Korrektur gehört in eQ-3s hmipserver; openccu-lite liefert dieses
 Binary unverändert aus.
+
+## Nicht ausgelieferte Gerätefirmware erscheint in anderen Apps als aktuell
+
+**Was Sie sehen:** die Seite Updates führt eine Gerätefirmware als *Heruntergeladen, nicht
+ausgeliefert*, während die WebUI, homematic-manager, Home Assistant und andere Apps dieselben Geräte
+als aktuell anzeigen.
+
+**Warum:** openccu-lite lädt Gerätefirmware herunter, gibt sie aber erst an die Geräte weiter, wenn
+Sie es wollen: ist *Automatisch bereitstellen* aus - die Voreinstellung seit 1.0.0-beta.5, auch auf
+Systemen, die von einer früheren Version aktualisiert wurden -, wartet ein Download auf dem System,
+bis Sie für seinen Typ *An die Geräte ausliefern* drücken. hmipserver und rfd melden eine verfügbare
+Firmware nur für ausgelieferte Firmware, also sieht jede App, die sie fragt, keine. Firmware, die
+vor dem Update ausgeliefert war, bleibt ausgeliefert.
+
+**Was zu tun ist:** nichts, wenn Sie selbst entscheiden wollen, wann eine Firmware Ihre Geräte
+erreicht. Liefern Sie sie auf der Seite Updates aus, wenn Sie sie wollen; HmIP-Geräte erhalten sie
+dann im Hintergrund (das kann Stunden dauern und nutzt die Funkzeit des Funkmoduls), BidCos-Geräte,
+wenn Sie das Update im Frontend starten. Die Installation ist immer Ihr Schritt im Frontend.
+Schalten Sie *Automatisch bereitstellen* ein, um jeden Download wie bisher sofort auszuliefern.

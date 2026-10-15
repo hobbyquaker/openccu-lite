@@ -328,7 +328,8 @@ Journals.
 - **Funk-Firmware:** die Firmware des Funkmoduls, mitgelieferte und hochgeladene Versionen, Flashen, Upgrade und
   Downgrade.
 - **Gerätefirmware:** die angelernten Geräte mit ihrer Firmware und der neuesten Version bei eQ-3, die bereitgestellten
-  Firmware-Dateien und das Hochladen eigener Firmware-Pakete.
+  Firmware-Dateien und das Hochladen eigener Firmware-Pakete. Eine heruntergeladene Firmware erreicht die Geräte erst
+  mit *An die Geräte ausliefern*.
 
 ### Statusleuchte
 
