@@ -62,6 +62,31 @@ grep -v '^#\|^[[:space:]]*$' "$ALLOW" | sed 's/ ## .*//' | while IFS= read -r re
 done > "$T/regex.out"
 [ -s "$T/regex.out" ] && bad "$(cat "$T/regex.out")" || ok "every expression compiles"
 
+# the real allowlist on lines the boot test met: the timing-dependent forms of one cause pass
+# (B-323: beta.4's runs 1 and 2 each met a form the list did not have), other error texts do not
+cat > "$T/timing" <<'EOF'
+  | Oct 14 22:41:07 openccu-lite-3456 occulited[402]: rpc: interface down interface=BidCos-RF err="HTTP request failed on 127.0.0.1:32001: Post \"http://127.0.0.1:32001\": dial tcp 127.0.0.1:32001: connect: connection refused" retry_in=5s
+  | Oct 14 22:41:07 openccu-lite-3456 occulited[402]: rpc: interface down interface=VirtualDevices err="HTTP request failed on 127.0.0.1:39292/groups: Post \"http://127.0.0.1:39292/groups\": dial tcp 127.0.0.1:39292: connect: connection refused" retry_in=5s
+  | Oct 14 22:41:12 openccu-lite-3456 occulited[402]: rpc: interface down interface=BidCos-RF err="HTTP request failed on 127.0.0.1:32001: Post \"http://127.0.0.1:32001\": read tcp 127.0.0.1:47644->127.0.0.1:32001: read: connection reset by peer" retry_in=5s
+  | Oct 14 23:19:30 openccu-lite-3456 occulited[402]: boot timeline: this boot could not be read err="systemctl show: context deadline exceeded"
+  | Oct 14 23:19:30 openccu-lite-3456 occulited[402]: boot timeline: this boot could not be read err="systemctl show: context canceled"
+  | Oct 14 23:19:30 openccu-lite-3456 occulited[402]: boot timeline: this boot could not be read err="systemctl show: privilege helper: read unix @->/run/occulite/helper.sock: i/o timeout"
+EOF
+out=$(sh "$CHECK" "$ALLOW" "$T/timing" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "the allowlist takes the refused, reset and timeout forms (B-323)" || bad "timing forms: rc $rc: $out"
+case "$out" in *"6 warning(s), 0 not"*) ok "all six counted";; *) bad "timing count: $out";; esac
+cat > "$T/other" <<'EOF'
+  | Oct 14 22:41:12 openccu-lite-3456 occulited[402]: rpc: interface down interface=BidCos-RF err="HTTP request failed on 127.0.0.1:32001: Post \"http://127.0.0.1:32001\": read tcp 127.0.0.1:47644->127.0.0.1:32001: read: connection timed out" retry_in=5s
+  | Oct 14 22:41:12 openccu-lite-3456 occulited[402]: rpc: interface down interface=BidCos-RF err="HTTP request failed on 127.0.0.1:32001: Post \"http://127.0.0.1:32001\": write tcp 127.0.0.1:47644->127.0.0.1:32001: write: broken pipe" retry_in=5s
+  | Oct 14 22:41:12 openccu-lite-3456 occulited[402]: rpc: interface down interface=BidCos-RF err="HTTP request failed on 192.168.1.5:2001: Post \"http://192.168.1.5:2001\": dial tcp 192.168.1.5:2001: connect: connection refused" retry_in=5s
+  | Oct 14 23:19:30 openccu-lite-3456 occulited[402]: boot timeline: this boot could not be read err="systemctl show: privilege helper: write unix @->/run/occulite/helper.sock: i/o timeout"
+  | Oct 14 23:19:30 openccu-lite-3456 occulited[402]: boot timeline: this boot could not be read err="systemctl show: privilege helper: read unix @->/run/occulite/helper.sock: connection reset by peer"
+  | Oct 14 23:19:30 openccu-lite-3456 occulited[402]: boot timeline: this boot could not be read err="systemctl show: exit status 1"
+EOF
+out=$(sh "$CHECK" "$ALLOW" "$T/other" 2>&1); rc=$?
+[ "$rc" = 1 ] && ok "other error texts of the same lines still fail" || bad "other texts: rc $rc: $out"
+case "$out" in *"6 warning(s), 6 not"*) ok "all six other texts named";; *) bad "other count: $out";; esac
+
 # the causes task 345 removed, which the allowlist leaves out: each fix is still in place
 EXT="$HERE/buildroot-external"
 PBS="$EXT/board/lite/post-build-systemd.sh"
