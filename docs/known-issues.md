@@ -98,4 +98,6 @@ every app that asks them sees none. Firmware delivered before the update stays d
 the Updates page when you want it; HmIP devices then receive it in the background (this can take
 hours and uses the radio's airtime), BidCos devices when you start the update in your frontend.
 The install itself is always your step in the frontend. Switch *Deploy automatically* on to deliver
-every download at once, as before.
+every download at once, as before. The Updates page lists HmIP devices only (HmIP wired included):
+BidCos-RF, BidCos-Wired and virtual devices are not listed, so BidCos firmware reaches rfd only with
+*Deploy automatically* on.

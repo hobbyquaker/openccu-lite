@@ -19,7 +19,7 @@ occulited repository). A change to what leaves the system fails those tests, and
 | [Addon update checks](#addon-update-checks) | each addon's own `Update:` URL | on the addon's check; daily with the Addons page's *Check daily* (**off by default**) | the addon's installed version | Addons page: *Check daily*; asked on the welcome page |
 | [ACME certificates](#acme-certificates) | the chosen CA (e.g. Let's Encrypt), a DNS provider | only in ACME mode: at the order, then a renewal when due | the system's names, the contact mail if given | Certificate page (default: self-signed, no calls) |
 | [Login with OpenID Connect](#login-with-openid-connect) | the configured provider | only when configured: at a login and at *Check* | the client id, the redirect URI | Users page (default: off) |
-| [Status LED internet check](#status-led-internet-check) | the hosts of the above | only when the LED is set to show it: every 5 minutes | a TCP connection, nothing sent | Status LED page (default: off) |
+| [Status LED internet check](#status-led-internet-check) | the hosts of the above | only when the LED is set to show it: every 5 minutes | a TCP connection, nothing sent | Hardware page, Status LED section (default: off) |
 | [Time (NTP)](#time-ntp) | your servers or the DHCP ones; the gateway, or `0-3.de.pool.ntp.org`, only when there are none | always | the NTP protocol only | Network page (your servers replace the pool) |
 | [HmIP key server](#hmip-key-server) | eQ-3 (`secgtw.homematic.com:8443`) | a radio module exchange; pairing a device whose key is not on the system | the radio module's and the device's serial numbers (SGTIN) | Keys page: *Local key mode* |
 
@@ -167,7 +167,7 @@ Off by default. When you configure a provider on the Users page:
 
 Off by default. When the status LED is set to show a missing internet connection, the system opens a TCP connection
 every 5 minutes to the host of the catalogue URL and, in ACME mode, of the ACME directory, and closes it at once.
-Nothing is sent over it. The Status LED page switches it off.
+Nothing is sent over it. The Status LED section of the Hardware page switches it off.
 
 ## Internet connections of the image
 

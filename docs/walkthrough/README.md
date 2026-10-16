@@ -327,19 +327,28 @@ Journals.
   Hochladen eines Update-Pakets.
 - **Funk-Firmware:** die Firmware des Funkmoduls, mitgelieferte und hochgeladene Versionen, Flashen, Upgrade und
   Downgrade.
-- **Gerätefirmware:** die angelernten Geräte mit ihrer Firmware und der neuesten Version bei eQ-3, die bereitgestellten
-  Firmware-Dateien und das Hochladen eigener Firmware-Pakete. Eine heruntergeladene Firmware erreicht die Geräte erst
+- **Gerätefirmware:** die angelernten HmIP-Geräte (auch HmIP Wired; BidCos und virtuelle Geräte stehen nicht in der
+  Liste) mit ihrer Firmware und der neuesten Version bei eQ-3, die bereitgestellten Firmware-Dateien und das Hochladen
+  eigener Firmware-Pakete. Eine heruntergeladene Firmware erreicht die Geräte erst
   mit *An die Geräte ausliefern*.
 
-### Statusleuchte
+### Hardware
 
 ![Statusleuchte](25-statusleuchte.png)
 
-Die Statusleuchte des Funkmoduls (RPI-RF-MOD) zeigt den Zustand des Systems in Farben: blau oder grün, wenn alles in
+Die Seite Hardware fasst zusammen, was sich an der Hardware des Systems schalten lässt; ein Abschnitt erscheint nur,
+wo das System den Teil hat. Die Statusleuchte des Funkmoduls (RPI-RF-MOD) zeigt den Zustand des Systems in Farben: blau oder grün, wenn alles in
 Ordnung ist, rot, gelb oder cyan für ausgefallene Dienste, fehlendes Netzwerk, Warnungen oder ein verfügbares Update.
 Welche Zustände sie zeigt und in welcher Reihenfolge lässt sich hier einstellen, dazu ein Nachtmodus, in dem sie zu
 festen Zeiten nur Fehler oder gar nichts zeigt;
-„Finden“ lässt sie ein paar Minuten weiß blinken, um das Gerät zu finden. Dazu die LEDs auf der Platine des Raspberry Pi.
+„Finden“ lässt sie ein paar Minuten weiß blinken, um das Gerät zu finden. Dazu die LEDs auf der Platine des Raspberry Pi. Auf dem Raspberry Pi außerdem der HDMI-Ausgang: standardmäßig aus,
+abgeschaltet erst, wenn das System gestartet ist, so dass ein Monitor den Start und das Recovery-System weiter zeigt.
+Mit dem Funkmodul RPI-RF-MOD auf der Stiftleiste des Raspberry Pi außerdem die Taste am Funkmodul: Einfacher,
+doppelter und langer Druck lösen je eine einstellbare Aktion aus (die Warnungen der LED stummschalten, Finden, für den
+langen Druck auch ein Neustart oder ein Neustart ins Recovery-System); ab Werk schaltet ein einfacher Druck die
+Warnungen stumm. Beim Anschließen der Stromversorgung gedrückt gehalten startet die Taste wie bisher das
+Recovery-System, auch wenn das System selbst nicht mehr startet. Über einen Funkadapter (HB-RF-USB, HB-RF-USB-2,
+HB-RF-ETH) erreicht die Taste das System nicht.
 
 ## Beispiele für Funk-Konfigurationen
 

@@ -25,7 +25,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 
 - Neue Weboberfläche (Svelte), ausgeliefert vom Systemdienst occulited, einer statischen Go-Binärdatei
 - Deutsch und Englisch, helles und dunkles Design
-- Seiten: Status, Bedienung, Zusatzsoftware und das System-Menü mit Schnittstellen, LAN-Geräte, Schlüssel, Netzwerk, Firewall, Fernzugriff, Vertrauensspeicher, Zertifikat, Benutzer, Dienste, Protokoll, Speicher, Sicherung, Updates, Statusleuchte
+- Seiten: Status, Bedienung, Zusatzsoftware und das System-Menü mit Schnittstellen, LAN-Geräte, Schlüssel, Netzwerk, Firewall, Fernzugriff, Vertrauensspeicher, Zertifikat, Benutzer, Dienste, Protokoll, Speicher, Sicherung, Updates, Hardware
 - Bedienung: Favoriten, Räume und Gewerke als Baum, Kanäle als Kacheln
 - Der Menüpunkt Bedienung lässt sich ausblenden
 - Namen, Räume und Gewerke in einem eigenen Metadatenspeicher mit REST-API und Änderungsstrom; Räume und Gewerke verschachtelbar
@@ -35,6 +35,8 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - Statusleuchte des RPI-RF-MOD zeigt den Systemzustand, mit Nachtmodus und „Finden“
 - Statusleuchte dimmbar, Farben frei wählbar, sanfte Übergänge; auf dem Raspberry Pi gelb ab dem Einschalten
 - Statusleuchte zeigt auf Wunsch die Auslastung des Funks (Duty Cycle, Carrier Sense)
+- Taste am Funkmodul (RPI-RF-MOD auf der Stiftleiste): einfacher, doppelter und langer Druck mit einstellbaren Aktionen (Warnungen der LED stummschalten, Finden, Neustart, Neustart ins Recovery-System); beim Einschalten gedrückt gehalten weiterhin das Recovery-System
+- HDMI auf dem Raspberry Pi standardmäßig aus, abgeschaltet erst nach dem Start (ein Monitor zeigt den Start und das Recovery-System), auf der Seite Hardware ohne Neustart wieder einschaltbar
 - Lizenzseite mit allen Bestandteilen und SBOM zum Herunterladen
 - Neustart, Herunterfahren und Start ins Recovery-System aus der Oberfläche
 - Beim ersten Start eine Begrüßung mit Übernahme aus einer Sicherung und der Wahl des Nur-HmIP-Betriebs
@@ -64,7 +66,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - Die Identitätsdateien des HmIP-Access-Points ändern sich nur nach einer Warnung und Bestätigung; die automatische Wahl verschiebt HmIP-RF nie auf ein anderes Funkmodul
 - Wechsel des HmIP-Funkmoduls: vorher ein Schnappschuss, ein Weg zurück zum vorherigen Modul, eine Diagnose, wenn der Schlüsseltausch abgelehnt wird
 - Schutz vor dem zurückgesetzten HmIP-Sicherheitszähler: der Uhr wird nur zwischen dem Bau des Images und 15 Jahren danach vertraut, gefährdete Access Points werden erkannt, hmipserver wartet auf eine verlässliche Uhr; Details in [bekannte-probleme.md](bekannte-probleme.md)
-- Warnung, wenn der Funk ausgelastet ist (Carrier Sense über 10 %, Duty Cycle über 50 %)
+- Warnung, wenn der Funk ausgelastet ist (Carrier Sense über 10 %, Duty Cycle ab 25 %, während einer Übertragung von Gerätefirmware ab 75 %)
 - Hinweis auf eine neuere Coprozessor-Firmware und auf Funkmodule, die die Dienste nicht nutzen können
 - HmIP-Heizungsgruppen über die API von occulited
 - Gerätebeschreibungen von Addons (`/firmware/rftypes`) in einer beschreibbaren Schicht, auf den Image-Stand zurücksetzbar

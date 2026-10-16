@@ -108,3 +108,5 @@ erreicht. Liefern Sie sie auf der Seite Updates aus, wenn Sie sie wollen; HmIP-G
 dann im Hintergrund (das kann Stunden dauern und nutzt die Funkzeit des Funkmoduls), BidCos-Geräte,
 wenn Sie das Update im Frontend starten. Die Installation ist immer Ihr Schritt im Frontend.
 Schalten Sie *Automatisch bereitstellen* ein, um jeden Download wie bisher sofort auszuliefern.
+Die Seite Updates führt nur HmIP-Geräte (auch HmIP Wired): BidCos-RF, BidCos-Wired und virtuelle Geräte
+stehen nicht in der Liste, BidCos-Firmware erreicht rfd also nur mit *Automatisch bereitstellen*.
