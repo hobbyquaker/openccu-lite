@@ -334,14 +334,14 @@ Journals.
 
 ### Hardware
 
-![Statusleuchte](25-statusleuchte.png)
+![Hardware](25-hardware.png)
 
 Die Seite Hardware fasst zusammen, was sich an der Hardware des Systems schalten lässt; ein Abschnitt erscheint nur,
 wo das System den Teil hat. Die Statusleuchte des Funkmoduls (RPI-RF-MOD) zeigt den Zustand des Systems in Farben: blau oder grün, wenn alles in
 Ordnung ist, rot, gelb oder cyan für ausgefallene Dienste, fehlendes Netzwerk, Warnungen oder ein verfügbares Update.
 Welche Zustände sie zeigt und in welcher Reihenfolge lässt sich hier einstellen, dazu ein Nachtmodus, in dem sie zu
 festen Zeiten nur Fehler oder gar nichts zeigt;
-„Finden“ lässt sie ein paar Minuten weiß blinken, um das Gerät zu finden. Dazu die LEDs auf der Platine des Raspberry Pi. Auf dem Raspberry Pi außerdem der HDMI-Ausgang: standardmäßig aus,
+„Finden“ lässt sie ein paar Minuten weiß blinken, um das Gerät zu finden. Dazu die LEDs auf der Platine des Raspberry Pi und die Taste am Funkmodul: was ein einfacher, doppelter und langer Druck tut, etwa die Warnungen der LED für eine Weile stummschalten. Auf dem Raspberry Pi außerdem der HDMI-Ausgang: standardmäßig aus,
 abgeschaltet erst, wenn das System gestartet ist, so dass ein Monitor den Start und das Recovery-System weiter zeigt.
 Mit dem Funkmodul RPI-RF-MOD auf der Stiftleiste des Raspberry Pi außerdem die Taste am Funkmodul: Einfacher,
 doppelter und langer Druck lösen je eine einstellbare Aktion aus (die Warnungen der LED stummschalten, Finden, für den
