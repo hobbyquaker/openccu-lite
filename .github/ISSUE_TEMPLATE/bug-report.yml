@@ -36,7 +36,6 @@ body:
         - rpi4 (Raspberry Pi 4)
         - ccu3 (eQ-3 CCU3)
         - ova (virtual machine)
-        - lxc (container)
     validations:
       required: true
   - type: input

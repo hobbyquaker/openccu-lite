@@ -20,7 +20,7 @@ Räume und Gewerke aus der ReGa-Datenbank und fragt nach einem Administrator-Pas
 
 | Ihr System | Paket | Was passiert |
 | --- | --- | --- |
-| OpenCCU auf SD-Karte oder USB-Datenträger (`PRODUCT=rpi3`, `rpi4`, `rpi5`, …) | `openccu-lite-<produkt>-<version>.zip` | ein Recovery-Durchlauf, ein Neustart, etwa drei Minuten |
+| OpenCCU auf SD-Karte oder USB-Datenträger (`PRODUCT=rpi3`, `rpi4`) | `openccu-lite-<produkt>-<version>.zip` | ein Recovery-Durchlauf, ein Neustart, etwa drei Minuten |
 | Die OpenCCU-VM (`PRODUCT=ova`) | `openccu-lite-x86_64-ova-<version>.zip` | dasselbe |
 | Eine CCU3 oder eine Karte aus einem CCU3-Image oder CCU3-Backup-Image (`PRODUCT=ccu3`) | `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` | zwei Recovery-Durchläufe und zwei Neustarts: der zweite vergrößert die Root-Partition auf 2 GB. Mit etwa 25 Minuten ab dem Start des Updates rechnen, auf einer langsameren oder größeren Karte bis zu 30-40 Minuten (siehe [unten](#ein-dunkles-update-auf-einem-raspberry-pi-3-oder-charly)). |
 

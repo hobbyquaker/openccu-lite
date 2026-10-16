@@ -28,9 +28,7 @@ here needs a radio, a board, or a person watching a light come on.
 | --- | --- | --- |
 | CCU3 / CM3 / Raspberry Pi 3 | `aarch64-rpi3` | boots; `/VERSION` says `rpi3`; the in-place `-ccu3.tgz` installs from the previous release's WebUI |
 | CM4 / Raspberry Pi 4 | `aarch64-rpi4` | boots; `/VERSION` says `rpi4`; the SD image comes up on a fresh card; the in-place update on top of itself (the staged zip) comes back with the userfs and the addons kept and the radio module detected again |
-| CM5 / Raspberry Pi 5 | `aarch64-rpi5` | boots; `/VERSION` says `rpi5`; the SD image comes up on a fresh card; the Pi 5 specifics — RF module on the RP1 UART, watchdog, LEDs, `occu-interface-clock` |
 | VM / appliance | `x86_64-ova` | covered by the QEMU test in CI, but boot the `.ova` once on the hypervisor people actually use |
-| Proxmox LXC, unprivileged | `lxc-lite_amd64` (`lxc-lite_arm64` on an aarch64 host) | the [install-lxc.md](install-lxc.md) gate: `pct create` from the template with `--unprivileged 1 --features nesting=1` and `mp0` on `/usr/local` boots to occulited on its address; `systemctl --failed` empty; `/VERSION` says `lxc`; the Network page says *managed by the host*; an addon installs; a LAN gateway or a passed-through RFUSB is reachable; a template swap keeps `/usr/local` |
 
 - [ ] The end-of-boot console hint is there and names a reachable address.
 - [ ] The boot splash's progress messages appear.

@@ -1,7 +1,7 @@
 # Empfehlungen
 
 Was sich im Betrieb von openccu-lite bewährt hat: die Hardware, der Funk, der Schlüssel des HmIP-Netzes und die
-Sicherungen.
+Sicherungen – und warum es für manche Plattformen kein Image gibt.
 
 ## Hardware
 
@@ -12,6 +12,22 @@ wenigsten.
 
 * Gute Erfahrungen mit einem **PoE-Splitter**, ähnlich z. B. [dieser](https://de.aliexpress.com/item/1005008712707676.html). 
 * **Gehäuse** für Pi und RPI-RF-MOD [„Raspberrymatic CCU3 Case Upgrade RPI-RF-MOD“](https://www.thingiverse.com/thing:4146052) von raabi91 und moclub.
+
+## Nicht angebotene Plattformen
+
+openccu-lite veröffentlicht nur Images, die vor jedem Release auf echter Hardware gestartet und geprüft werden. Eine
+Plattform, auf der das nicht geht, gibt es nicht als Image: ein Image, das niemand gestartet hat, ist ein Risiko für
+die Geräte und die Schlüssel der Anwender.
+
+* **Raspberry Pi 5:** Es gibt keinen Pi 5 zum Testen. Sein I/O-Chip, an dem GPIO und UART für das RPI-RF-MOD hängen,
+  und sein Bootloader unterscheiden sich vom Pi 4. Das Image kommt, sobald sich ein Pi 5 testen lässt.
+* **ASUS Tinker Board 2, ODROID (C2, C4, N2):** Es gibt keines dieser Boards zum Testen.
+* **LXC-Container (z. B. auf Proxmox):** Ein unprivilegierter Container kann keine Kernelmodule laden und keine
+  Geräte direkt ansprechen. Das RPI-RF-MOD und die Funktreiber funktionieren dort nicht, ein USB-Funkstick nur zum
+  Teil (BidCos über einen HmIP-RFUSB braucht Geräte, die multimacd im Container nicht anlegen kann). Status-LED, Taster
+  und HDMI-Einstellung gibt es im Container nicht, und die Firewall ist die des Hosts. Funk ginge nur über
+  LAN-Gateways. Stattdessen das **VM-Image (OVA)**: auf Proxmox legt `install-proxmox.sh` die VM in einem Schritt an
+  und reicht einen USB-Funkstick durch ([Installation](../README.md#installation)).
 
 ## Funk
 

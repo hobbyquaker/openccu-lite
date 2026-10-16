@@ -20,7 +20,7 @@ for an administrator password.
 
 | Your system | Package | What happens |
 | --- | --- | --- |
-| OpenCCU on an SD card or USB disk (`PRODUCT=rpi3`, `rpi4`, `rpi5`, …) | `openccu-lite-<product>-<version>.zip` | one recovery pass, one reboot, about three minutes |
+| OpenCCU on an SD card or USB disk (`PRODUCT=rpi3`, `rpi4`) | `openccu-lite-<product>-<version>.zip` | one recovery pass, one reboot, about three minutes |
 | The OpenCCU VM (`PRODUCT=ova`) | `openccu-lite-x86_64-ova-<version>.zip` | the same |
 | A CCU3, or a card set up from a CCU3 image or CCU3 backup image (`PRODUCT=ccu3`) | `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` | two recovery passes and two reboots: the second grows the root partition to 2 GB. Plan for about 25 minutes after *Start update*, up to 30-40 minutes on a slower or larger card (see [below](#a-dark-update-on-a-raspberry-pi-3-or-charly)). |
 

@@ -80,7 +80,7 @@ done
 touch "${TARGET_DIR}/usr/local/.doFactoryReset"
 
 # the interface daemons' device policies: no udev inside the container, so the host maps the
-# nodes (install-lxc.sh allows every char device), and a DevicePolicy= may not be applied in a
+# nodes (OpenCCU's install-lxc.sh allows every char device), and a DevicePolicy= may not be applied in a
 # nested cgroup - a unit that fails on that is not acceptable. The users, the sandbox and the
 # node groups (set by lite-radio-prep) stay; only the device drop-in goes.
 for lite_unit in multimacd rfd hmipserver hs485d hmlangw; do

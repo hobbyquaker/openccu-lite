@@ -173,7 +173,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 
 ## Build und Releases
 
-- Produkte: x86_64-VM (OVA), Raspberry Pi 3/CCU3, Raspberry Pi 4, Raspberry Pi 5, Proxmox-LXC-Container (amd64, arm64)
+- Produkte: x86_64-VM (OVA), Raspberry Pi 3/CCU3, Raspberry Pi 4; kein Image für Raspberry Pi 5, Tinker Board, ODROID und LXC-Container ([warum](recommendations.de.md#nicht-angebotene-plattformen))
 - Keine 32-Bit-ARM-Produkte
 - Update-Pakete bleiben mit OpenCCU austauschbar
 - Update-Pakete zeigen vor der EULA von OpenCCU einen eigenen Vorspann: wo es Unterstützung gibt, keine Spenden

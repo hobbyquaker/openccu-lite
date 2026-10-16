@@ -174,8 +174,7 @@ Nothing is sent over it. The Status LED section of the Hardware page switches it
 
 ### Time (NTP)
 
-The radio stack needs a correct clock, so time synchronisation (chrony) always runs, on every product but the LXC
-container (which takes the host's clock).
+The radio stack needs a correct clock, so time synchronisation (chrony) always runs.
 
 - **To:** the servers set on the Network page (`/etc/config/ntpclient`) and the ones your DHCP server hands out
   (unless switched off there); the default gateway when neither gives one; `0.de.pool.ntp.org` to

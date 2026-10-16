@@ -38,9 +38,9 @@ The lite products are the ones listed in `LITE_PRODUCTS` in [lite-version.mk](li
 | --- | --- |
 | `aarch64-rpi3` | Raspberry Pi 3, and the eQ-3 CCU3 (its `-ccu3.tgz` update file) |
 | `aarch64-rpi4` | Raspberry Pi 4 |
-| `aarch64-rpi5` | Raspberry Pi 5 |
+| `aarch64-rpi5` | Raspberry Pi 5 (built, not released: no Pi 5 to test on) |
 | `x86_64-ova` | virtual machines (`.ova`) |
-| `lxc-lite_amd64`, `lxc-lite_arm64` | LXC containers |
+| `lxc-lite_amd64`, `lxc-lite_arm64` | LXC containers (built, not released: no radio in an unprivileged container) |
 
 ```sh
 make help                                                   # the targets
@@ -73,7 +73,7 @@ scripts/lite-qemu-test.sh build-x86_64-ova/images/sdcard.img 18090   # boot the 
   lighttpd);
 - `buildroot-external/package/occulited/`, `package/lite-bindlo/` — lite's packages;
 - `scripts/lite-*` and `scripts/testcases/lite-*` — the guards and tests; `.github/workflows/lite-*.yml` — CI;
-- `docs/` — the user documents (switching, LXC, addons, security, privacy, certificates) and the delta index.
+- `docs/` — the user documents (switching, addons, security, privacy, certificates, recommendations) and the delta index.
 
 An edit to an upstream file is made only in a form upstream could take as it is: honour an existing Kconfig
 symbol, add a default-off guard, extend a generic mechanism. Anything else goes into lite's own files. Every
