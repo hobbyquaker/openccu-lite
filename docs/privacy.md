@@ -74,8 +74,9 @@ The firmware of paired Homematic and HmIP devices comes from eQ-3's update serve
 - **The download, in the same run:** for every paired device type whose firmware on the server is newer than what
   the system already holds, `GET …/firmware/download?cmd=download&product=<DEVICE TYPE>&serial=0`. So eQ-3 learns
   which device types (e.g. `HmIP-BBL`) are paired and not up to date. The serial is always `0`: **no device serial
-  number is sent.** A downloaded firmware reaches the devices only when you deliver it on the Updates page
-  (*Deploy automatically*, off by default), and installing it onto a device stays your action in your frontend.
+  number is sent.** A downloaded HmIP firmware reaches the devices only when you deliver it on the Updates page
+  (*Deploy automatically*, off by default); BidCos-RF firmware is offered to rfd at once (rfd transfers nothing by
+  itself). Installing it onto a device stays your action in your frontend.
 - **Not sent:** device serial numbers, the system's serial or SGTIN, the host name, how many devices there are.
 - **Off:** the default; clear *Check daily* to switch it off again. Firmware files can be uploaded by hand instead.
 

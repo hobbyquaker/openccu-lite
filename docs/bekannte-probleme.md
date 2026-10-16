@@ -92,21 +92,23 @@ Binary unverändert aus.
 
 ## Nicht ausgelieferte Gerätefirmware erscheint in anderen Apps als aktuell
 
-**Was Sie sehen:** die Seite Updates führt eine Gerätefirmware als *Heruntergeladen, nicht
+**Was Sie sehen:** die Seite Updates führt eine HmIP-Gerätefirmware als *Heruntergeladen, nicht
 ausgeliefert*, während die WebUI, homematic-manager, Home Assistant und andere Apps dieselben Geräte
 als aktuell anzeigen.
 
-**Warum:** openccu-lite lädt Gerätefirmware herunter, gibt sie aber erst an die Geräte weiter, wenn
-Sie es wollen: ist *Automatisch bereitstellen* aus - die Voreinstellung seit 1.0.0-beta.5, auch auf
+**Warum:** openccu-lite lädt HmIP-Gerätefirmware herunter, gibt sie aber erst an die Geräte weiter,
+wenn Sie es wollen: ist *Automatisch bereitstellen* aus - die Voreinstellung seit 1.0.0-beta.5, auch auf
 Systemen, die von einer früheren Version aktualisiert wurden -, wartet ein Download auf dem System,
-bis Sie für seinen Typ *An die Geräte ausliefern* drücken. hmipserver und rfd melden eine verfügbare
-Firmware nur für ausgelieferte Firmware, also sieht jede App, die sie fragt, keine. Firmware, die
+bis Sie für seinen Typ *An die Geräte ausliefern* drücken. hmipserver meldet eine verfügbare
+Firmware nur für ausgelieferte Firmware, also sieht jede App, die ihn fragt, keine. Firmware, die
 vor dem Update ausgeliefert war, bleibt ausgeliefert.
 
 **Was zu tun ist:** nichts, wenn Sie selbst entscheiden wollen, wann eine Firmware Ihre Geräte
 erreicht. Liefern Sie sie auf der Seite Updates aus, wenn Sie sie wollen; HmIP-Geräte erhalten sie
-dann im Hintergrund (das kann Stunden dauern und nutzt die Funkzeit des Funkmoduls), BidCos-Geräte,
-wenn Sie das Update im Frontend starten. Die Installation ist immer Ihr Schritt im Frontend.
+dann im Hintergrund (das kann Stunden dauern und nutzt die Funkzeit des Funkmoduls). Die Installation ist immer Ihr Schritt im Frontend.
 Schalten Sie *Automatisch bereitstellen* ein, um jeden Download wie bisher sofort auszuliefern.
 Die Seite Updates führt nur HmIP-Geräte (auch HmIP Wired): BidCos-RF, BidCos-Wired und virtuelle Geräte
-stehen nicht in der Liste, BidCos-Firmware erreicht rfd also nur mit *Automatisch bereitstellen*.
+stehen nicht in der Liste. **BidCos-RF-Firmware wird den Frontends gleich nach dem Download
+angeboten, unabhängig von *Automatisch bereitstellen*** (seit 1.0.0-beta.8): rfd überträgt nichts
+von selbst, das Update bleibt also ein Klick in Ihrem Frontend. BidCos-Firmware, die eine frühere
+Version zurückgehalten hat, wird beim Update einmal an rfd übergeben.
