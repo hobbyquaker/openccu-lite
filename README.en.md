@@ -26,13 +26,6 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
 - **Switching from a CCU3:** upload `openccu-lite-aarch64-rpi3-<version>-ccu3.tgz` in the CCU3's software update.
 - **New install on a Raspberry Pi 3/4:** unpack the release `.zip` and write the `.img` inside it to the SD card.
 - **New install as a VM:** import the `.ova` (Proxmox, VMware, VirtualBox and so on).
-- **Raspberry Pi 5, Tinker Board, ODROID, LXC container:** there is no image for these. openccu-lite only releases
-  images that are booted and checked on real hardware before every release. There is no Pi 5 to test on (its I/O
-  chip and its bootloader differ from the Pi 4's; the image comes once a Pi 5 can be tested), and no Tinker Board 2
-  or ODROID. An unprivileged LXC container can neither load kernel modules nor reach devices directly: the RPI-RF-MOD
-  and the radio drivers do not work there, a USB radio stick only in part, and radio would only work over LAN
-  gateways. Use the `.ova` instead; on Proxmox the script below creates the VM and passes a USB radio stick through.
-  More in [recommendations.de.md](docs/recommendations.de.md#nicht-angebotene-plattformen) (in German).
 - **Proxmox VM by script:** as root on the Proxmox VE host, a script creates the VM in one step (`--help` lists
   the options):
   `bash -c "$(wget -qLO - https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh)"`

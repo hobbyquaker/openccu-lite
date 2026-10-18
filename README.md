@@ -20,8 +20,6 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
 
 - **Neuinstallation auf einem Raspberry Pi 3/4:** die `.zip` des Releases entpacken und die `.img` darin auf die SD-Karte schreiben.
 - **Neuinstallation als VM:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.).
-- **Raspberry Pi 5, Tinker Board, ODROID, LXC-Container:** dafür gibt es kein Image; warum, steht in
-  [recommendations.de.md](docs/recommendations.de.md#nicht-angebotene-plattformen).
 - **Proxmox-VM per Skript:** als root auf dem Proxmox-VE-Host legt ein Skript die VM in einem Schritt an (`--help`
   zeigt die Optionen):
   `bash -c "$(wget -qLO - https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh)"`
