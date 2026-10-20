@@ -551,7 +551,18 @@ switched the early start off on the Addons page (globally or for the addon). Its
 `network.target lighttpd.service occulited.service occu-addons.service` only, not on its interfaces, so it starts
 before they are ready; a
 file with anything else keeps the ordering above. `lite-unit-order-test.sh` checks that none of those four base units
-is itself ordered after an interface daemon. A change of the switches takes effect at the next boot. Safe mode (`/etc/config/safemode`) generates nothing, as
+is itself ordered after an interface daemon. A change of the switches takes effect at the next boot.
+
+**A start delay per addon** (task 369): the Addons page's section *Addon start* sets, per addon, the seconds (1-600) it
+waits at boot after its radio interfaces answer; occulited writes them to `addon-policy/<name>.delay`. Such a unit is
+ordered after its interface units whatever its `.start` says - systemd calls `hmipserver.service` started only once
+both of its APIs answer - and gets the drop-in `05-start-delay.conf` (`ExecStartPre=+/usr/libexec/occu/lite-addon-delay
+<name> <seconds>`, `TimeoutStartSec` 300 plus the delay), sorted before the policy's drop-ins. `lite-addon-delay` waits
+only while `systemctl is-system-running` says `initializing` or `starting`, so a start or restart later on does not
+wait, and it never refuses a start: a bad file or an unknown state is no delay. Measured on a Charly (2026-10-20):
+every client called hmipserver's `init` within 0.1 s, the second its XML-RPC port opened, whatever its own start time;
+on a large network their inits and device reads block hmipserver's event loop for seconds. A delay staggers them.
+`lite-addon-delay-test.sh` and `occu-addons-generator-test.sh` check both. Safe mode (`/etc/config/safemode`) generates nothing, as
 `S98StartAddons` skipped the addons.
 
 **Every addon gets the generated unit; an addon cannot bring its own** (D-69, B-118). Until

@@ -41,6 +41,16 @@ that bit (through the privilege helper — the script is root's) and then start 
 Two checks disable an addon by themselves, both on the first boot after a switch from OpenCCU, and
 both reversible by the user:
 
+## A start delay at boot
+
+After a reboot every addon connects to the radio interfaces in the same second they are ready, whenever
+it started itself. On a large installation the HmIP server then needs seconds for all of them at once.
+The Addons page's section *Addon start* sets a **start delay** per addon, 0 to 600 seconds: such an
+addon waits for its radio interfaces, then the given seconds, then starts, so the addons come one after
+the other. An addon with a delay never starts early, and the delay applies at boot only; a start or
+restart later on does not wait. A change takes effect at the next boot. How the unit does it is in
+[systemd-scope.md](systemd-scope.md).
+
 ## After a backup restore
 
 A backup is what a CCU backup is: all of `/usr/local`, except the contents of every directory that

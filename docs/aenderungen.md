@@ -123,6 +123,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - Unveränderte CCU-Addons werden weiter unterstützt; Installation über `install_addon`
 - Addon-Katalog mit Installation per Klick
 - Katalog und Seite Zusatzsoftware zeigen, ob ein Addon eingesperrt läuft, früh startet oder ungetestet ist
+- Je Addon eine Startverzögerung: Es wartet beim Hochfahren auf die Funkschnittstellen und dann die eingestellten Sekunden, damit sich nicht alle Addons im selben Moment mit dem HmIP-Server verbinden
 - Addons laufen standardmäßig eingesperrt unter eigenem Benutzer; Root nur auf ausdrücklichen Wunsch
 - Bereits installierte Addons behalten beim Update Root
 - Auch Root-Addons können die Systempartition nicht mehr beschreibbar einhängen; was sie ablegen, landet in beschreibbaren Verzeichnissen

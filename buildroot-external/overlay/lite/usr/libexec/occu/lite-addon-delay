@@ -1,0 +1,44 @@
+#!/bin/sh
+# openccu-lite: an addon's start delay at boot (task 369). The occu-addons generator writes, for an
+# addon whose /usr/local/etc/config/addon-policy/<name>.delay holds seconds (occulited writes it from
+# the Addons page's start delay), the drop-in addon-<name>.service.d/05-start-delay.conf:
+#
+#   ExecStartPre=+/usr/libexec/occu/lite-addon-delay <name> <seconds>
+#
+# The unit is ordered after its interface units then, even when the addon could start early, and
+# systemd calls hmipserver started only once both of its APIs answer - so this waits the delay
+# counted from the moment the interfaces are ready. Measured on a Charly (2026-10-20): every client
+# called hmipserver's init in the same 0.1 s, the second its port opened; on a large network their
+# inits and device reads then block its event loop for seconds. Staggered, they come one by one.
+#
+# Only at boot: while systemd still reports the system initializing or starting. A start or restart
+# later on (the Addons page, an update, occulited's supervisor) starts right away. Anything this
+# cannot read - no number, out of range, no systemctl - starts the addon without a delay: the delay
+# must never keep an addon from starting. "+": it runs as root whatever User= the policy sets.
+set -u
+NAME=${1:-}
+SECS=${2:-}
+SYSTEMCTL=${OCCU_SYSTEMCTL:-systemctl}  # overridable for tests
+SLEEP=${OCCU_SLEEP:-sleep}
+
+case "${NAME}" in
+  ''|.*|*[!A-Za-z0-9_.-]*) exit 0 ;;
+esac
+case "${SECS}" in
+  ''|*[!0-9]*) echo "lite-addon-delay: ${NAME}: no delay (not a number of seconds: ${SECS})"; exit 0 ;;
+esac
+if [ "${SECS}" -lt 1 ] || [ "${SECS}" -gt 600 ]; then
+  echo "lite-addon-delay: ${NAME}: no delay (${SECS} s is out of 1-600)"
+  exit 0
+fi
+state=$("${SYSTEMCTL}" is-system-running 2>/dev/null)
+case "${state}" in
+  initializing|starting) ;;
+  *)
+    echo "lite-addon-delay: ${NAME} starts without its delay: the system is ${state:-in an unknown state}, not booting"
+    exit 0
+    ;;
+esac
+echo "lite-addon-delay: ${NAME} waits ${SECS} s after its radio interfaces"
+"${SLEEP}" "${SECS}"
+exit 0

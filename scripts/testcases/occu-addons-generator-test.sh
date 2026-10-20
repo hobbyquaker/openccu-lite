@@ -289,4 +289,50 @@ rc=$?
   && ok "no /dev/kmsg: the line on stderr, the generated unit" || bad "no /dev/kmsg: exit $rc, stderr $(cat "$L/err2")"
 [ "$(grep -c 'ships its own unit file' "$L/err2")" = 3 ] && ok "no /dev/kmsg: one line per addon" || bad "no /dev/kmsg: $(cat "$L/err2")"
 
+# task 369: an addon with a start delay (addon-policy/<name>.delay = seconds) is ordered after its
+# interfaces even when it would start early, and waits the delay in a drop-in that runs first; any
+# other content of the file is no delay
+D="$T/delay"; RD="$D/root"; ED="$D/early"
+mkdir -p "$RD/usr/local/etc/config/rc.d" "$RD/usr/local/etc/config/addon-policy" "$ED"
+for n in dplain dearly dneeds dnone dconf dzero dbig djunk dlong; do
+  printf '#!/bin/sh\n' > "$RD/usr/local/etc/config/rc.d/$n"; chmod 755 "$RD/usr/local/etc/config/rc.d/$n"
+done
+DP="$RD/usr/local/etc/config/addon-policy"
+echo 30 > "$DP/dplain.delay"
+echo 45 > "$DP/dearly.delay"; echo early > "$DP/dearly.start"
+echo 600 > "$DP/dneeds.delay"; echo hs485d > "$DP/dneeds.needs"
+printf ' 20 \r\n' > "$DP/dnone.delay"; echo none > "$DP/dnone.needs"
+echo 15 > "$DP/dconf.delay"
+printf '[Service]\nUser=addon-dconf\n' > "$DP/dconf.conf"
+echo 0 > "$DP/dzero.delay"; echo early > "$DP/dzero.start"
+echo 601 > "$DP/dbig.delay"
+echo soon > "$DP/djunk.delay"
+echo 0030 > "$DP/dlong.delay"
+OCCU_ADDONS_KMSG="$D/kmsg" OCCU_ADDONS_ROOT="$RD" sh "$GEN" "$D/normal" "$ED" "$D/late" > "$D/out" 2>&1 || bad "the generator with delay files exits $?: $(cat "$D/out")"
+daft() { sed -n 's/^After=//p' "$ED/$1" | tr ' ' '\n'; }
+dhas() { daft "$1" | grep -qx "$2"; }
+dropin() { cat "$ED/addon-$1.service.d/05-start-delay.conf" 2>/dev/null; }
+for c in "dplain 30" "dearly 45" "dneeds 600" "dnone 20" "dconf 15"; do
+  set -- $c
+  dropin "$1" | grep -qx "ExecStartPre=+/usr/libexec/occu/lite-addon-delay $1 $2" \
+    && dropin "$1" | grep -qx "TimeoutStartSec=$((300 + $2))" && dropin "$1" | grep -qx '\[Service\]' \
+    && ok "delay $1: waits $2 s, TimeoutStartSec $((300 + $2))" || bad "delay $1: $(dropin "$1" | tr '\n' '|')"
+done
+dhas addon-dplain.service rfd.service && dhas addon-dplain.service hmipserver.service \
+  && ok "delay: an undeclared addon after rfd and hmipserver" || bad "delay dplain: After=$(daft addon-dplain.service | tr '\n' ' ')"
+dhas addon-dearly.service rfd.service && dhas addon-dearly.service hmipserver.service \
+  && ok "delay: an early addon is ordered after its interfaces" || bad "delay dearly: After=$(daft addon-dearly.service | tr '\n' ' ')"
+dhas addon-dneeds.service hs485d.service && ! dhas addon-dneeds.service hmipserver.service \
+  && ok "delay: after exactly the declared needs" || bad "delay dneeds: After=$(daft addon-dneeds.service | tr '\n' ' ')"
+! dhas addon-dnone.service hmipserver.service && ! dhas addon-dnone.service rfd.service \
+  && ok "delay: needs none stays after the base units" || bad "delay dnone: After=$(daft addon-dnone.service | tr '\n' ' ')"
+[ -f "$ED/addon-dconf.service.d/10-policy.conf" ] && [ "$(ls "$ED/addon-dconf.service.d" | head -n 1)" = 05-start-delay.conf ] \
+  && ok "delay: the drop-in sorts before the policy's" || bad "delay dconf: $(ls "$ED/addon-dconf.service.d" | tr '\n' ' ')"
+for n in dzero dbig djunk dlong; do
+  [ -e "$ED/addon-$n.service.d/05-start-delay.conf" ] && bad "no delay for $n: $(dropin "$n" | tr '\n' '|')" || ok "$n: no delay"
+done
+yafz() { sed -n 's/^After=//p' "$ED/addon-dzero.service" | tr ' ' '\n'; }
+yafz | grep -qx hmipserver.service && bad "dzero (no delay): the early start is gone" || ok "no delay: the early start stays early"
+if grep -rqs '^Wants=\|^Requires=' "$ED"; then bad "delay: a Wants=/Requires= line"; else ok "delay: no Wants= or Requires="; fi
+
 [ "$fails" = 0 ] && echo "occu-addons generator: all cases passed" || { echo "occu-addons generator: $fails case(s) failed"; exit 1; }
