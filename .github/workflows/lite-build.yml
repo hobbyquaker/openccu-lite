@@ -100,6 +100,9 @@ jobs:
         # B-313: openccu-base-paths.txt lists HMServer.jar and the install takes it with opt/ (the
         # licence step runs for it), the post-build guard requires it, and the SBOM lists it
         run: sh scripts/testcases/lite-hmserver-jar-test.sh
+      - name: npm purls by the purl spec
+        # B-325: lite-sbom.py percent-encodes a scoped npm name's '@' (pkg:npm/%40scope/name@version)
+        run: sh scripts/testcases/lite-sbom-npm-purl-test.sh
       - name: The nested builds are keyed on their own inputs
         # task 353: multilib32's and the recovery's build directories do not name OpenCCU-Base's
         # version, every variable they pass to their nested build is one of their inputs, and a

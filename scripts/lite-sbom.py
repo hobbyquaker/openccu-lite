@@ -41,6 +41,7 @@ import subprocess
 import sys
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 # --- licences ---------------------------------------------------------------------------------
 
@@ -540,6 +541,13 @@ def go_licence(b):
     return None
 
 
+def npm_purl(name, version):
+    """The purl of an npm package: a scoped name's scope is the namespace, its '@' percent-encoded
+(purl spec: pkg:npm/%40scope/name@version), every segment and the version percent-encoded."""
+    segs = [quote(seg, safe="") for seg in name.split("/")]
+    return "pkg:npm/" + "/".join(segs) + (f"@{quote(version, safe='')}" if version else "")
+
+
 def occulited(texts, b, errors):
     c = package(texts, b, "occulited")
     c["version"] = c["version"][:7]
@@ -595,10 +603,10 @@ def occulited(texts, b, errors):
             for p in json.loads(bl).get("packages", []):
                 n = {
                     "type": "library",
-                    "bom-ref": f"pkg:npm/{p['name']}@{p['version']}",
+                    "bom-ref": npm_purl(p["name"], p["version"]),
                     "name": p["name"],
                     "version": p["version"],
-                    "purl": f"pkg:npm/{p['name']}@{p['version']}",
+                    "purl": npm_purl(p["name"], p["version"]),
                     "licenses": licences(texts, p.get("license") or "", p.get("text")),
                     "properties": [{"name": "openccu-lite:origin", "value": "occulited UI bundle"}],
                 }
