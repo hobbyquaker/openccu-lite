@@ -30,4 +30,16 @@ touch "${BINARIES_DIR}/overlays/README" 2>/dev/null || true
 cp "${TARGET_DIR}/boot/VERSION" "${BINARIES_DIR}"
 
 # create *.img file using genimage
-support/scripts/genimage.sh -c "${BOARD_DIR}/genimage.cfg"
+GENIMAGE_CFG="${BOARD_DIR}/genimage.cfg"
+# openccu-lite (task 366): with BR2_PACKAGE_RPI_EEPROM_OFFER the bootloader EEPROM update stays
+# out of the boot partition - the boot ROM would flash it at the first start - and the image keeps
+# it under /usr/share/rpi-eeprom/ for occulited's Hardware page to offer
+if grep -q '^BR2_PACKAGE_RPI_EEPROM_OFFER=y' "${BR2_CONFIG}"; then
+  GENIMAGE_CFG="${BUILD_DIR}/genimage-offer.cfg"
+  grep -v '"rpi-eeprom/' "${BOARD_DIR}/genimage.cfg" >"${GENIMAGE_CFG}"
+  if grep -q 'rpi-eeprom' "${GENIMAGE_CFG}"; then
+    echo "post-image: rpi-eeprom files left in ${GENIMAGE_CFG}" >&2
+    exit 1
+  fi
+fi
+support/scripts/genimage.sh -c "${GENIMAGE_CFG}"

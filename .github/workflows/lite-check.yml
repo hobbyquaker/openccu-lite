@@ -57,6 +57,8 @@ jobs:
         run: sh scripts/testcases/lite-irqbalance-test.sh
       - name: The boot script is the product's boot.cmd
         run: sh scripts/testcases/lite-bootscr-check-test.sh
+      - name: The Pi 4/5 bootloader update is offered, not flashed
+        run: sh scripts/testcases/lite-rpi-eeprom-offer-test.sh
       - name: The binaries carry the build's hardening flags
         run: sh scripts/testcases/lite-hardening-guard-test.sh
       - name: occulited in the image is the pinned commit

@@ -22,7 +22,6 @@
 #
 
 DT_BOOTLOADER_TS=${DT_BOOTLOADER_TS:-/proc/device-tree/chosen/bootloader/build-timestamp}
-BOOTLOADER_UPDATE_IMAGE=${BOOTLOADER_UPDATE_IMAGE:-/boot/pieeprom.upd}
 
 EXIT_SUCCESS=0
 EXIT_UPDATE_REQUIRED=1
@@ -49,6 +48,14 @@ else
   echo "Device does not have a Raspberry Pi bootloader EEPROM (only Pi 4 and Pi 5 do)."
   exit ${EXIT_FAILED}
 fi
+
+# openccu-lite (task 366): a staged update in /boot, else the one the image offers
+if [ -z "${BOOTLOADER_UPDATE_IMAGE}" ]; then
+  BOOTLOADER_UPDATE_IMAGE=/boot/pieeprom.upd
+  [ -f "${BOOTLOADER_UPDATE_IMAGE}" ] || BOOTLOADER_UPDATE_IMAGE=/usr/share/rpi-eeprom/firmware-${BCM_CHIP}/pieeprom.upd
+fi
+VL805_UPDATE_VER=/boot/vl805.ver
+[ -f "${VL805_UPDATE_VER}" ] || VL805_UPDATE_VER=/usr/share/rpi-eeprom/firmware-${BCM_CHIP}/vl805.ver
 
 if [ ${BOARD_TYPE} -eq 17 ] && [ ${BOARD_REVISION} -lt 4 ]; then
   HAVE_VL805_EEPROM=1
@@ -99,7 +106,7 @@ if [ "${BCM_CHIP}" = 2711 ]; then
     echo "   CURRENT: ${VL805_CURRENT_VERSION}"
 
     if [ "${HAVE_VL805_EEPROM}" = 1 ]; then
-      VL805_UPDATE_VERSION=$(cat /boot/vl805.ver 2>/dev/null || echo "unknown")
+      VL805_UPDATE_VERSION=$(cat "${VL805_UPDATE_VER}" 2>/dev/null || echo "unknown")
       echo "    LATEST: ${VL805_UPDATE_VERSION}"
     fi
   else

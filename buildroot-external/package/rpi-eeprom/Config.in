@@ -23,4 +23,15 @@ config BR2_PACKAGE_RPI_EEPROM_RPI5
 
 endchoice
 
+config BR2_PACKAGE_RPI_EEPROM_OFFER
+	bool "Offer the update instead of flashing it at the first boot"
+	help
+	  openccu-lite (task 366): the update (pieeprom.upd, its .sig,
+	  recovery.bin and the VL805 files) is not put into the boot
+	  partition, where the boot ROM would flash it at the next
+	  start; it is installed under
+	  /usr/share/rpi-eeprom/firmware-<chip>/, and occulited's
+	  Hardware page offers it. The post-image script leaves the
+	  rpi-eeprom files out of boot.vfat.
+
 endif

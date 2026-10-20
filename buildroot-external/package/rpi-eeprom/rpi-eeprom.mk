@@ -15,10 +15,12 @@ ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI4),y)
   RPI_EEPROM_FIRMWARE_PATH = firmware-2711/stable/pieeprom-2026-10-15.bin
   RPI_EEPROM_RECOVERY_PATH = firmware-2711/stable/recovery.bin
   RPI_EEPROM_VL805_GLOB = firmware-2711/stable/vl805-*.bin
+  RPI_EEPROM_CHIP = 2711
 else ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI5),y)
   # Raspberry Pi 5 (2712)
   RPI_EEPROM_FIRMWARE_PATH = firmware-2712/stable/pieeprom-2026-10-15.bin
   RPI_EEPROM_RECOVERY_PATH = firmware-2712/stable/recovery.bin
+  RPI_EEPROM_CHIP = 2712
 endif
 
 define RPI_EEPROM_BUILD_CMDS
@@ -42,7 +44,27 @@ endif
 
 define RPI_EEPROM_INSTALL_TARGET_CMDS
 	$(INSTALL) -D -m 0755 $(RPI_EEPROM_PKGDIR)/rpi-eeprom-info $(TARGET_DIR)/bin
+	$(RPI_EEPROM_INSTALL_OFFER_CMDS)
 endef
+
+# openccu-lite (task 366): the update goes to the root file system, not into the boot partition -
+# occulited's helper stages it into /boot when an administrator asks for it on the Hardware page
+ifeq ($(BR2_PACKAGE_RPI_EEPROM_OFFER),y)
+RPI_EEPROM_OFFER_DIR = $(TARGET_DIR)/usr/share/rpi-eeprom/firmware-$(RPI_EEPROM_CHIP)
+define RPI_EEPROM_INSTALL_OFFER_CMDS
+	$(INSTALL) -D -m 0644 $(@D)/pieeprom.upd $(RPI_EEPROM_OFFER_DIR)/pieeprom.upd
+	$(INSTALL) -D -m 0644 $(@D)/pieeprom.sig $(RPI_EEPROM_OFFER_DIR)/pieeprom.sig
+	$(INSTALL) -D -m 0644 $(@D)/$(RPI_EEPROM_RECOVERY_PATH) $(RPI_EEPROM_OFFER_DIR)/recovery.bin
+	$(RPI_EEPROM_INSTALL_OFFER_VL805_CMDS)
+endef
+ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI4),y)
+define RPI_EEPROM_INSTALL_OFFER_VL805_CMDS
+	$(INSTALL) -D -m 0644 $(@D)/vl805.bin $(RPI_EEPROM_OFFER_DIR)/vl805.bin
+	$(INSTALL) -D -m 0644 $(@D)/vl805.sig $(RPI_EEPROM_OFFER_DIR)/vl805.sig
+	$(INSTALL) -D -m 0644 $(@D)/vl805.ver $(RPI_EEPROM_OFFER_DIR)/vl805.ver
+endef
+endif
+endif
 
 define RPI_EEPROM_INSTALL_IMAGES_CMDS
 	$(INSTALL) -D -m 0644 $(@D)/pieeprom.sig $(BINARIES_DIR)/rpi-eeprom/pieeprom.sig
