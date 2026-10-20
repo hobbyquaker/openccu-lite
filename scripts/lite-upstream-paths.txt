@@ -45,6 +45,10 @@ remove scripts/install-lxc.sh
 # the Proxmox installer: lite's own, it installs an openccu-lite VM (task 328)
 ours scripts/install-proxmox.sh
 
+# the piVCCU packages' bump helpers: lite's own, they pin the piVCCU fork (task 373, B-330)
+ours scripts/update-generic_raw_uart.sh
+ours scripts/update-detect_radio_module.sh
+
 # the ReGa WebUI's update check
 remove release/LATEST-VERSION.js
 

@@ -71,6 +71,8 @@ jobs:
         run: sh scripts/testcases/lite-hmserver-jar-test.sh
       - name: npm purls by the purl spec
         run: sh scripts/testcases/lite-sbom-npm-purl-test.sh
+      - name: The piVCCU packages' bump helpers pin the fork
+        run: sh scripts/testcases/lite-pivccu-update-test.sh
       - name: The nested builds are keyed on their own inputs
         run: sh scripts/testcases/lite-nested-build-keys-test.sh
       - name: The boot order and the boot path

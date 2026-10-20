@@ -103,6 +103,11 @@ jobs:
       - name: npm purls by the purl spec
         # B-325: lite-sbom.py percent-encodes a scoped npm name's '@' (pkg:npm/%40scope/name@version)
         run: sh scripts/testcases/lite-sbom-npm-purl-test.sh
+      - name: The piVCCU packages' bump helpers pin the fork
+        # B-330: update-generic_raw_uart.sh and update-detect_radio_module.sh pin the piVCCU fork's
+        # tag or a commit on its lite (never a branch, never Alex's master), the hash from two equal
+        # downloads, and change only the _VERSION and the archive's hash line
+        run: sh scripts/testcases/lite-pivccu-update-test.sh
       - name: The nested builds are keyed on their own inputs
         # task 353: multilib32's and the recovery's build directories do not name OpenCCU-Base's
         # version, every variable they pass to their nested build is one of their inputs, and a
