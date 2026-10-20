@@ -5,10 +5,14 @@
 # Alexander Reinert <alex@areinert.de>
 # https://github.com/alexreinert/piVCCU/tree/master/detect_radio_module
 #
+# openccu-lite builds it from its piVCCU fork at the same commit as generic_raw_uart (task 373;
+# a pin change sets both):
+# https://github.com/hobbyquaker/piVCCU/tree/lite
+#
 ################################################################################
 
-DETECT_RADIO_MODULE_VERSION = 908d18fd52963ef8bf54b12083650509ce116374
-DETECT_RADIO_MODULE_SITE = $(call github,alexreinert,piVCCU,$(DETECT_RADIO_MODULE_VERSION))
+DETECT_RADIO_MODULE_VERSION = 7d334f5e0222e0e87788377529e55eea321db720
+DETECT_RADIO_MODULE_SITE = $(call github,hobbyquaker,piVCCU,$(DETECT_RADIO_MODULE_VERSION))
 DETECT_RADIO_MODULE_LICENSE = Apache-2.0
 DETECT_RADIO_MODULE_LICENSE_FILES = LICENSE
 

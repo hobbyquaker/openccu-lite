@@ -6,6 +6,9 @@
 # Copyright (c) 2021-2023 Alexander Reinert
 # https://github.com/alexreinert/piVCCU/tree/master/kernel
 #
+# openccu-lite builds it from its piVCCU fork (task 373): Alex's master plus our
+# changes as commits on the branch lite, https://github.com/hobbyquaker/piVCCU/tree/lite
+#
 # Uses parts of bcm2835_raw_uart.c
 # Copyright (c) 2015 eQ-3 Entwicklung GmbH
 # https://github.com/eq-3/occu/tree/master/KernelDrivers
@@ -13,8 +16,8 @@
 #
 ################################################################################
 
-GENERIC_RAW_UART_VERSION = 8ec885dd99986b1ee6f5131d482b33a451764fcf
-GENERIC_RAW_UART_SITE = $(call github,alexreinert,piVCCU,$(GENERIC_RAW_UART_VERSION))
+GENERIC_RAW_UART_VERSION = 7d334f5e0222e0e87788377529e55eea321db720
+GENERIC_RAW_UART_SITE = $(call github,hobbyquaker,piVCCU,$(GENERIC_RAW_UART_VERSION))
 GENERIC_RAW_UART_LICENSE = GPL2
 GENERIC_RAW_UART_LICENSE_FILES = LICENSE
 GENERIC_RAW_UART_MODULE_SUBDIRS = kernel

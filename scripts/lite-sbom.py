@@ -330,7 +330,7 @@ REPOS = {
     "buildroot": "https://github.com/buildroot/buildroot",
     "OpenCCU": "https://github.com/OpenCCU/OpenCCU",
     "OpenCCU-Base": "https://github.com/OpenCCU/OpenCCU-Base",
-    "piVCCU": "https://github.com/alexreinert/piVCCU",
+    "piVCCU": "https://github.com/hobbyquaker/piVCCU",
     "git.zerfleddert.de": "https://git.zerfleddert.de/cgi-bin/gitweb.cgi/hmcfgusb",
     "linux-firmware": "https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git",
     "Azul Zulu": "https://www.azul.com/downloads/",
