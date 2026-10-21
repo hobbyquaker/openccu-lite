@@ -44,3 +44,8 @@ sie sonst zusammen verloren geht. Die *Verschlüsselung* auf derselben Seite sch
 Funkschlüssel, die Zugangsdaten und die Zertifikate. Den Wiederherstellungsschlüssel (Notfallkit) getrennt vom System
 aufbewahren, etwa in einem Passwort-Manager: ohne ihn lässt sich eine verschlüsselte Sicherung auf keinem anderen
 System einspielen, und auf diesem nicht mehr, sobald sein Speicher verloren ist.
+
+**Von einem anderen Rechner abholen:** Wer die Sicherung lieber von einem Server oder NAS aus holt (cron, systemd-Timer,
+Synology, QNAP), nimmt [occulite-backup](https://github.com/hobbyquaker/occulite-backup): ein Shell-Skript, das mit
+einem API-Token, das nur Sicherungen darf, eine frische Sicherung herunterlädt, sie prüft und die neuesten N behält;
+eine verschlüsselte Sicherung bleibt verschlüsselt.

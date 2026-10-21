@@ -306,7 +306,8 @@ Journals.
   Sicherung jeden Schlüssel des Systems im Klartext.
 - **Sicherung erstellen:** eine Sicherung sofort herunterladen.
 - **Sicherungsziele:** jede Nacht automatisch auf ein USB-Verzeichnis, eine Netzwerkfreigabe oder einen SSH-Server
-  (SFTP), mit Test, „Jetzt sichern“ und der Liste der Sicherungen dort.
+  (SFTP), mit Test, „Jetzt sichern“ und der Liste der Sicherungen dort. Von einem Server oder NAS aus holt
+  [occulite-backup](https://github.com/hobbyquaker/occulite-backup) die Sicherung mit einem API-Token ab.
 - **Sicherung einspielen:** eine Sicherung prüfen und wiederherstellen, auch die einer CCU oder von OpenCCU.
 - **Angelernte Geräte übernehmen:** aus einer geprüften Sicherung einer CCU oder von OpenCCU nur die angelernten
   Geräte mit ihren Schlüsseln, ohne den Rest wiederherzustellen; nur auf einem System ohne angelernte Geräte. Eine
