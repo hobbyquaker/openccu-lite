@@ -60,6 +60,10 @@ service with the web UI is [occulited](https://github.com/hobbyquaker/occulited)
 and auth APIs, `occulited.json`, the addon manifest and the catalogue.
 Recommendations: [recommendations.de.md](docs/recommendations.de.md) (in German).
 
+Tools: [occulite-backup](https://github.com/hobbyquaker/occulite-backup) downloads the backups of one or more systems
+from cron or a timer (a shell script, curl only); [occulite-client](https://github.com/hobbyquaker/occulite-client)
+is the client for openccu-lite's APIs (an npm package for addons and your own programs).
+
 ## Bugs and help
 
 Bugs and wishes, for the firmware and for occulited alike: this repository's

@@ -61,6 +61,10 @@ Systemdienst mit der Weboberfläche ist [occulited](https://github.com/hobbyquak
 System- und Auth-API, `occulited.json`, das Addon-Manifest und den Katalog.
 Empfehlungen: [recommendations.de.md](docs/recommendations.de.md).
 
+Werkzeuge: [occulite-backup](https://github.com/hobbyquaker/occulite-backup) lädt die Sicherungen eines oder mehrerer
+Systeme per Cron oder Timer herunter (ein Shell-Skript, nur curl); [occulite-client](https://github.com/hobbyquaker/occulite-client)
+ist der Client für die APIs von openccu-lite (npm-Paket für Addons und eigene Programme).
+
 ## Fehler und Hilfe
 
 Fehler und Wünsche, für die Firmware wie für occulited: der
