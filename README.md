@@ -2,10 +2,6 @@
 
 [:uk: English README](README.en.md)
 
-> [!CAUTION]
-> Die Beta-Releases richten sich an erfahrene Homematic-Anwender, die wissen, was sie tun und sich im Fall der Fälle
-> selbst helfen können.
-
 Openccu-lite ist ein Fork des [OpenCCU-Projekts](https://github.com/OpenCCU/OpenCCU), der einige alte Softwareteile entfernt,
 die für Anwender, die ihre Automation anderswo (z. B. in Home Assistant, ioBroker, Node-RED, ...) betreiben, nicht notwendig sind:
 **Es gibt in openccu-lite keine ReGaHSS, keine WebUI-Programme, keine Homematic-Scripte und keine Diagramme.**
