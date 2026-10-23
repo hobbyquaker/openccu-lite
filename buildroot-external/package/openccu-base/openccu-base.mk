@@ -22,7 +22,7 @@
 # (task 352); a tag never moves once pushed. The compat version is the release's identity
 # (PRODUCT_VERSION, the recovery's hm-platform; the top Makefile reads both lines) and stays the
 # release while the version is a tag of the fork.
-OPENCCU_BASE_VERSION = v1.0.0-rc.0
+OPENCCU_BASE_VERSION = v1.0.0-rc.1
 OPENCCU_BASE_COMPAT_VERSION = 3.89.11
 # GitHub's archive of that tag (the recovery's hm-platform downloads OpenCCU-Base's own
 # release archive of the compat version), pruned right after the extract to the paths
