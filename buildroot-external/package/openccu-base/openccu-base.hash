@@ -4,4 +4,4 @@ sha256  aa9639372555d45bf15b818ae303075ce0c27874a11e1276e48f120718bcb912  licens
 sha256  edaef632cbb643e4e7a221717a6c441a4c1a7c918e6e4d56debc3d8739b233f6  licenses/gpl-2.0.txt
 sha256  20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95  licenses/lgpl-2.1.txt
 # GitHub's archive of hobbyquaker/OpenCCU-Base at the pinned tag (tasks 348, 352; the branch lite)
-sha256  0f9d72c47cde4c3ac4ab750bd07fbc1f587e103e5c45f2bc8b4ebb8025240a9d  openccu-base-v1.0.0-rc.1.tar.gz
+sha256  0236f04cc4c451421ba96c47145143539c6cd646b2d693ade417de261cf2ea59  openccu-base-v1.0.0-rc.2.tar.gz
