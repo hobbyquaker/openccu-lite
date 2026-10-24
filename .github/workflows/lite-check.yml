@@ -131,3 +131,5 @@ jobs:
         run: sh scripts/testcases/lite-fwprepare-cleanup-test.sh
       - name: The update packages' EULA carries openccu-lite's preamble
         run: sh scripts/testcases/lite-eula-test.sh
+      - name: The daily upstream version check decides as its rule says (offline, fixtures)
+        run: sh scripts/testcases/lite-upstream-versions-test.sh

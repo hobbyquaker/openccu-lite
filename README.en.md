@@ -1,5 +1,7 @@
 # openccu-lite
 
+[![upstream versions](https://img.shields.io/endpoint?url=https://hobbyquaker.github.io/openccu-lite/badge.json)](https://hobbyquaker.github.io/openccu-lite/en.html)
+
 [:de: Deutsches README](README.md)
 
 openccu-lite is a fork of the [OpenCCU project](https://github.com/OpenCCU/OpenCCU) that removes some old software parts

@@ -216,6 +216,10 @@ jobs:
         run: sh scripts/testcases/lite-fwprepare-cleanup-test.sh
       - name: The update packages' EULA carries openccu-lite's preamble
         run: sh scripts/testcases/lite-eula-test.sh
+      - name: The daily upstream version check decides as its rule says
+        # scripts/lite-upstream-versions.py against fixtures; the network check itself is
+        # lite-upstream-versions.yml, daily on GitHub only
+        run: sh scripts/testcases/lite-upstream-versions-test.sh
       - name: The lighttpd redirects and the session gate, on a real lighttpd
         # the base and lite overlays' lighttpd configuration with occulited's fragment and gate, parsed
         # and driven by curl in an Alpine container (docker, apk over the network): the HTTP -> HTTPS
