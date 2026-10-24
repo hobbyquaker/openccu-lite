@@ -11,7 +11,7 @@
 #
 ################################################################################
 
-DETECT_RADIO_MODULE_VERSION = v1.0.0-rc.1
+DETECT_RADIO_MODULE_VERSION = v1.0.0-rc.2
 DETECT_RADIO_MODULE_SITE = $(call github,hobbyquaker,piVCCU,$(DETECT_RADIO_MODULE_VERSION))
 DETECT_RADIO_MODULE_LICENSE = Apache-2.0
 DETECT_RADIO_MODULE_LICENSE_FILES = LICENSE
