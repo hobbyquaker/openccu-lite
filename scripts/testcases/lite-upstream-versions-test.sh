@@ -6,8 +6,9 @@
 # rpi-eeprom default channel; the end of support of buildroot's series and of the kernel series:
 # iseol, gone from releases.json, the projected dates within six months, unreadable pages; the JVM against
 # Azul's newest Zulu build of our Java major per architecture; HMIPServer against eQ-3's
-# homematicip/OpenCCU-Base (shown, never a finding) and the latest OpenCCU release (a finding when ours
-# is older) - the jar by its git blob sha and its version read by
+# homematicip/OpenCCU-Base (shown, never a finding) and the newest version tag of OpenCCU/OpenCCU-Base
+# (chosen by version order among other tags; a finding when ours is older), ours with the OpenCCU-Base
+# tag its jar comes from - the jar by its git blob sha and its version read by
 # range from small test jars, a snapshot named as such; the OpenCCU-Base commits above our line from
 # its report.json, each linked); findings exit 0 with ::warning:: lines and a yellow badge, errors exit
 # 2 (pin) or 3 (upstream) with a grey badge - never green; the report pages (with the link to the
@@ -25,7 +26,6 @@ C=buildroot-external/configs
 FW_OURS=1111111111111111111111111111111111111111
 K_OLD=aaaa000000000000000000000000000000000000
 K_NEW=bbbb000000000000000000000000000000000000
-OCCU=3.89.11.20260919
 JAR_OURS=f22c000000000000000000000000000000000000
 JAR_THEIRS=e5ea000000000000000000000000000000000000
 JAR_EQ3=e3e3000000000000000000000000000000000000
@@ -125,9 +125,8 @@ base() { # a current world
   kernel_eol "Dec, 2028"
   br_eol "June 2027"
   printf 'ref: refs/heads/rpi-6.18.y\tHEAD\naeadd6ed\tHEAD\n' >"$tmp/fx/rpi-head.txt"
-  printf '{"tag_name": "%s", "html_url": "https://github.com/OpenCCU/OpenCCU/releases/tag/%s"}\n' $OCCU $OCCU >"$tmp/fx/openccu-release.json"
+  tags openccu-base-tags.txt 3.89.9 3.89.11 v1.0.0-rc.3 3.89.11.20260919 lts-1 4.0.0-rc1
   azul aarch64 21.52.203-ca-jre21.0.12.1 21.50.19-ca-jre21.0.11; azul x64 21.52.203-ca-jre21.0.12.1
-  base_mk "$tmp/fx/openccu-$OCCU-openccu-base.mk" 3.89.11 https://github.com/OpenCCU/OpenCCU-Base
   contents hobbyquaker_OpenCCU-Base-v1.0.0-rc.3 $JAR_OURS; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_OURS
   echo '{"full_name": "homematicip/OpenCCU-Base", "default_branch": "main"}' >"$tmp/fx/eq3-repo.json"
   contents homematicip_OpenCCU-Base-main $JAR_OURS
@@ -196,9 +195,11 @@ grep -qF '<a href="https://hobbyquaker.github.io/OpenCCU-Base/">der OpenCCU-Base
   && grep -qF '<a href="https://hobbyquaker.github.io/OpenCCU-Base/">the OpenCCU-Base commit report</a>' "$tmp/site/en.html" \
   && ok "both pages link the OpenCCU-Base commit report" || bad "both pages link the OpenCCU-Base commit report"
 grep -qF '| JVM (Azul Zulu) | 21.0.12.1 (Zulu 21.52.203, JRE) | 21.0.12.1 (Zulu 21.52.203, JRE) | 2031-09 | up to date |' "$tmp/sum" \
-  && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base v1.0.0-rc.3) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU 3.89.11.20260919: 1.60.1 (the same jar) |  | up to date |' "$tmp/sum" \
+  && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base 3.89.11) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU/OpenCCU-Base 3.89.11: 1.60.1 (the same jar) |  | up to date |' "$tmp/sum" \
   && grep -qF '| OpenCCU-Base commits above our line | lite at: libXmlRpc: regenerate (#190) (2026-10-13) | 0 commit(s) above the line |  | up to date |' "$tmp/sum" \
-  && grep -qF '<td>homematicip/OpenCCU-Base main: 1.60.1 (dasselbe Jar) · OpenCCU 3.89.11.20260919: 1.60.1 (dasselbe Jar)</td>' "$tmp/site/index.html" \
+  && grep -qF '<td>homematicip/OpenCCU-Base main: 1.60.1 (dasselbe Jar) · OpenCCU/OpenCCU-Base 3.89.11: 1.60.1 (dasselbe Jar)</td>' "$tmp/site/index.html" \
+  && grep -qF '<td>1.60.1 (OpenCCU-Base 3.89.11)</td>' "$tmp/site/index.html" && grep -qF '<td>1.60.1 (OpenCCU-Base 3.89.11)</td>' "$tmp/site/en.html" \
+  && ! grep -qF 'v1.0.0-rc.3' "$tmp/site/index.html" "$tmp/site/en.html" \
   && ok "the JVM, HMIPServer and OpenCCU-Base rows" || { bad "the JVM, HMIPServer and OpenCCU-Base rows"; cat "$tmp/sum"; }
 
 base; tags buildroot-tags.txt 2026.08.2; expect "buildroot: a newer point release" 0 "$UPD" "::warning::update available - buildroot: buildroot 2026.08.2 is out"
@@ -286,47 +287,61 @@ base; zulu_eol 2027-05-31; expect "JVM: seven months ahead is a date only" 0 "up
 base; zulu_eol 2031-09-30 true; expect "JVM: Zulu marked end of life" 0 "$UPD" "Azul Zulu 21 is end of life"
 base; echo 'nope' >"$tmp/fx/zulu-eol.json"; expect "JVM: endoflife.date unreadable is a note, not a failed check" 0 "up to date" "end of support of Zulu 21 unknown"
 base; rm "$tmp/fx/zulu-eol.json"; expect "JVM: endoflife.date unreachable is a note, not a failed check" 0 "up to date" "end of support of Zulu 21 unknown"
-base; rm "$tmp/fx/openccu-release.json"; expect "OpenCCU's latest release unreachable: exit 3" 3 "check failed" "::error::upstream unreachable"
-base; echo '{"message": "Not Found"}' >"$tmp/fx/openccu-release.json"; expect "OpenCCU's latest release without a tag: exit 3" 3 "check failed" "the latest release has no tag"
+base; rm "$tmp/fx/openccu-base-tags.txt"; expect "OpenCCU-Base's tags unreachable: exit 3" 3 "check failed" "::error::upstream unreachable"
+base; : >"$tmp/fx/openccu-base-tags.txt"; tags openccu-base-tags.txt v1.0.0-rc.3 lts-1 4.0.0-rc1
+expect "OpenCCU-Base without a version tag: exit 3" 3 "check failed" "OpenCCU/OpenCCU-Base: no version tag"
 base; rm "$tmp/fx/azul-x64.json"; expect "Azul's metadata API unreachable: exit 3" 3 "check failed" "azul-x64.json"
 base; echo '[{"name": "zulu21.54.107-ca-jre21.0.13-linux_musl_x64.tar.gz"}]' >"$tmp/fx/azul-x64.json"; expect "Azul's metadata API without a glibc JRE for x64: exit 3" 3 "check failed" "no Zulu 21 JRE for linux_x64"
 base; rm "$tmp/root/buildroot-external/package/java-azul/java-azul.mk"; expect "our java-azul.mk missing: exit 2" 2 "check failed" "java-azul.mk"
 
 # HMIPServer: the jar by its blob sha, the version by range
-base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS 1.61.11-SNAPSHOT
-expect "HMIPServer: OpenCCU's release ships a newer snapshot" 0 "$UPD" "ships a newer HMIPServer, a snapshot: 1.61.11-SNAPSHOT (ours: 1.60.1) - see the OpenCCU-Base report https://hobbyquaker.github.io/OpenCCU-Base/"
-grep -qF '<li><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 liefert einen neueren HMIPServer, einen Snapshot' "$tmp/site/index.html" \
-  && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base v1.0.0-rc.3) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU 3.89.11.20260919: 1.61.11-SNAPSHOT (snapshot) |' "$tmp/sum" \
+base; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS; jar $JAR_THEIRS 1.61.11-SNAPSHOT
+expect "HMIPServer: the newest OpenCCU-Base tag has a newer snapshot" 0 "$UPD" "OpenCCU-Base 3.89.12 has a newer HMIPServer, a snapshot: 1.61.11-SNAPSHOT (ours: 1.60.1) - see the OpenCCU-Base report https://hobbyquaker.github.io/OpenCCU-Base/"
+grep -qF '<li><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU-Base 3.89.12 hat einen neueren HMIPServer, einen Snapshot' "$tmp/site/index.html" \
+  && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base 3.89.11) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU/OpenCCU-Base 3.89.12: 1.61.11-SNAPSHOT (snapshot) |' "$tmp/sum" \
   && ok "HMIPServer: the snapshot finding links the OpenCCU-Base report, both versions shown" || bad "HMIPServer: the snapshot finding links the OpenCCU-Base report, both versions shown"
 base; contents homematicip_OpenCCU-Base-main $JAR_EQ3; jar $JAR_EQ3 1.61.11-SNAPSHOT
 expect "HMIPServer: a newer snapshot at homematicip is shown, not a finding" 0 "up to date" "homematicip/OpenCCU-Base main has a newer one: 1.61.11-SNAPSHOT (snapshot) - information, not a finding"
-grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base v1.0.0-rc.3) | homematicip/OpenCCU-Base main: 1.61.11-SNAPSHOT (snapshot) · OpenCCU 3.89.11.20260919: 1.60.1 (the same jar) |  | up to date |' "$tmp/sum" \
-  && grep -qF '<td>homematicip/OpenCCU-Base main: 1.61.11-SNAPSHOT (Snapshot) · OpenCCU 3.89.11.20260919: 1.60.1 (dasselbe Jar)</td>' "$tmp/site/index.html" \
+grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base 3.89.11) | homematicip/OpenCCU-Base main: 1.61.11-SNAPSHOT (snapshot) · OpenCCU/OpenCCU-Base 3.89.11: 1.60.1 (the same jar) |  | up to date |' "$tmp/sum" \
+  && grep -qF '<td>homematicip/OpenCCU-Base main: 1.61.11-SNAPSHOT (Snapshot) · OpenCCU/OpenCCU-Base 3.89.11: 1.60.1 (dasselbe Jar)</td>' "$tmp/site/index.html" \
   && ok "HMIPServer: both comparisons in the row" || { bad "HMIPServer: both comparisons in the row"; grep HMIP "$tmp/sum"; }
 base; contents homematicip_OpenCCU-Base-main $JAR_EQ3; jar $JAR_EQ3 1.62.0
 expect "HMIPServer: a newer release at homematicip is not a finding either" 0 "up to date" "has a newer one: 1.62.0 - information"
-base; contents homematicip_OpenCCU-Base-main $JAR_EQ3; jar $JAR_EQ3 1.62.0; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS 1.61.2
-expect "HMIPServer: the OpenCCU release newer is a finding, homematicip shown beside it" 0 "$UPD" "OpenCCU 3.89.11.20260919 ships a newer HMIPServer: 1.61.2 (ours: 1.60.1)"
-grep -qF 'homematicip/OpenCCU-Base main: 1.62.0 · OpenCCU 3.89.11.20260919: 1.61.2 |' "$tmp/sum" && [ "$(grep -c '::warning::update available - HMIPServer' "$tmp/out")" -eq 1 ] \
+base; contents homematicip_OpenCCU-Base-main $JAR_EQ3; jar $JAR_EQ3 1.62.0; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS; jar $JAR_THEIRS 1.61.2
+expect "HMIPServer: the newest OpenCCU-Base tag newer is a finding, homematicip shown beside it" 0 "$UPD" "OpenCCU-Base 3.89.12 has a newer HMIPServer: 1.61.2 (ours: 1.60.1)"
+grep -qF 'homematicip/OpenCCU-Base main: 1.62.0 · OpenCCU/OpenCCU-Base 3.89.12: 1.61.2 |' "$tmp/sum" && [ "$(grep -c '::warning::update available - HMIPServer' "$tmp/out")" -eq 1 ] \
   && ok "HMIPServer: one finding, both versions" || bad "HMIPServer: one finding, both versions"
 base; contents homematicip_OpenCCU-Base-main $JAR_EQ3
 expect "HMIPServer: homematicip's different jar unreachable: exit 3" 3 "check failed" "jar-$JAR_EQ3"
 base; echo '{"message": "Not Found"}' >"$tmp/fx/eq3-repo.json"
 expect "HMIPServer: homematicip/OpenCCU-Base without a default branch: exit 3" 3 "check failed" "no default branch"
-base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS 1.62.0 stored
-expect "HMIPServer: a newer release (a stored entry)" 0 "$UPD" "ships a newer HMIPServer: 1.62.0 (ours: 1.60.1)"
-base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS 1.58.4
-expect "HMIPServer: an older one is a note" 0 "up to date" "OpenCCU 3.89.11.20260919 ships an older one"
-base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS 1.60.1
+base; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS; jar $JAR_THEIRS 1.62.0 stored
+expect "HMIPServer: a newer release (a stored entry)" 0 "$UPD" "OpenCCU-Base 3.89.12 has a newer HMIPServer: 1.62.0 (ours: 1.60.1)"
+base; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS; jar $JAR_THEIRS 1.58.4
+expect "HMIPServer: an older one is a note" 0 "up to date" "OpenCCU-Base 3.89.12 has an older one"
+base; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS; jar $JAR_THEIRS 1.60.1
 expect "HMIPServer: another build of the same version is a note" 0 "up to date" "a different build of the same version"
-base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS ""
-expect "HMIPServer: a different jar without a readable version is a finding" 0 "$UPD" "ships a different HMIPServer.jar (its version is not readable)"
-base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS
-expect "HMIPServer: OpenCCU's different jar unreachable: exit 3" 3 "check failed" "jar-$JAR_THEIRS"
+base; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS; jar $JAR_THEIRS ""
+expect "HMIPServer: a different jar without a readable version is a finding" 0 "$UPD" "OpenCCU-Base 3.89.12 has a different HMIPServer.jar (its version is not readable)"
+base; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS
+expect "HMIPServer: OpenCCU-Base's different jar unreachable: exit 3" 3 "check failed" "jar-$JAR_THEIRS"
 base; echo '[{"name": "HMServer.jar", "sha": "484534cedc7e2a4b711600c09b7a908e83593c04"}]' >"$tmp/fx/contents-OpenCCU_OpenCCU-Base-3.89.11.json"
-expect "HMIPServer: no jar in OpenCCU's OpenCCU-Base: exit 3" 3 "check failed" "no opt/HMServer/HMIPServer.jar"
-base; base_mk "$tmp/fx/openccu-$OCCU-openccu-base.mk" 3.89.11 'https://example.org/x.tar.gz'
-expect "HMIPServer: OpenCCU's openccu-base.mk not on GitHub: exit 3" 3 "check failed" "no GitHub OPENCCU_BASE_SITE"
+expect "HMIPServer: no jar at the newest OpenCCU-Base tag: exit 3" 3 "check failed" "no opt/HMServer/HMIPServer.jar"
+# the newest version tag by version order, our jar's own tag, a newer jar there is a finding
+base; tags openccu-base-tags.txt 3.89.10 3.100.1 v9.9.9 9.9.9.1; contents OpenCCU_OpenCCU-Base-3.100.1 $JAR_OURS
+expect "HMIPServer: the newest of several OpenCCU-Base tags by version order (3.100.1, not 3.89.11 or v9.9.9)" 0 "up to date"
+grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base 3.100.1) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU/OpenCCU-Base 3.100.1: 1.60.1 (the same jar) |' "$tmp/sum" \
+  && ok "HMIPServer: 3.100.1 shown as the newest tag and as ours" || { bad "HMIPServer: 3.100.1 shown as the newest tag and as ours"; grep HMIP "$tmp/sum"; }
+base; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS; jar $JAR_THEIRS 1.61.2
+expect "HMIPServer: a newer jar at the newest OpenCCU-Base tag is a finding" 0 "$UPD" "OpenCCU-Base 3.89.12 has a newer HMIPServer: 1.61.2 (ours: 1.60.1)"
+grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base 3.89.11) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU/OpenCCU-Base 3.89.12: 1.61.2 |' "$tmp/sum" \
+  && grep -qF '<li>OpenCCU-Base 3.89.12 hat einen neueren HMIPServer: 1.61.2 (unserer: 1.60.1)</li>' "$tmp/site/index.html" \
+  && ok "HMIPServer: ours from the older tag 3.89.11, the newest tag 3.89.12 beside it" || { bad "HMIPServer: ours from the older tag 3.89.11, the newest tag 3.89.12 beside it"; grep HMIP "$tmp/sum"; }
+base; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS; jar $JAR_THEIRS 1.60.1
+contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_EQ3; echo '[]' >"$tmp/fx/contents-OpenCCU_OpenCCU-Base-3.89.9.json"
+expect "HMIPServer: our jar in no OpenCCU-Base tag is a note" 0 "up to date" "our jar is in none of the 10 newest version tags of OpenCCU/OpenCCU-Base"
+grep -qF '<td>1.60.1 (in keinem OpenCCU-Base-Tag)</td>' "$tmp/site/index.html" && grep -qF '<td>1.60.1 (in no OpenCCU-Base tag)</td>' "$tmp/site/en.html" \
+  && ok "HMIPServer: no tag of ours is said so" || bad "HMIPServer: no tag of ours is said so"
 base; base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 'https://example.org/x.tar.gz'
 expect "HMIPServer: our openccu-base.mk not on GitHub: exit 2" 2 "check failed" "openccu-base.mk"
 

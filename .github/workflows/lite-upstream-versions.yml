@@ -1,6 +1,6 @@
 # openccu-lite: once a day, are the fork's buildroot, kernels, U-Boot and Raspberry Pi firmware current, and
 # how long are they supported? Is the JVM the newest Zulu build of its Java line, is HMIPServer older than the
-# latest OpenCCU release's, and which
+# one at the newest OpenCCU-Base version tag, and which
 # relevant OpenCCU-Base commits are above our line (from https://hobbyquaker.github.io/OpenCCU-Base/)?
 # scripts/lite-upstream-versions.py reads the pins and compares them with upstream (the components and
 # the rule for "current" are in its header) and writes a report page, which this publishes on GitHub

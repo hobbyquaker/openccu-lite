@@ -48,12 +48,15 @@
 #                         our Java major (Azul's published dates), a finding from EOL_WARN_MONTHS before
 #                         it; unreadable is a note.
 #   HMIPServer            opt/HMServer/HMIPServer.jar of the OpenCCU-Base our package/openccu-base pins
-#                         (the fork's tag), shown against two others: eQ-3's own repository
-#                         homematicip/OpenCCU-Base (its default branch head; information only, a newer
-#                         one there - often a -SNAPSHOT - is a note, never a finding) and the OpenCCU-Base
-#                         version the latest OpenCCU release pins (a finding when ours is older, or when
-#                         its different jar has no readable version). The jar is identified by its git
-#                         blob sha (GitHub's contents API lists it without the 40 MB). The version is the
+#                         (the fork's tag), shown with the OpenCCU/OpenCCU-Base version tag it comes from
+#                         (the newest of the BASE_TAGS_SCAN newest version tags with the same jar), and
+#                         against two others: eQ-3's own repository homematicip/OpenCCU-Base (its default
+#                         branch head; information only, a newer one there - often a -SNAPSHOT - is a
+#                         note, never a finding) and the newest version tag of OpenCCU/OpenCCU-Base
+#                         (BASE_TAG_RE, e.g. 3.89.11, by version order; any other tag ignored): a finding
+#                         when ours is older, or when its different jar has no readable version. The jar
+#                         is identified by its git blob sha (GitHub's contents API lists it without the
+#                         40 MB). The version is the
 #                         one of eQ-3's server-core module, read from the jar's
 #                         META-INF/maven/.../pom.properties with HTTP range requests (the zip's central
 #                         directory and that one entry, about 3 MB) - ours always, another only when its
@@ -80,8 +83,8 @@
 #   --fixtures DIR reads upstream from files instead of the network (the offline test):
 #     buildroot-tags.txt, rpi-tags.txt, uboot-tags.txt, firmware-tags.txt (git ls-remote output),
 #     releases.json, releases.html, buildroot-download.html, rpi-head.txt (git ls-remote --symref HEAD), rpi-Makefile-<tag>,
-#     firmware-git_hash-<commit or tag>, eeprom-versions.txt, openccu-release.json (releases/latest),
-#     openccu-<tag>-openccu-base.mk (the release's package file), eq3-repo.json (homematicip/OpenCCU-Base), azul-aarch64.json, azul-x64.json,
+#     firmware-git_hash-<commit or tag>, eeprom-versions.txt, openccu-base-tags.txt (OpenCCU/OpenCCU-Base's
+#     tags, git ls-remote output), eq3-repo.json (homematicip/OpenCCU-Base), azul-aarch64.json, azul-x64.json,
 #     contents-<owner>_<repo>-<ref>.json (the opt/HMServer listing), jar-<blob sha> (the jar, read by
 #     range), zulu-eol.json, base-report.json
 #   --today YYYY-MM-DD the date the EOL warning counts from (the tests; default today, UTC)
@@ -114,7 +117,9 @@ BUILDROOT_LTS_EOL_WARN_MONTHS = 6    # an LTS series: supported three years, war
 BUILDROOT_DOWNLOAD = "https://buildroot.org/download.html"
 NO_PERIOD = ("", "")   # no published support period: the cell stays empty
 PAGE = "https://hobbyquaker.github.io/openccu-lite/"
-OPENCCU = "OpenCCU/OpenCCU"
+BASE_UP = "OpenCCU/OpenCCU-Base"   # the OpenCCU-Base our fork follows
+BASE_TAG_RE = re.compile(r"^\d+\.\d+\.\d+$")   # its version tags, e.g. 3.89.11
+BASE_TAGS_SCAN = 10   # how many of its newest version tags are searched for the tag our jar comes from
 GH_API = "https://api.github.com/"
 GH_RAW = "https://raw.githubusercontent.com/{repo}/{ref}/{path}"
 HMIP_DIR = "opt/HMServer"
@@ -632,19 +637,15 @@ def check_rpi_eeprom(root, up):
     return r
 
 
-# ---- the JVM (Azul Zulu) and HMIPServer (against the latest OpenCCU release)
+# ---- the JVM (Azul Zulu) and HMIPServer (against the newest OpenCCU-Base version tag)
 
-def openccu_release(up):
-    """(tag, page) of OpenCCU/OpenCCU's latest release"""
-    rel = up.api(f"repos/{OPENCCU}/releases/latest", "openccu-release.json")
-    tag = rel.get("tag_name") if isinstance(rel, dict) else None
-    if not tag or not re.match(r"^[\w.-]+$", tag):
-        raise UpstreamError(f"{OPENCCU}: the latest release has no tag")
-    return tag, rel.get("html_url") or f"https://github.com/{OPENCCU}/releases/tag/{tag}"
-
-
-def openccu_file(up, tag, rel):
-    return up.http(GH_RAW.format(repo=OPENCCU, ref=tag, path=rel), f"openccu-{tag}-{os.path.basename(rel)}")
+def base_tags(up):
+    """OpenCCU/OpenCCU-Base's version tags, newest first"""
+    t = [n for n in up.tags(f"https://github.com/{BASE_UP}", "refs/tags/*", "openccu-base-tags.txt")
+         if BASE_TAG_RE.match(n)]
+    if not t:
+        raise UpstreamError(f"{BASE_UP}: no version tag")
+    return sorted(t, key=ver_key, reverse=True)
 
 
 ZULU_RE = re.compile(r"^(\d+(?:\.\d+)*)-ca-(jre|jdk)(\d+(?:\.\d+)*)$")
@@ -745,12 +746,15 @@ def base_source(text):
     return (f"{m.group(1)}/{m.group(2)}", v.group(1)) if m else None
 
 
-def jar_blob(up, repo, ref):
+def jar_blob(up, repo, ref, need=True):
+    """the git blob sha of the ref's HMIPServer.jar; without it an error, or None when not `need`"""
     lst = up.api(f"repos/{repo}/contents/{HMIP_DIR}?ref={ref}", f"contents-{repo.replace('/', '_')}-{ref}.json")
     for x in lst if isinstance(lst, list) else []:
         if isinstance(x, dict) and x.get("name") == HMIP_JAR and re.match(r"^[0-9a-f]{40}$", x.get("sha") or ""):
             return x["sha"]
-    raise UpstreamError(f"{repo} {ref}: no {HMIP_DIR}/{HMIP_JAR}")
+    if need:
+        raise UpstreamError(f"{repo} {ref}: no {HMIP_DIR}/{HMIP_JAR}")
+    return None
 
 
 def zip_member(up, url, fixture, member):
@@ -803,7 +807,17 @@ def check_hmipserver(root, up):
         raise PinError(f"{BASE_MK}: no OPENCCU_BASE_VERSION or no GitHub OPENCCU_BASE_SITE")
     bo = jar_blob(up, *ours)
     vo = jar_version(up, *ours, bo)
-    r.ours = f"{vo or '?'} (OpenCCU-Base {ours[1]})"
+    tags = base_tags(up)
+    newest = tags[0]
+    bt = jar_blob(up, BASE_UP, newest)
+    origin = newest if bt == bo else next((t for t in tags[1:BASE_TAGS_SCAN] if jar_blob(up, BASE_UP, t, False) == bo),
+                                         None)
+    if origin:
+        r.ours = f"{vo or '?'} (OpenCCU-Base {origin})"
+    else:
+        r.ours = (f"{vo or '?'} (in no OpenCCU-Base tag)", f"{vo or '?'} (in keinem OpenCCU-Base-Tag)")
+        r.note(f"our jar is in none of the {BASE_TAGS_SCAN} newest version tags of {BASE_UP}",
+               f"unser Jar ist in keinem der {BASE_TAGS_SCAN} neuesten Versions-Tags von {BASE_UP}")
 
     # eQ-3's own repository, its default branch: shown, never a finding
     info = up.api(f"repos/{EQ3_BASE}", "eq3-repo.json")
@@ -826,34 +840,29 @@ def check_hmipserver(root, up):
                    f"{EQ3_BASE} {branch} hat einen neueren: {ve}{mark[1]} - zur Information, kein Befund (siehe "
                    "den OpenCCU-Base-Bericht)")
 
-    # the latest OpenCCU release: a finding when ours is older
-    tag, _ = openccu_release(up)
-    theirs = base_source(openccu_file(up, tag, "buildroot-external/package/openccu-base/openccu-base.mk"))
-    if not theirs:
-        raise UpstreamError(f"OpenCCU {tag}: no OPENCCU_BASE_VERSION or no GitHub OPENCCU_BASE_SITE in package/openccu-base")
-    bt = jar_blob(up, *theirs)
+    # the newest OpenCCU/OpenCCU-Base version tag: a finding when ours is older
+    who = f"OpenCCU-Base {newest}"
     if bt == bo:
-        occu = (f"OpenCCU {tag}: {vo or '?'} (the same jar)", f"OpenCCU {tag}: {vo or '?'} (dasselbe Jar)")
+        occu = (f"{BASE_UP} {newest}: {vo or '?'} (the same jar)", f"{BASE_UP} {newest}: {vo or '?'} (dasselbe Jar)")
     else:
-        vt = jar_version(up, *theirs, bt)
-        occu = (f"OpenCCU {tag}: {vt or '?'}" + (" (snapshot)" if snap(vt) else ""),
-                f"OpenCCU {tag}: {vt or '?'}" + (" (Snapshot)" if snap(vt) else ""))
-        r.note(f"git blob ours {bo[:12]}, OpenCCU's {bt[:12]}", f"Git-Blob unserer {bo[:12]}, OpenCCUs {bt[:12]}")
+        vt = jar_version(up, BASE_UP, newest, bt)
+        occu = (f"{BASE_UP} {newest}: {vt or '?'}" + (" (snapshot)" if snap(vt) else ""),
+                f"{BASE_UP} {newest}: {vt or '?'}" + (" (Snapshot)" if snap(vt) else ""))
+        r.note(f"git blob ours {bo[:12]}, {who}'s {bt[:12]}", f"Git-Blob unserer {bo[:12]}, der von {who} {bt[:12]}")
         if not vo or not vt:
-            r.due(f"OpenCCU {tag} ships a different HMIPServer.jar (its version is not readable)",
-                  f"OpenCCU {tag} liefert ein anderes HMIPServer.jar (seine Version ist nicht lesbar)")
+            r.due(f"{who} has a different HMIPServer.jar (its version is not readable)",
+                  f"{who} hat ein anderes HMIPServer.jar (seine Version ist nicht lesbar)")
         elif ver_key(vt) > ver_key(vo) and snap(vt):
-            r.due(f"OpenCCU {tag} ships a newer HMIPServer, a snapshot: {vt} (ours: {vo}) - see the OpenCCU-Base report",
-                  f"OpenCCU {tag} liefert einen neueren HMIPServer, einen Snapshot: {vt} (unserer: {vo}) - siehe den "
+            r.due(f"{who} has a newer HMIPServer, a snapshot: {vt} (ours: {vo}) - see the OpenCCU-Base report",
+                  f"{who} hat einen neueren HMIPServer, einen Snapshot: {vt} (unserer: {vo}) - siehe den "
                   "OpenCCU-Base-Bericht", BASE_REPORT)
         elif ver_key(vt) > ver_key(vo):
-            r.due(f"OpenCCU {tag} ships a newer HMIPServer: {vt} (ours: {vo})",
-                  f"OpenCCU {tag} liefert einen neueren HMIPServer: {vt} (unserer: {vo})")
+            r.due(f"{who} has a newer HMIPServer: {vt} (ours: {vo})",
+                  f"{who} hat einen neueren HMIPServer: {vt} (unserer: {vo})")
         elif ver_key(vt) == ver_key(vo):
-            r.note(f"OpenCCU {tag}: a different build of the same version",
-                   f"OpenCCU {tag}: ein anderer Build derselben Version")
+            r.note(f"{who}: a different build of the same version", f"{who}: ein anderer Build derselben Version")
         else:
-            r.note(f"OpenCCU {tag} ships an older one", f"OpenCCU {tag} liefert einen älteren")
+            r.note(f"{who} has an older one", f"{who} hat einen älteren")
     r.newest = (f"{eq3[0]} · {occu[0]}", f"{eq3[1]} · {occu[1]}")
     return r
 
