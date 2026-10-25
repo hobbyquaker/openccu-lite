@@ -1,0 +1,13 @@
+diff --git a/cmd/usb_mass_storage.c b/cmd/usb_mass_storage.c
+index e8b8704..dd12e7a 100644
+--- a/cmd/usb_mass_storage.c
++++ b/cmd/usb_mass_storage.c
+@@ -117,7 +117,7 @@ static int ums_init(const char *devtype, const char *devnums_part_str)
+ 		name = malloc(UMS_NAME_LEN);
+ 		if (!name)
+ 			goto cleanup;
+-		snprintf(name, UMS_NAME_LEN, "UMS disk %d", ums_count);
++		snprintf(name, UMS_NAME_LEN, "OpenCCU UMS disk %d", ums_count);
+ 		ums[ums_count].name = name;
+ 		ums[ums_count].block_dev = *block_dev;
+ 		ums[ums_count].hwpart = block_dev->hwpart;

@@ -1,0 +1,13 @@
+--- buildroot/boot/uboot/uboot.mk.orig
++++ buildroot/boot/uboot/uboot.mk
+@@ -34,7 +34,9 @@
+ UBOOT_SITE_METHOD = svn
+ else
+ # Handle stable official U-Boot versions
+-UBOOT_SITE = https://ftp.denx.de/pub/u-boot
++# openccu-lite: U-Boot publishes its release archives on git.u-boot-project.org since 2026.10
++# (buildroot 747aa911f6a4, "boot/uboot: bump to version 2026.10"; the old releases are there too)
++UBOOT_SITE = https://git.u-boot-project.org/u-boot/u-boot/-/releases/v$(UBOOT_VERSION)/downloads
+ UBOOT_SOURCE = u-boot-$(UBOOT_VERSION).tar.bz2
+ endif
+ 

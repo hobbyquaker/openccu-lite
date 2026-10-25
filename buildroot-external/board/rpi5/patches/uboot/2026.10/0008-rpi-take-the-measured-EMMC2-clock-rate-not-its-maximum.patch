@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: hobbyquaker <hobbyquaker@gmail.com>
+Date: Sun, 25 Oct 2026 11:15:00 +0100
+Subject: [PATCH] rpi: take the measured EMMC2 clock rate, not its maximum
+
+The firmware answers GET_CLOCK_RATE with the last rate set by
+SET_CLOCK_RATE, which U-Boot never sends, so it reads 0 for EMMC2.
+Since "arm: rpi: fallback to max clock rate for MMC clock" (0a36afa,
+v2023.04) bcm2835_get_mmc_clock() then returns the clock's maximum,
+500 MHz on a Pi 4, while EMMC2 really runs at 100 MHz. sdhci takes that
+as its base clock and programs the divider for 50 MHz as 500/10, so the
+card runs at 10 MHz: SD reads at about 4.8 MB/s instead of 24 MB/s.
+
+For EMMC2 ask for the measured rate before falling back to the maximum,
+rounded to whole MHz so that a measurement a little above 100 MHz does not
+halve the card clock again. The other clocks keep their behaviour.
+
+Measured on a Pi 4 B (openccu-lite task 381): 16 MiB raw read 3.47 s ->
+0.70 s, the 31 MB kernel from ext4 6.5 s -> 1.34 s, the 55 MiB initrd
+from FAT 11.9 s -> 2.4 s, as with U-Boot 2023.01.
+---
+diff -ru a/arch/arm/mach-bcm283x/include/mach/mbox.h b/arch/arm/mach-bcm283x/include/mach/mbox.h
+--- a/arch/arm/mach-bcm283x/include/mach/mbox.h
++++ b/arch/arm/mach-bcm283x/include/mach/mbox.h
+@@ -224,6 +224,7 @@
+ 
+ #define BCM2835_MBOX_TAG_GET_CLOCK_RATE	0x00030002
+ #define BCM2835_MBOX_TAG_GET_MAX_CLOCK_RATE	0x00030004
++#define BCM2835_MBOX_TAG_GET_CLOCK_RATE_MEASURED	0x00030047
+ #define BCM2835_MBOX_TAG_GET_MIN_CLOCK_RATE	0x00030007
+ 
+ #define BCM2835_MBOX_CLOCK_ID_EMMC	1
+diff -ru a/arch/arm/mach-bcm283x/msg.c b/arch/arm/mach-bcm283x/msg.c
+--- a/arch/arm/mach-bcm283x/msg.c
++++ b/arch/arm/mach-bcm283x/msg.c
+@@ -99,6 +99,26 @@
+ 
+ 	clock_rate = msg_clk->get_clock_rate.body.resp.rate_hz;
+ 
++	/*
++	 * EMMC2 (BCM2711): the firmware reports a current rate only after a
++	 * SET_CLOCK_RATE, which U-Boot never sends, and its maximum (500 MHz)
++	 * is five times the rate the clock really runs at (100 MHz). Taken as
++	 * the base clock, the maximum makes sdhci divide 50 MHz down to 10 MHz.
++	 * Ask for the measured rate first, rounded to whole MHz: a measurement
++	 * a little above 100 MHz would otherwise halve the card clock again.
++	 */
++	if (clock_rate == 0 && clock_id == BCM2835_MBOX_CLOCK_ID_EMMC2) {
++		BCM2835_MBOX_INIT_HDR(msg_clk);
++		BCM2835_MBOX_INIT_TAG(&msg_clk->get_clock_rate,
++				      GET_CLOCK_RATE_MEASURED);
++		msg_clk->get_clock_rate.body.req.clock_id = clock_id;
++
++		ret = bcm2835_mbox_call_prop(BCM2835_MBOX_PROP_CHAN, &msg_clk->hdr);
++		if (!ret)
++			clock_rate = (msg_clk->get_clock_rate.body.resp.rate_hz +
++				      500000) / 1000000 * 1000000;
++	}
++
+ 	if (clock_rate == 0) {
+ 		BCM2835_MBOX_INIT_HDR(msg_clk);
+ 		BCM2835_MBOX_INIT_TAG(&msg_clk->get_clock_rate, GET_MAX_CLOCK_RATE);
+-- 
+2.43.0
