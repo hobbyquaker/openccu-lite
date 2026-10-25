@@ -174,7 +174,7 @@ EOF
 
 base; expect "all current: exit 0, green" 0 "up to date" "all current"
 grep -q '::warning::\|::error::' "$tmp/out" && bad "no annotations when current" || ok "no annotations when current"
-grep -qF '| Raspberry Pi firmware (rpi3, rpi4) | 111111111111 (stable_20260911) | 1.20260915 (stable_20260911) | no published support period | up to date |' "$tmp/sum" \
+grep -qF '| Raspberry Pi firmware (rpi3, rpi4) | 111111111111 (stable_20260911) | 1.20260915 (stable_20260911) |  | up to date |' "$tmp/sum" \
   && grep -qF '| buildroot | 2026.08.1 | 2026.08.1 | 2027-06 | up to date |' "$tmp/sum" \
   && grep -qF '| VM kernel (ova) | 6.18.58 | 6.18.58 | 2028-12 | up to date |' "$tmp/sum" \
   && grep -qF '**All current.**' "$tmp/sum" && ok "the job summary" || { bad "the job summary"; cat "$tmp/sum"; }
@@ -183,14 +183,21 @@ grep -q '<html lang="de">' "$tmp/site/index.html" && grep -qF 'aktuell' "$tmp/si
   && grep -q '<html lang="en">' "$tmp/site/en.html" && grep -qF 'up to date' "$tmp/site/en.html" \
   && grep -qF 'href="en.html"' "$tmp/site/index.html" && grep -qF 'prefers-color-scheme:dark' "$tmp/site/index.html" \
   && [ "$(grep -c '<tr><td>' "$tmp/site/en.html")" -eq 9 ] && grep -qF 'GRUB (VM) and Go come with buildroot' "$tmp/site/en.html" \
-  && grep -qF '<th>Support bis</th>' "$tmp/site/index.html" && grep -qF 'kein veröffentlichter Supportzeitraum' "$tmp/site/index.html" \
+  && grep -qF '<th>Support bis</th>' "$tmp/site/index.html" \
   && ok "the report pages: German and English, nine components, the support column, dark mode" || bad "the report pages"
+! grep -qiF 'Supportzeitraum' "$tmp/site/index.html" && ! grep -qiF 'support period' "$tmp/site/en.html" \
+  && grep -qF '</td><td></td><td><span class="ok">aktuell</span>' "$tmp/site/index.html" \
+  && grep -qF '</td><td></td><td><span class="ok">up to date</span>' "$tmp/site/en.html" \
+  && ok "no published support period: the cell stays empty" || bad "no published support period: the cell stays empty"
+grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">0 Commit(s) über der Linie</a></td>' "$tmp/site/index.html" \
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">0 commit(s) above the line</a></td>' "$tmp/site/en.html" \
+  && ok "OpenCCU-Base: the count links the commit report" || bad "OpenCCU-Base: the count links the commit report"
 grep -qF '<a href="https://hobbyquaker.github.io/OpenCCU-Base/">der OpenCCU-Base-Commit-Bericht</a>' "$tmp/site/index.html" \
   && grep -qF '<a href="https://hobbyquaker.github.io/OpenCCU-Base/">the OpenCCU-Base commit report</a>' "$tmp/site/en.html" \
   && ok "both pages link the OpenCCU-Base commit report" || bad "both pages link the OpenCCU-Base commit report"
 grep -qF '| JVM (Azul Zulu) | 21.0.12.1 (Zulu 21.52.203, JRE) | 21.0.12.1 (Zulu 21.52.203, JRE) | 2031-09 | up to date |' "$tmp/sum" \
-  && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base v1.0.0-rc.3) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU 3.89.11.20260919: 1.60.1 (the same jar) | no published support period | up to date |' "$tmp/sum" \
-  && grep -qF '| OpenCCU-Base commits above our line | lite at: libXmlRpc: regenerate (#190) (2026-10-13) | 0 commit(s) above the line | no published support period | up to date |' "$tmp/sum" \
+  && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base v1.0.0-rc.3) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU 3.89.11.20260919: 1.60.1 (the same jar) |  | up to date |' "$tmp/sum" \
+  && grep -qF '| OpenCCU-Base commits above our line | lite at: libXmlRpc: regenerate (#190) (2026-10-13) | 0 commit(s) above the line |  | up to date |' "$tmp/sum" \
   && grep -qF '<td>homematicip/OpenCCU-Base main: 1.60.1 (dasselbe Jar) · OpenCCU 3.89.11.20260919: 1.60.1 (dasselbe Jar)</td>' "$tmp/site/index.html" \
   && ok "the JVM, HMIPServer and OpenCCU-Base rows" || { bad "the JVM, HMIPServer and OpenCCU-Base rows"; cat "$tmp/sum"; }
 
@@ -293,7 +300,7 @@ grep -qF '<li><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89
   && ok "HMIPServer: the snapshot finding links the OpenCCU-Base report, both versions shown" || bad "HMIPServer: the snapshot finding links the OpenCCU-Base report, both versions shown"
 base; contents homematicip_OpenCCU-Base-main $JAR_EQ3; jar $JAR_EQ3 1.61.11-SNAPSHOT
 expect "HMIPServer: a newer snapshot at homematicip is shown, not a finding" 0 "up to date" "homematicip/OpenCCU-Base main has a newer one: 1.61.11-SNAPSHOT (snapshot) - information, not a finding"
-grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base v1.0.0-rc.3) | homematicip/OpenCCU-Base main: 1.61.11-SNAPSHOT (snapshot) · OpenCCU 3.89.11.20260919: 1.60.1 (the same jar) | no published support period | up to date |' "$tmp/sum" \
+grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base v1.0.0-rc.3) | homematicip/OpenCCU-Base main: 1.61.11-SNAPSHOT (snapshot) · OpenCCU 3.89.11.20260919: 1.60.1 (the same jar) |  | up to date |' "$tmp/sum" \
   && grep -qF '<td>homematicip/OpenCCU-Base main: 1.61.11-SNAPSHOT (Snapshot) · OpenCCU 3.89.11.20260919: 1.60.1 (dasselbe Jar)</td>' "$tmp/site/index.html" \
   && ok "HMIPServer: both comparisons in the row" || { bad "HMIPServer: both comparisons in the row"; grep HMIP "$tmp/sum"; }
 base; contents homematicip_OpenCCU-Base-main $JAR_EQ3; jar $JAR_EQ3 1.62.0
@@ -328,8 +335,9 @@ base; base_report 2026-10-24 'webui: default objects (#222)' 'rfd: a fix (#230)'
 expect "OpenCCU-Base: commits above the line, one finding each" 0 "$UPD" "not taken yet: 2026-10-12 rfd: a fix (#230) https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000002"
 [ "$(grep -c '::warning::update available - OpenCCU-Base commits above our line' "$tmp/out")" -eq 2 ] \
   && grep -qF '<li><a href="https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000001">noch nicht übernommen: 2026-10-11 webui: default objects (#222)</a></li>' "$tmp/site/index.html" \
-  && grep -qF '<td>2 commit(s) above the line</td>' "$tmp/site/en.html" && grep -qF '<td>2 Commit(s) über der Linie</td>' "$tmp/site/index.html" \
-  && ok "OpenCCU-Base: two warnings, the subjects linked, the count" || bad "OpenCCU-Base: two warnings, the subjects linked, the count"
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">2 commit(s) above the line</a></td>' "$tmp/site/en.html" \
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">2 Commit(s) über der Linie</a></td>' "$tmp/site/index.html" \
+  && ok "OpenCCU-Base: two warnings, the subjects linked, the count linked" || bad "OpenCCU-Base: two warnings, the subjects linked, the count linked"
 base; base_report 2026-10-21; expect "OpenCCU-Base: a stale report is a note" 0 "up to date" "the OpenCCU-Base report is from 2026-10-21"
 base; base_report 2026-10-22; run >/dev/null; grep -qF 'report is from' "$tmp/out" && bad "OpenCCU-Base: two days old is not stale" || ok "OpenCCU-Base: two days old is not stale"
 base; rm "$tmp/fx/base-report.json"; expect "OpenCCU-Base report unreachable: exit 3" 3 "check failed" "base-report.json"

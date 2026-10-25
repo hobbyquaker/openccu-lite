@@ -62,10 +62,10 @@
 #   OpenCCU-Base commits  the filtered OpenCCU-Base report (BASE_REPORT, report.json, kept by the fork's
 #                         workflow every 6 hours): the commits on the paths openccu-lite uses above the
 #                         line of the fork's lite. Current: none; each one is a finding, linked. A report
-#                         older than BASE_REPORT_STALE_DAYS is a note.
+#                         older than BASE_REPORT_STALE_DAYS is a note. The count links to that report.
 #   The report's "supported until" column: buildroot, the kernels and the JVM as above; U-Boot, the
 #   Raspberry Pi firmware, rpi-eeprom, HMIPServer and the OpenCCU-Base commits have no published support
-#   period, and the report says so.
+#   period: their cell stays empty.
 #
 # Findings are not an error: they are ::warning:: lines, the report and a yellow badge, and the exit
 # code stays 0. An error is: 2 a pin not found in the tree, 3 upstream unreachable or not parseable,
@@ -112,7 +112,7 @@ EOL_WARN_MONTHS = 6
 BUILDROOT_EOL_WARN_DAYS = 14         # a quarterly series: supported about four months, warn two weeks ahead
 BUILDROOT_LTS_EOL_WARN_MONTHS = 6    # an LTS series: supported three years, warn six months ahead
 BUILDROOT_DOWNLOAD = "https://buildroot.org/download.html"
-NO_PERIOD = ("no published support period", "kein veröffentlichter Supportzeitraum")
+NO_PERIOD = ("", "")   # no published support period: the cell stays empty
 PAGE = "https://hobbyquaker.github.io/openccu-lite/"
 OPENCCU = "OpenCCU/OpenCCU"
 GH_API = "https://api.github.com/"
@@ -257,6 +257,7 @@ class Row:
     def __init__(self, key, en, de, link):
         self.key, self.en, self.de, self.link = key, en, de, link
         self.ours = self.newest = "-"   # a string, or (en, de)
+        self.newest_link = None         # the "newest" cell as a link
         self.until = NO_PERIOD
         self.findings = []   # [(en, de, link or None)]
         self.notes = []      # [(en, de)]
@@ -876,6 +877,7 @@ def check_base_commits(root, up):
     else:
         r.ours = ("lite has no upstream commit of main", "lite hat keinen Upstream-Commit von main")
     r.newest = (f"{len(above)} commit(s) above the line", f"{len(above)} Commit(s) über der Linie")
+    r.newest_link = BASE_REPORT
     for c in above:
         when = str(c.get("date", ""))[:10]
         r.due(f"not taken yet: {when} {c['subject']}", f"noch nicht übernommen: {when} {c['subject']}", c["url"])
@@ -950,7 +952,9 @@ def page(lang, rows, error, when, run_url):
             items = [f'<li><a href="{e(f[2])}">{e(f[li])}</a></li>' if f[2] else f"<li>{e(f[li])}</li>"
                      for f in r.findings] + [f'<li class="note">{e(n[li])}</li>' for n in r.notes]
             name = r.en if lang == "en" else r.de
-            out.append(f'<tr><td><a href="{e(r.link)}">{e(name)}</a></td><td>{e(loc(r.ours, li))}</td><td>{e(loc(r.newest, li))}</td>'
+            newest = (f'<a href="{e(r.newest_link)}">{e(loc(r.newest, li))}</a>' if r.newest_link
+                      else e(loc(r.newest, li)))
+            out.append(f'<tr><td><a href="{e(r.link)}">{e(name)}</a></td><td>{e(loc(r.ours, li))}</td><td>{newest}</td>'
                        f"<td>{e(r.until[li])}</td><td>{st}" + (f"<ul>{''.join(items)}</ul>" if items else "") + "</td></tr>")
         out.append("</table></div>")
     out.append("</main></body></html>\n")
