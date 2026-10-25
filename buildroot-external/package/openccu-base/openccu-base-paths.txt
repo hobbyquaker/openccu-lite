@@ -32,11 +32,6 @@ licenses/
 # announces the system)
 regex:^src/(?!(webui|hss_led|eq3configd|ssdpd)/)
 
-# the startup scripts the image installs to /bin
-bin/hm_autoconf
-bin/hm_deldev
-bin/hm_startup
-
 # installed as they are: /etc, /firmware
 etc/
 firmware/

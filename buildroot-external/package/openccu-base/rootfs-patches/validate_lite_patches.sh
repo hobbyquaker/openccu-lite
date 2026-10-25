@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# Validate the part of the series that openccu-lite applies: every patch's sections outside www/
-# and opt/HMServer/pages/ and on the WebUI files openccu-lite ships (lite_series.py), against a
-# rootfs staged from OpenCCU-Base pruned to openccu-base-paths.txt, with zero fuzz (tasks 329,
-# 331, 335).
-# validate_patches.sh stays the check of the complete series against OpenCCU-Base with its
-# WebUI, for update_patchfiles.sh.
+# Validate the rootfs patch series openccu-lite applies (only OpenCCU's sections on what it builds
+# and ships, lite_series.py checks that) against a rootfs staged from OpenCCU-Base pruned to
+# openccu-base-paths.txt, with zero fuzz (tasks 329, 331, 335, 388, 389). The check-openccu-base
+# target runs it; it is the series' only validation since task 389 retired the complete-stack
+# refresh (update_patchfiles.sh, validate_patches.sh).
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
@@ -30,13 +29,10 @@ state=${temp_dir}/rootfs
 mkdir -p "$state"
 cp -a "${pristine_rootfs}/." "$state/"
 
-# Stage what openccu-base.mk's pre-build hook stages: the startup scripts, and the static firmware
-# files next to the generated device types (a generated file wins).
-mkdir -p "${state}/bin" "${state}/firmware"
-for script_name in hm_autoconf hm_deldev hm_startup; do
-  [[ -e ${state}/bin/${script_name} ]] || \
-    install -m 0755 "${openccu_base_source}/bin/${script_name}" "${state}/bin/${script_name}"
-done
+# Stage what openccu-base.mk's pre-build hook stages: the static firmware files next to the
+# generated device types (a generated file wins). The ReGaHss hooks bin/hm_* are neither staged
+# nor shipped (task 388).
+mkdir -p "${state}/firmware"
 (cd "${openccu_base_source}/firmware" && find . \( -type f -o -type l \) -print0) |
   while IFS= read -r -d '' source_file; do
     destination_file=${state}/firmware/${source_file#./}
@@ -51,18 +47,16 @@ done
 
 "${script_dir}/create_patches.sh" --check
 
-"$python" "${script_dir}/lite_series.py" "$script_dir" "${temp_dir}/lite"
+"$python" "${script_dir}/lite_series.py" "$script_dir"
 applied=0
 while IFS= read -r patch_name || [[ -n $patch_name ]]; do
-  [[ -n $patch_name ]] || continue
-  patch -s -t -d "$state" -p1 -F0 -N <"${temp_dir}/lite/${patch_name}" || \
-    die "patch does not apply with zero fuzz: $patch_name (its sections lite_series.py keeps)"
+  [[ -n $patch_name && $patch_name != \#* ]] || continue
+  patch -s -t -d "$state" -p1 -F0 -N <"${script_dir}/${patch_name}" || \
+    die "patch does not apply with zero fuzz: $patch_name"
   applied=$((applied + 1))
-done <"${temp_dir}/lite/series"
+done <"${script_dir}/series"
 
 for marker in \
-  bin/hm_autoconf \
-  bin/hm_startup \
   firmware/rftypes/rf_cfm_tw.xml \
   usr/lib/tcl8.2/homematic/homematic.tcl \
   www/config/devdescr/DEVDB.tcl \
@@ -76,7 +70,7 @@ if find "$state" -type f -name '*.rej' -print -quit | grep -q .; then
   die "patched rootfs contains rejected hunks"
 fi
 
-for tcl_file in bin/hm_autoconf bin/hm_startup usr/lib/tcl8.2/homematic/homematic.tcl www/config/devdescr/DEVDB.tcl; do
+for tcl_file in usr/lib/tcl8.2/homematic/homematic.tcl www/config/devdescr/DEVDB.tcl; do
   "$tclsh" /dev/stdin "${state}/${tcl_file}" <<'TCL'
 set file_name [lindex $argv 0]
 set channel [open $file_name r]
@@ -89,5 +83,5 @@ if {![info complete $contents]} {
 TCL
 done
 
-printf 'Validated the sections lite_series.py keeps of %s of %s patches against %s\n' \
+printf 'Validated %s of %s patches against %s\n' \
   "$applied" "$(grep -Ec '^[^#[:space:]]' "${script_dir}/series")" "$pristine_rootfs"

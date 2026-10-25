@@ -5,13 +5,13 @@
 # 1. board/lite/webui-files-guard.sh on fake targets: the files as package/openccu-base installs
 #    them pass; another file, a directory of the WebUI, a link, a picture outside 50/ and 250/, a
 #    file not 0644, a directory not 0755, a missing DEVDB.tcl or too few pictures stop the build.
-# 2. rootfs-patches/lite_series.py keeps a patch's sections on exactly those files (and everything
-#    outside www/ and opt/HMServer/pages/), and drops the rest of www/.
+# 2. rootfs-patches/lite_series.py refuses a series with a section on anything but those files and
+#    the homematic Tcl package, and an empty patch; the real series passes (tasks 388, 389).
 # 3. rootfs-patches/stage_lite_www.sh on a made-up source tree: the files staged with their modes,
 #    DEVDB.tcl generated in sorted order whatever order the file system lists the descriptions in,
 #    and a source without the pictures refused. Needs tclsh (skipped without it, said so).
-# 4. post-build.sh runs the guard, the lite webui.conf serves the paths, and the series of the
-#    real stack still keeps the sections that are not www/.
+# 4. post-build.sh runs the guard, the lite webui.conf serves the paths, and openccu-base.mk
+#    stages the files, checks the series with lite_series.py and applies it as it is.
 #
 # Usage: sh scripts/testcases/lite-webui-files-test.sh    (from the fork's checkout)
 set -u
@@ -112,8 +112,8 @@ cat >"$T/rp/0001-a.patch" <<'EOF'
 @@ -1 +1 @@
 -a
 +b
---- a/bin/hm_startup
-+++ b/bin/hm_startup
+--- a/usr/lib/tcl8.2/homematic/homematic.tcl
++++ b/usr/lib/tcl8.2/homematic/homematic.tcl
 @@ -1 +1 @@
 -a
 +b
@@ -126,27 +126,45 @@ cat >"$T/rp/0002-b.patch" <<'EOF'
 +c
 EOF
 printf '0001-a.patch\n0002-b.patch\n' >"$T/rp/series"
-if python3 "$RP/lite_series.py" "$T/rp" "$T/lite" >"$T/out" 2>&1; then
-  got=$(grep '^+++ ' "$T/lite/0001-a.patch" | sed 's/^+++ b\///' | tr '\n' ' ')
-  want="www/config/devdescr/DEVDB.tcl www/webui/js/lang/de/translate.lang.extension.js www/config/stringtable_de.txt www/config/img/devices/250/coupling/c.png bin/hm_startup "
-  if [ "$got" = "$want" ]; then ok "lite_series keeps the WebUI files' sections and drops the rest of www/"; else fail "lite_series kept: $got"; fi
-  if [ "$(cat "$T/lite/series")" = "0001-a.patch" ] && [ ! -e "$T/lite/0002-b.patch" ]; then ok "a patch left empty leaves the series"; else fail "the series: $(cat "$T/lite/series")"; fi
+# the guard refuses a series with a section on anything openccu-lite does not build or ship,
+# naming each, and an empty patch
+if python3 "$RP/lite_series.py" "$T/rp" >"$T/out" 2>&1; then
+  fail "lite_series passed a series with WebUI sections"
 else
-  fail "lite_series.py: $(cat "$T/out")"
-fi
-rm -rf "$T/lite2"
-if python3 "$RP/lite_series.py" "$RP" "$T/lite2" >"$T/out" 2>&1; then
-  for p in 0034-WebUI-Addon-Config.patch 0072-WebUI-Fix-hm_autoconf.patch 0109-WebUI-Fix-SystemLanguageDefaultNames.patch; do
-    if grep -qx "$p" "$T/lite2/series"; then ok "the real series keeps $p"; else fail "the real series lost $p"; fi
-  done
-  if grep -h '^+++ ' "$T/lite2"/*.patch | sed 's/^+++ b\///' | grep '^www/' | grep -Ev '^www/(config/devdescr/DEVDB\.tcl|config/stringtable_de\.txt|webui/js/lang/[^/]+/translate\.lang[^/]*\.js|config/img/devices/(50|250)/.*)$'; then
-    fail "the real series keeps other www/ sections (above)"
+  named=$(grep -c 'does not build or ship' "$T/out")
+  if [ "$named" = 5 ] && grep -q '0001-a.patch: changes www/webui/webui.js' "$T/out" && grep -q '0001-a.patch: changes opt/HMServer/pages/x.ftl' "$T/out" \
+    && grep -q '0002-b.patch: changes www/webui/webui.js' "$T/out" && ! grep -q 'DEVDB\|stringtable\|translate.lang\|coupling\|homematic.tcl' "$T/out"; then
+    ok "lite_series names the sections on the WebUI and HMServer's pages and passes the shipped files"
   else
-    ok "the real series keeps no other www/ section"
+    fail "lite_series named $named: $(cat "$T/out")"
   fi
+fi
+mkdir -p "$T/rp2"
+grep -A4 -E '^--- a/(www/config/devdescr/DEVDB.tcl|usr/lib/tcl8.2/homematic/homematic.tcl)$' "$T/rp/0001-a.patch" | grep -v '^--$' >"$T/rp2/0001-a.patch"
+printf '0001-a.patch\n' >"$T/rp2/series"
+if python3 "$RP/lite_series.py" "$T/rp2" >"$T/out" 2>&1; then ok "a series on shipped files only passes"; else fail "lite_series on shipped files: $(cat "$T/out")"; fi
+: >"$T/rp2/0002-empty.patch"; printf '0001-a.patch\n0002-empty.patch\n' >"$T/rp2/series"
+if python3 "$RP/lite_series.py" "$T/rp2" >"$T/out" 2>&1; then fail "an empty patch passes"; else ok "an empty patch is refused"; fi
+
+# the real series (tasks 388, 389: cut to the sections openccu-lite applies)
+if python3 "$RP/lite_series.py" "$RP" >"$T/out" 2>&1; then
+  ok "the real series changes only what openccu-lite builds and ships: $(cat "$T/out")"
 else
   fail "lite_series.py on the real series: $(cat "$T/out")"
 fi
+for p in 0034-WebUI-Addon-Config.patch 0104-WebUI-Add-AssignFunctionAndRoomToHmRFChan0.patch 0109-WebUI-Fix-SystemLanguageDefaultNames.patch; do
+  if grep -qx "$p" "$RP/series"; then ok "the real series keeps $p"; else fail "the real series lost $p"; fi
+done
+# task 388: the ReGaHss hooks bin/hm_autoconf, hm_deldev and hm_startup are not shipped
+if grep -h '^[-+][-+][-+] ' "$RP"/*.patch | grep -E '/bin/hm_(autoconf|deldev|startup)'; then
+  fail "a rootfs patch still changes bin/hm_* (above)"
+else
+  ok "no rootfs patch changes bin/hm_*"
+fi
+# task 389: the retired complete-stack tooling stays retired
+for f in update_patchfiles.sh validate_patches.sh prepare_patch_input.sh finalize_patch_input.sh; do
+  if [ -e "$RP/$f" ]; then fail "$f is back (task 389 retired it)"; else ok "no $f"; fi
+done
 
 # --- 3. stage_lite_www.sh
 TCLSH=$(command -v tclsh8.6 || command -v tclsh || true)
@@ -202,6 +220,8 @@ fi
 # --- 4. the wiring
 if grep -v '^[[:space:]]*#' "$EXT/board/lite/post-build.sh" | grep -q 'webui-files-guard\.sh" "\${TARGET_DIR}"'; then ok "post-build.sh runs the guard"; else fail "post-build.sh does not run webui-files-guard.sh"; fi
 if grep -v '^[[:space:]]*#' "$EXT/package/openccu-base/openccu-base.mk" | grep -q 'stage_lite_www\.sh'; then ok "openccu-base.mk stages the files"; else fail "openccu-base.mk does not run stage_lite_www.sh"; fi
+MKC=$(grep -v '^[[:space:]]*#' "$EXT/package/openccu-base/openccu-base.mk")
+if echo "$MKC" | grep -q 'lite_series\.py" \\$' && echo "$MKC" | grep -q '"$(OPENCCU_BASE_ROOTFS_PATCH_DIR)" \\\*\.patch$'; then ok "openccu-base.mk checks the series and applies it from the patch directory"; else fail "openccu-base.mk's rootfs patch hook"; fi
 # the source they are staged from survives the prune to openccu-base-paths.txt (task 335)
 unlisted=$(python3 "$EXT/package/openccu-base/scripts/prune_source.py" --match "$EXT/package/openccu-base/openccu-base-paths.txt" \
   src/webui/www/config/img/devices/250/x.png src/webui/www/config/img/devices/50/x.png src/webui/www/config/stringtable_de.txt \

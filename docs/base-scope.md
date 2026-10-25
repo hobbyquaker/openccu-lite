@@ -79,7 +79,8 @@ already rotates `/var/log/messages`).
 
 **Removed with the WebUI**: `ReGaHss`, `/www/webui`, `/www/config`, `/www/rega`, `/www/api`,
 `/www/pda`, `/www/tools`, `/www/ise`, and the three ReGa clients the WebUI package installs into
-`/bin` (`hm_autoconf`, `hm_startup`, `hm_deldev`). The firmware's own ReGa consumers —
+`/bin` (`hm_autoconf`, `hm_startup`, `hm_deldev`; since task 388 `openccu-base` neither takes
+nor installs them, and the rootfs patches that changed them are gone). The firmware's own ReGa consumers —
 `updateDCVars.tcl`, `triggerAlarm.tcl`, `checkHmIPconsistency.tcl`, `checkHmIPdevices.sh`,
 `checkPortForwarding.sh` — are deleted by `board/oci-lite/post-build.sh` rather than stubbed: a
 script that silently does nothing costs the next person an afternoon.

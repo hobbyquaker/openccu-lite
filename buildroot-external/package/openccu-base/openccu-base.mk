@@ -22,7 +22,7 @@
 # (task 352); a tag never moves once pushed. The compat version is the release's identity
 # (PRODUCT_VERSION, the recovery's hm-platform; the top Makefile reads both lines) and stays the
 # release while the version is a tag of the fork.
-OPENCCU_BASE_VERSION = v1.0.0-rc.2
+OPENCCU_BASE_VERSION = v1.0.0-rc.3
 OPENCCU_BASE_COMPAT_VERSION = 3.89.11
 # GitHub's archive of that tag (the recovery's hm-platform downloads OpenCCU-Base's own
 # release archive of the compat version), pruned right after the extract to the paths
@@ -124,16 +124,7 @@ define OPENCCU_BASE_PREPARE_ROOTFS_PATCH_INPUTS
 		"$(@D)/build/rootfs/opt" \
 		"$(@D)/build/rootfs/firmware" \
 		"$(@D)/build/rootfs/usr/lib/tcl8.2/homematic"
-	rm -f \
-		"$(@D)/build/rootfs/bin/hm_autoconf" \
-		"$(@D)/build/rootfs/bin/hm_deldev" \
-		"$(@D)/build/rootfs/bin/hm_startup" \
-		"$(@D)/build/rootfs/.applied_patches_list"
-	$(INSTALL) -d -m 0755 "$(@D)/build/rootfs/bin"
-	for file in hm_autoconf hm_deldev hm_startup; do \
-		$(INSTALL) -m 0755 "$(@D)/bin/$$file" \
-			"$(@D)/build/rootfs/bin/$$file"; \
-	done
+	rm -f "$(@D)/build/rootfs/.applied_patches_list"
 	$(INSTALL) -d -m 0755 "$(@D)/build/rootfs/firmware"
 	cp -a "$(@D)/firmware/." "$(@D)/build/rootfs/firmware/"
 	# the WebUI's files addons read on a CCU (task 331): the device pictures, DEVDB.tcl generated
@@ -145,21 +136,19 @@ ifneq ($(BR2_PACKAGE_OPENCCU_BASE_COMPAT_LIBS_ONLY),y)
 OPENCCU_BASE_PRE_BUILD_HOOKS += OPENCCU_BASE_PREPARE_ROOTFS_PATCH_INPUTS
 endif
 
-# Apply the OpenCCU rootfs patch stack after CMake has generated the device types and the
-# homematic Tcl package, but before any files are installed into TARGET_DIR. The pruned source
-# has neither the WebUI nor HMServer's pages, so only the patches' sections outside www/ and
-# opt/HMServer/pages/ apply, plus those on the WebUI files staged above (lite_series.py writes
-# them); the series itself stays as OpenCCU keeps it (tasks 329, 331, 335).
+# Apply the rootfs patch series after CMake has generated the device types and the homematic Tcl
+# package, but before any files are installed into TARGET_DIR. The pruned source has neither the
+# WebUI nor HMServer's pages, and the series holds only OpenCCU's patch sections on what openccu-lite
+# builds and ships: the homematic Tcl package and the WebUI files staged above (tasks 329, 331, 335,
+# 388, 389). lite_series.py stops the build if a section on anything else has come in.
 define OPENCCU_BASE_APPLY_ROOTFS_PATCHES
-	test -s "$(@D)/build/rootfs/bin/hm_autoconf"
 	test -s "$(@D)/build/rootfs/usr/lib/tcl8.2/homematic/homematic.tcl"
 	test -s "$(@D)/build/rootfs/firmware/rftypes/rf_cfm_tw.xml"
-	rm -rf "$(@D)/rootfs-patches-lite"
 	$(HOST_DIR)/bin/python3 "$(OPENCCU_BASE_ROOTFS_PATCH_DIR)/lite_series.py" \
-		"$(OPENCCU_BASE_ROOTFS_PATCH_DIR)" "$(@D)/rootfs-patches-lite"
+		"$(OPENCCU_BASE_ROOTFS_PATCH_DIR)"
 	rm -f "$(@D)/build/rootfs/.applied_patches_list"
 	$(APPLY_PATCHES) "$(@D)/build/rootfs" \
-		"$(@D)/rootfs-patches-lite" \*.patch
+		"$(OPENCCU_BASE_ROOTFS_PATCH_DIR)" \*.patch
 endef
 ifeq ($(OPENCCU_BASE_ENABLE_ROOTFS_PATCHING),YES)
 ifneq ($(BR2_PACKAGE_OPENCCU_BASE_COMPAT_LIBS_ONLY),y)
@@ -175,10 +164,6 @@ define OPENCCU_BASE_INSTALL_TARGET_CMDS
 
 	# collect own compiled binaries from $(@D)/build/rootfs/bin
 	for file in SetInterfaceClock crypttool eq3configcmd hs485d hs485dLoader multimacd rfd; do \
-		$(INSTALL) -m 0755 "$(@D)/build/rootfs/bin/$$file" "$(TARGET_DIR)/bin/$$file"; \
-	done
-	# collect staged scripts/bins from $(@D)/build/rootfs/bin
-	for file in hm_autoconf hm_deldev hm_startup; do \
 		$(INSTALL) -m 0755 "$(@D)/build/rootfs/bin/$$file" "$(TARGET_DIR)/bin/$$file"; \
 	done
 	# generate /lib

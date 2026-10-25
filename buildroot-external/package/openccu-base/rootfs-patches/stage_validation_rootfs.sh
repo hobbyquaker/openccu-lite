@@ -82,7 +82,7 @@ CMAKE
 "$cmake" --build "$build_dir/build" --target \
   "${webui_targets[@]}" devicetypes-assets tcl-homematic-assets
 
-# Check every generated device before validate_patches.sh can supplement the
+# Check every generated device before validate_lite_patches.sh can supplement the
 # firmware tree with static files from OpenCCU-Base.
 for family in rftypes hs485types; do
   device_sources=("$openccu_base_source/src/devicetypes/$family/"*.xml)
