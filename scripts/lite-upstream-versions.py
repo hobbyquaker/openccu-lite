@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# openccu-lite: are the fork's buildroot, kernels, U-Boot and Raspberry Pi firmware current? Reads the
+# openccu-lite: are the fork's buildroot, kernels and Raspberry Pi firmware current? Reads the
 # pins from the tree and compares them with upstream; changes nothing. Run daily by
 # .github/workflows/lite-upstream-versions.yml, which publishes the report page this writes.
 # lite-only file, never part of an upstream PR.
@@ -18,8 +18,9 @@
 #                         repository's stable_ tags. Current: both configs pin the same tag, and no newer
 #                         tag exists. The kernel version of a tag comes from its top-level Makefile.
 #   VM kernel             BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE of x86_64-ova; kernel.org's releases.json.
-#                         Current: no newer release of our series (e.g. 6.18.x), and our series not at its
-#                         end (below). A newer longterm series is a note.
+#                         Current: our series not at its end (below). A newer release of our series (e.g.
+#                         6.18.x) is a note, never a finding - only the Raspberry Pi kernel's newer tag
+#                         turns the badge yellow. A newer longterm series is a note.
 #   the end of a series   (the VM kernel's, and the Raspberry Pi kernel's series from its Makefile) a
 #                         series marked "iseol" in releases.json, or gone from it, is end of life: a
 #                         finding ("move to the next longterm"), not a failed check. Early warning: the
@@ -27,9 +28,6 @@
 #                         and from EOL_WARN_MONTHS before it the series is a finding ("plan the move");
 #                         an unreadable table is a note ("EOL date unknown"), never a failed check.
 #                         raspberrypi's default branch on a newer rpi-X.Y.y is a note.
-#   U-Boot                BR2_TARGET_UBOOT_CUSTOM_VERSION_VALUE of aarch64-rpi3 and -rpi4; the vYYYY.MM
-#                         tags of github.com/u-boot/u-boot. Current: both pin the same version, and it is
-#                         the newest release.
 #   Raspberry Pi firmware BR2_PACKAGE_RPI_FIRMWARE_VERSION of aarch64-rpi3 and -rpi4 (a commit of
 #                         raspberrypi/firmware). raspberrypi releases firmware and kernel together: a
 #                         firmware commit's extra/git_hash is the raspberrypi/linux commit it was built
@@ -39,7 +37,6 @@
 #   rpi-eeprom            the pieeprom-YYYY-MM-DD.bin of package/rpi-eeprom's Pi 4 path (aarch64-rpi4);
 #                         firmware-2711/versions.txt of raspberrypi/rpi-eeprom, the "default" channel
 #                         only (never "latest"). Current: no default release newer than ours.
-#   GRUB (VM) and Go come with buildroot and are covered by its check.
 #   JVM                   JAVA_AZUL_VERSION of package/java-azul (the Azul Zulu runtime HMIPServer runs
 #                         on) against the newest GA Zulu build of our Java major and package type (JRE)
 #                         for each architecture we download (linux_aarch64, linux_x64), from Azul's
@@ -66,7 +63,7 @@
 #                         workflow every 6 hours): the commits on the paths openccu-lite uses above the
 #                         line of the fork's lite. Current: none; each one is a finding, linked. A report
 #                         older than BASE_REPORT_STALE_DAYS is a note. The count links to that report.
-#   The report's "supported until" column: buildroot, the kernels and the JVM as above; U-Boot, the
+#   The report's "supported until" column: buildroot, the kernels and the JVM as above; the
 #   Raspberry Pi firmware, rpi-eeprom, HMIPServer and the OpenCCU-Base commits have no published support
 #   period: their cell stays empty.
 #
@@ -81,7 +78,7 @@
 # Usage: python3 scripts/lite-upstream-versions.py [--root DIR] [--fixtures DIR] [--summary FILE]
 #                                                   [--site DIR]
 #   --fixtures DIR reads upstream from files instead of the network (the offline test):
-#     buildroot-tags.txt, rpi-tags.txt, uboot-tags.txt, firmware-tags.txt (git ls-remote output),
+#     buildroot-tags.txt, rpi-tags.txt, firmware-tags.txt (git ls-remote output),
 #     releases.json, releases.html, buildroot-download.html, rpi-head.txt (git ls-remote --symref HEAD), rpi-Makefile-<tag>,
 #     firmware-git_hash-<commit or tag>, eeprom-versions.txt, openccu-base-tags.txt (OpenCCU/OpenCCU-Base's
 #     tags, git ls-remote output), eq3-repo.json (homematicip/OpenCCU-Base), azul-aarch64.json, azul-x64.json,
@@ -106,7 +103,6 @@ FIRMWARE_TAGS = 8
 
 BUILDROOT_GIT = "https://github.com/buildroot/buildroot"
 RPI_GIT = "https://github.com/raspberrypi/linux"
-UBOOT_GIT = "https://github.com/u-boot/u-boot"
 FIRMWARE_GIT = "https://github.com/raspberrypi/firmware"
 RAW = "https://raw.githubusercontent.com/raspberrypi/{repo}/{ref}/{path}"
 KERNEL_RELEASES = "https://www.kernel.org/releases.json"
@@ -345,7 +341,6 @@ def check_buildroot(root, up):
         r.until = ("not listed (end of support)", "nicht gelistet (Supportende)")
         r.due(f"buildroot {name} is no longer listed on buildroot.org's download page (end of support)",
               f"buildroot {name} steht nicht mehr auf der Download-Seite von buildroot.org (Supportende)")
-    r.note("GRUB (VM) and Go come with buildroot", "GRUB (VM) und Go kommen mit buildroot")
     return r
 
 
@@ -530,32 +525,13 @@ def check_vm_kernel(root, up):
     if mine:
         r.newest = max((x[1] for x in mine), key=ver_key)
         if ver_key(r.newest) > ver_key(ours):
-            r.due(f"kernel {r.newest} is out (we pin {ours})", f"Kernel {r.newest} ist erschienen (wir: {ours})")
+            r.note(f"kernel {r.newest} is out (we pin {ours}) - update available, information only",
+                   f"Kernel {r.newest} ist erschienen (wir: {ours}) - Update verfügbar, nur zur Information")
     series_eol(r, series, rels, kernel_eol_dates(up), up.today)
     newer_lt = sorted((x[1] for x in rels if x[0] == "longterm" and not x[2] and ver_key(x[1])[:2] > ver_key(series)),
                       key=ver_key)
     if newer_lt:
         r.note("newer longterm: " + ", ".join(newer_lt), "neuerer Longterm-Kernel: " + ", ".join(newer_lt))
-    return r
-
-
-# ---- U-Boot
-
-def check_uboot(root, up):
-    r = Row("u-boot", "U-Boot (rpi3, rpi4)", "U-Boot (rpi3, rpi4)", "https://github.com/u-boot/u-boot/tags")
-    pins = {p: pin(root, cfg(p), r'^BR2_TARGET_UBOOT_CUSTOM_VERSION_VALUE="([^"]+)"', "U-Boot version") for p in RPI}
-    rel = sorted((t[1:] for t in up.tags(UBOOT_GIT, "refs/tags/v20*", "uboot-tags.txt")
-                  if re.match(r"^v\d{4}\.\d{2}$", t)), key=ver_key)
-    if not rel:
-        raise UpstreamError("u-boot: no release tags in the listing")
-    r.newest = rel[-1]
-    one = differ(r, pins, "U-Boot versions", "U-Boot-Versionen")
-    if one:
-        r.ours = one
-    for v in sorted(set(pins.values()), key=ver_key):
-        if ver_key(r.newest) > ver_key(v):
-            who = ", ".join(short(p) for p in RPI if pins[p] == v)
-            r.due(f"U-Boot {r.newest} is out ({who} pins {v})", f"U-Boot {r.newest} ist erschienen ({who}: {v})")
     return r
 
 
@@ -898,7 +874,7 @@ def check_base_commits(root, up):
     return r
 
 
-CHECKS = [check_buildroot, check_rpi_kernel, check_vm_kernel, check_uboot, check_rpi_firmware, check_rpi_eeprom,
+CHECKS = [check_buildroot, check_rpi_kernel, check_vm_kernel, check_rpi_firmware, check_rpi_eeprom,
           check_jvm, check_hmipserver, check_base_commits]
 
 

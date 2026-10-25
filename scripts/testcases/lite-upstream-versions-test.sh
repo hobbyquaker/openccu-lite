@@ -1,8 +1,9 @@
 #!/bin/sh
 # openccu-lite: scripts/lite-upstream-versions.py offline, against fixtures instead of upstream:
 # the fork's own pins are found; the rule for "current" per component (buildroot point release and
-# series, the Raspberry Pi kernel tag and rpi3 = rpi4, the VM kernel's series, newer and end of life,
-# U-Boot and rpi3 = rpi4, the Raspberry Pi firmware built with our kernel tag and the newest one, the
+# series, the Raspberry Pi kernel tag and rpi3 = rpi4, the VM kernel's series and end of life (a newer
+# point release of the VM kernel is a note only, the badge stays green),
+# the Raspberry Pi firmware built with our kernel tag and the newest one, the
 # rpi-eeprom default channel; the end of support of buildroot's series and of the kernel series:
 # iseol, gone from releases.json, the projected dates within six months, unreadable pages; the JVM against
 # Azul's newest Zulu build of our Java major per architecture; HMIPServer against eQ-3's
@@ -12,7 +13,9 @@
 # range from small test jars, a snapshot named as such; the OpenCCU-Base commits above our line from
 # its report.json, each linked); findings exit 0 with ::warning:: lines and a yellow badge, errors exit
 # 2 (pin) or 3 (upstream) with a grey badge - never green; the report pages (with the link to the
-# OpenCCU-Base report) and the job summary.
+# OpenCCU-Base report) and the job summary. U-Boot is not checked (it follows buildroot's version from the
+# LTS 2027.02 on, bumped deliberately until then) and the pages carry no "GRUB (VM) and Go" note: both
+# fail the test when they come back.
 #
 # Usage: sh scripts/testcases/lite-upstream-versions-test.sh    (from the fork's checkout)
 set -u
@@ -30,7 +33,8 @@ JAR_OURS=f22c000000000000000000000000000000000000
 JAR_THEIRS=e5ea000000000000000000000000000000000000
 JAR_EQ3=e3e3000000000000000000000000000000000000
 
-# a tree: <buildroot> <ova kernel> <rpi tag> <u-boot> <firmware commit> <eeprom date>
+# a tree: <buildroot> <ova kernel> <rpi tag> <u-boot> <firmware commit> <eeprom date> (the U-Boot pin stays in
+# the configs, as in the fork, and must not be read)
 tree() {
   rm -rf "$tmp/root"; mkdir -p "$tmp/root/$C" "$tmp/root/buildroot-external/package/rpi-eeprom"
   printf 'BUILDROOT_VERSION=%s\nBUILDROOT_SHA256=x\n' "$1" >"$tmp/root/Makefile"
@@ -116,7 +120,6 @@ base() { # a current world
   tree 2026.08.1 6.18.58 stable_20260911 2026.10 $FW_OURS 2026-09-23
   rm -rf "$tmp/fx"; mkdir -p "$tmp/fx"
   tags buildroot-tags.txt 2026.02 2026.02.6 2026.05 2026.05.2 2026.08-rc1 2026.08 2026.08.1 2026.11-rc1
-  tags uboot-tags.txt v2026.04 v2026.07 v2026.10-rc5 v2026.10
   releases mainline:7.3:false stable:7.2.12:false longterm:6.18.58:false longterm:6.12.114:false
   rpi_tag stable_20260609 $K_OLD 6.18.34; rpi_tag stable_20260911 $K_NEW 6.18.50
   fw 1.20260610 $K_OLD tag; fw 1.20260915 $K_NEW tag; fw $FW_OURS $K_NEW
@@ -158,17 +161,16 @@ print("buildroot", m.pin(root, "Makefile", r"^BUILDROOT_VERSION\s*:?=\s*(\S+)\s*
 print("rpi", " ".join(m.rpi_pins(root).values()))
 print("vm", m.pin(root, m.cfg(m.VM), r'^BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="([^"]+)"', "x"))
 for p in m.RPI:
-    print("uboot", m.pin(root, m.cfg(p), r'^BR2_TARGET_UBOOT_CUSTOM_VERSION_VALUE="([^"]+)"', "x"))
     print("firmware", m.pin(root, m.cfg(p), r'^BR2_PACKAGE_RPI_FIRMWARE_VERSION="([0-9a-f]{40})"', "x"))
 print("java", "".join(m.zulu(m.pin(root, m.JAVA_MK, m.JAVA_VAR, "x")) or ("none",)))
 print("openccu-base", " ".join(m.base_source(m.read(root, m.BASE_MK)) or ("none",)))
 mk = open(root + "/buildroot-external/package/rpi-eeprom/rpi-eeprom.mk").read()
 print("eeprom", re.search(r"^\s*RPI_EEPROM_FIRMWARE_PATH\s*=\s*firmware-2711/\S*pieeprom-(\d{4}-\d{2}-\d{2})\.bin", mk, re.M).group(1))
 EOF
-[ $? -eq 0 ] && [ "$(grep -c '^uboot 20' "$tmp/pins")" -eq 2 ] && [ "$(grep -c '^firmware [0-9a-f]' "$tmp/pins")" -eq 2 ] \
+[ $? -eq 0 ] && [ "$(grep -c '^firmware [0-9a-f]' "$tmp/pins")" -eq 2 ] \
   && grep -q '^rpi stable_[0-9]* stable_' "$tmp/pins" && grep -q '^eeprom 20' "$tmp/pins" && grep -q '^vm [0-9]' "$tmp/pins" \
   && grep -q '^java [0-9.]*[0-9][0-9.]*jre$' "$tmp/pins" && grep -q '^openccu-base hobbyquaker/OpenCCU-Base v1\.0\.0-' "$tmp/pins" \
-  && ok "the fork's pins: buildroot, kernels, U-Boot, firmware, rpi-eeprom, JVM, OpenCCU-Base" \
+  && ok "the fork's pins: buildroot, kernels, firmware, rpi-eeprom, JVM, OpenCCU-Base" \
   || { bad "the fork's pins are not found"; sed 's/^/     /' "$tmp/pins"; }
 
 base; expect "all current: exit 0, green" 0 "up to date" "all current"
@@ -181,9 +183,9 @@ grep -qF '"color": "brightgreen"' "$tmp/site/badge.json" && ok "badge green" || 
 grep -q '<html lang="de">' "$tmp/site/index.html" && grep -qF 'aktuell' "$tmp/site/index.html" \
   && grep -q '<html lang="en">' "$tmp/site/en.html" && grep -qF 'up to date' "$tmp/site/en.html" \
   && grep -qF 'href="en.html"' "$tmp/site/index.html" && grep -qF 'prefers-color-scheme:dark' "$tmp/site/index.html" \
-  && [ "$(grep -c '<tr><td>' "$tmp/site/en.html")" -eq 9 ] && grep -qF 'GRUB (VM) and Go come with buildroot' "$tmp/site/en.html" \
+  && [ "$(grep -c '<tr><td>' "$tmp/site/en.html")" -eq 8 ] \
   && grep -qF '<th>Support bis</th>' "$tmp/site/index.html" \
-  && ok "the report pages: German and English, nine components, the support column, dark mode" || bad "the report pages"
+  && ok "the report pages: German and English, eight components, the support column, dark mode" || bad "the report pages"
 ! grep -qiF 'Supportzeitraum' "$tmp/site/index.html" && ! grep -qiF 'support period' "$tmp/site/en.html" \
   && grep -qF '</td><td></td><td><span class="ok">aktuell</span>' "$tmp/site/index.html" \
   && grep -qF '</td><td></td><td><span class="ok">up to date</span>' "$tmp/site/en.html" \
@@ -217,7 +219,12 @@ expect "rpi kernel: rpi3 and rpi4 on different tags" 0 "$UPD" "rpi3 and rpi4 pin
 grep -qF 'rpi3: firmware 111111111111 belongs to stable_20260911, the kernel is stable_20260609' "$tmp/out" \
   && ok "firmware: a firmware that does not belong to the kernel" || bad "firmware: a firmware that does not belong to the kernel"
 
-base; releases mainline:7.3:false longterm:6.18.59:false; expect "VM kernel: a newer release of our series" 0 "$UPD" "kernel 6.18.59 is out (we pin 6.18.58)"
+base; releases mainline:7.3:false longterm:6.18.59:false
+expect "VM kernel: a newer release of our series is a note, the badge stays green" 0 "up to date" "kernel 6.18.59 is out (we pin 6.18.58) - update available, information only"
+grep -q '::warning::' "$tmp/out" && bad "VM kernel: a newer release is no ::warning::" || ok "VM kernel: a newer release is no ::warning::"
+grep -qF '| VM kernel (ova) | 6.18.58 | 6.18.59 | 2028-12 | up to date |' "$tmp/sum" && grep -qF '"color": "brightgreen"' "$tmp/site/badge.json" \
+  && grep -qF 'Update verfügbar, nur zur Information' "$tmp/site/index.html" \
+  && ok "VM kernel: a newer release shown in the row, green" || { bad "VM kernel: a newer release shown in the row, green"; cat "$tmp/sum"; }
 base; releases mainline:7.3:false longterm:7.2.1:false longterm:6.18.58:true
 expect "VM kernel: our series marked iseol is end of life, not a failed check" 0 "$UPD" "kernel 6.18 is end of life (marked EOL on kernel.org), move to the next longterm (7.2.1)"
 grep -qF '| VM kernel (ova) | 6.18.58 | 6.18.58 | end of life | update available |' "$tmp/sum" && ok "VM kernel: the support column says end of life" || bad "VM kernel: the support column says end of life"
@@ -255,10 +262,15 @@ expect "buildroot.org's download page unparsable: unknown, not a failed check" 0
 base; rm "$tmp/fx/buildroot-download.html"; expect "buildroot.org's download page unreachable: unknown, not a failed check" 0 "up to date" "end of support unknown"
 base; releases mainline:7.3:false longterm:7.2.1:false longterm:6.18.58:false; expect "VM kernel: a newer longterm is a note" 0 "up to date" "newer longterm: 7.2.1"
 
-base; tags uboot-tags.txt v2027.01; expect "U-Boot: a newer release" 0 "$UPD" "U-Boot 2027.01 is out (rpi3, rpi4 pins 2026.10)"
+# U-Boot is not checked: no row, no upstream lookup (no uboot-tags.txt fixture), rpi3 != rpi4 is no finding;
+# and no "GRUB (VM) and Go" note - neither may come back
 base; set_cfg aarch64-rpi4 BR2_TARGET_UBOOT_CUSTOM_VERSION_VALUE 2023.01
-expect "U-Boot: rpi3 and rpi4 differ" 0 "$UPD" "rpi3 and rpi4 pin different U-Boot versions: rpi3 2026.10, rpi4 2023.01"
-grep -qF 'U-Boot 2026.10 is out (rpi4 pins 2023.01)' "$tmp/out" && ok "U-Boot: the old one is named" || bad "U-Boot: the old one is named"
+expect "U-Boot: not checked, rpi3 and rpi4 may differ" 0 "up to date" "all current"
+! grep -qi 'u-boot\|uboot' "$tmp/out" "$tmp/sum" "$tmp/site/index.html" "$tmp/site/en.html" \
+  && ! grep -qi 'grub\|kommen mit buildroot\|come with buildroot' "$tmp/out" "$tmp/sum" "$tmp/site/index.html" "$tmp/site/en.html" \
+  && ! grep -qi 'u-boot\|uboot\|grub' "$PY" \
+  && ok "no U-Boot and no GRUB/Go note: output, summary, both pages, the script" \
+  || bad "no U-Boot and no GRUB/Go note: output, summary, both pages, the script"
 
 base; fw 1.20261021 cccc000000000000000000000000000000000000 tag; rpi_tag stable_20261020 cccc000000000000000000000000000000000000 6.18.60
 expect "firmware: a newer release built with a newer stable_ tag" 0 "$UPD" "firmware 1.20261021 (built with stable_20261020) is out; ours was built with stable_20260911"
