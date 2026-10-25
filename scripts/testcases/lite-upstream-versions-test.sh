@@ -4,8 +4,14 @@
 # series, the Raspberry Pi kernel tag and rpi3 = rpi4, the VM kernel's series, newer and end of life,
 # U-Boot and rpi3 = rpi4, the Raspberry Pi firmware built with our kernel tag and the newest one, the
 # rpi-eeprom default channel; the end of support of buildroot's series and of the kernel series:
-# iseol, gone from releases.json, the projected dates within six months, unreadable pages); findings exit 0 with ::warning:: lines and a yellow badge, errors exit
-# 2 (pin) or 3 (upstream) with a grey badge - never green; the report pages and the job summary.
+# iseol, gone from releases.json, the projected dates within six months, unreadable pages; the JVM against
+# Azul's newest Zulu build of our Java major per architecture; HMIPServer against eQ-3's
+# homematicip/OpenCCU-Base (shown, never a finding) and the latest OpenCCU release (a finding when ours
+# is older) - the jar by its git blob sha and its version read by
+# range from small test jars, a snapshot named as such; the OpenCCU-Base commits above our line from
+# its report.json, each linked); findings exit 0 with ::warning:: lines and a yellow badge, errors exit
+# 2 (pin) or 3 (upstream) with a grey badge - never green; the report pages (with the link to the
+# OpenCCU-Base report) and the job summary.
 #
 # Usage: sh scripts/testcases/lite-upstream-versions-test.sh    (from the fork's checkout)
 set -u
@@ -19,6 +25,10 @@ C=buildroot-external/configs
 FW_OURS=1111111111111111111111111111111111111111
 K_OLD=aaaa000000000000000000000000000000000000
 K_NEW=bbbb000000000000000000000000000000000000
+OCCU=3.89.11.20260919
+JAR_OURS=f22c000000000000000000000000000000000000
+JAR_THEIRS=e5ea000000000000000000000000000000000000
+JAR_EQ3=e3e3000000000000000000000000000000000000
 
 # a tree: <buildroot> <ova kernel> <rpi tag> <u-boot> <firmware commit> <eeprom date>
 tree() {
@@ -33,6 +43,49 @@ tree() {
   echo 'BR2_PACKAGE_RPI_EEPROM=y' >>"$tmp/root/$C/aarch64-rpi4.config"
   printf 'ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI4),y)\n  RPI_EEPROM_FIRMWARE_PATH = firmware-2711/stable/pieeprom-%s.bin\n' "$6" \
     >"$tmp/root/buildroot-external/package/rpi-eeprom/rpi-eeprom.mk"
+  java_mk "$tmp/root/buildroot-external/package/java-azul/java-azul.mk" 21.52.203-ca-jre21.0.12.1
+  base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 '$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
+}
+java_mk() { # <file> <JAVA_AZUL_VERSION>
+  mkdir -p "$(dirname "$1")"
+  printf '# Azul\nJAVA_AZUL_VERSION = %s\nJAVA_AZUL_SITE = https://cdn.azul.com/zulu/bin\n' "$2" >"$1"
+}
+base_mk() { # <file> <OPENCCU_BASE_VERSION> <OPENCCU_BASE_SITE>
+  mkdir -p "$(dirname "$1")"
+  printf '# OpenCCU-Base\nOPENCCU_BASE_VERSION = %s\nOPENCCU_BASE_COMPAT_VERSION = 3.89.11\nOPENCCU_BASE_SITE = %s\n' "$2" "$3" >"$1"
+}
+jar() { # <blob sha> <server-core version, or "" for none> [stored] - a small jar: the version entry between others
+  python3 - "$tmp/fx/jar-$1" "$2" "${3:-}" <<'PY'
+import sys, zipfile
+out, ver, stored = sys.argv[1], sys.argv[2], sys.argv[3] == "stored"
+with zipfile.ZipFile(out, "w", zipfile.ZIP_STORED if stored else zipfile.ZIP_DEFLATED) as z:
+    z.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\nBuild-Version: 1.5.1-SNAPSHOT\n")
+    z.writestr("META-INF/maven/de.eq3.cbcs/devicemanagement/pom.properties", "version=9.9.9\n")
+    if ver:
+        z.writestr("META-INF/maven/de.eq3.cbcs.server/server-core/pom.properties",
+                   "artifactId=server-core\ngroupId=de.eq3.cbcs.server\nversion=%s\n" % ver)
+    z.writestr("de/eq3/x.class", b"\xca\xfe" * 5000)
+PY
+}
+contents() { # <owner_repo-ref fixture name> <blob sha of HMIPServer.jar>
+  printf '[{"name": "HMIPServer.jar", "sha": "%s", "size": 39996391}, {"name": "HMServer.jar", "sha": "484534cedc7e2a4b711600c09b7a908e83593c04"}]\n' "$2" \
+    >"$tmp/fx/contents-$1.json"
+}
+azul() { # <arch> <zulu-ca-jre-java>... - Azul's metadata API answer (a musl and a JDK build mixed in)
+  a=$1; shift
+  { printf '['; sep=""
+    for z in "$@"; do printf '%s{"name": "zulu%s-linux_%s.tar.gz"}, {"name": "zulu%s-linux_musl_%s.tar.gz"}' "$sep" "$z" "$a" "$(echo "$z" | sed 's/jre21/jre21.9/')" "$a"; sep=", "; done
+    printf '%s{"name": "zulu99.1.1-ca-jdk21.9.9-linux_%s.tar.gz"}]\n' "$sep" "$a"; } >"$tmp/fx/azul-$a.json"
+}
+zulu_eol() { # <eolFrom of 21> [isEol]
+  printf '{"result": {"releases": [{"name": "25", "eolFrom": "2033-09-30", "isEol": false}, {"name": "21", "eolFrom": "%s", "isEol": %s}]}}\n' "$1" "${2:-false}" >"$tmp/fx/zulu-eol.json"
+}
+base_report() { # <generated date> <subject>... of the commits above the line
+  g=$1; shift
+  { printf '{"generated": "%s 10:52 UTC", "boundary": {"sha": "423cde2b", "subject": "libXmlRpc: regenerate (#190)", "date": "2026-10-13T23:34:42+02:00"}, "above": [' "$g"
+    sep=""; n=0
+    for subj in "$@"; do n=$((n+1)); printf '%s{"subject": "%s", "date": "2026-10-1%sT10:00:00Z", "url": "https://github.com/OpenCCU/OpenCCU-Base/commit/%040d"}' "$sep" "$subj" "$n" "$n"; sep=", "; done
+    printf ']}\n'; } >"$tmp/fx/base-report.json"
 }
 set_cfg() { # <product> <variable> <value>
   sed -i "s|^$2=.*|$2=\"$3\"|" "$tmp/root/$C/$1.config"
@@ -72,6 +125,15 @@ base() { # a current world
   kernel_eol "Dec, 2028"
   br_eol "June 2027"
   printf 'ref: refs/heads/rpi-6.18.y\tHEAD\naeadd6ed\tHEAD\n' >"$tmp/fx/rpi-head.txt"
+  printf '{"tag_name": "%s", "html_url": "https://github.com/OpenCCU/OpenCCU/releases/tag/%s"}\n' $OCCU $OCCU >"$tmp/fx/openccu-release.json"
+  azul aarch64 21.52.203-ca-jre21.0.12.1 21.50.19-ca-jre21.0.11; azul x64 21.52.203-ca-jre21.0.12.1
+  base_mk "$tmp/fx/openccu-$OCCU-openccu-base.mk" 3.89.11 https://github.com/OpenCCU/OpenCCU-Base
+  contents hobbyquaker_OpenCCU-Base-v1.0.0-rc.3 $JAR_OURS; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_OURS
+  echo '{"full_name": "homematicip/OpenCCU-Base", "default_branch": "main"}' >"$tmp/fx/eq3-repo.json"
+  contents homematicip_OpenCCU-Base-main $JAR_OURS
+  jar $JAR_OURS 1.60.1
+  zulu_eol 2031-09-30
+  base_report 2026-10-24
 }
 kernel_eol() { # <projected EOL of 6.18> - kernel.org's longterm table
   printf '<table><caption>Longterm release kernels</caption>\n<thead><tr><th class="head">Version</th><th>Maintainer</th><th>Released</th><th>Projected EOL</th></tr></thead>\n<tbody valign="top">\n<tr><td>6.18</td>\n<td>Greg &amp; Sasha</td>\n<td>2025-11-30</td>\n<td>%s</td>\n</tr>\n<tr><td>6.12</td>\n<td>Greg</td>\n<td>2024-11-17</td>\n<td>Dec, 2028</td>\n</tr>\n</tbody></table>\n' "$1" >"$tmp/fx/releases.html"
@@ -99,12 +161,15 @@ print("vm", m.pin(root, m.cfg(m.VM), r'^BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="(
 for p in m.RPI:
     print("uboot", m.pin(root, m.cfg(p), r'^BR2_TARGET_UBOOT_CUSTOM_VERSION_VALUE="([^"]+)"', "x"))
     print("firmware", m.pin(root, m.cfg(p), r'^BR2_PACKAGE_RPI_FIRMWARE_VERSION="([0-9a-f]{40})"', "x"))
+print("java", "".join(m.zulu(m.pin(root, m.JAVA_MK, m.JAVA_VAR, "x")) or ("none",)))
+print("openccu-base", " ".join(m.base_source(m.read(root, m.BASE_MK)) or ("none",)))
 mk = open(root + "/buildroot-external/package/rpi-eeprom/rpi-eeprom.mk").read()
 print("eeprom", re.search(r"^\s*RPI_EEPROM_FIRMWARE_PATH\s*=\s*firmware-2711/\S*pieeprom-(\d{4}-\d{2}-\d{2})\.bin", mk, re.M).group(1))
 EOF
 [ $? -eq 0 ] && [ "$(grep -c '^uboot 20' "$tmp/pins")" -eq 2 ] && [ "$(grep -c '^firmware [0-9a-f]' "$tmp/pins")" -eq 2 ] \
   && grep -q '^rpi stable_[0-9]* stable_' "$tmp/pins" && grep -q '^eeprom 20' "$tmp/pins" && grep -q '^vm [0-9]' "$tmp/pins" \
-  && ok "the fork's pins: buildroot, kernels, U-Boot, firmware, rpi-eeprom" \
+  && grep -q '^java [0-9.]*[0-9][0-9.]*jre$' "$tmp/pins" && grep -q '^openccu-base hobbyquaker/OpenCCU-Base v1\.0\.0-' "$tmp/pins" \
+  && ok "the fork's pins: buildroot, kernels, U-Boot, firmware, rpi-eeprom, JVM, OpenCCU-Base" \
   || { bad "the fork's pins are not found"; sed 's/^/     /' "$tmp/pins"; }
 
 base; expect "all current: exit 0, green" 0 "up to date" "all current"
@@ -117,9 +182,17 @@ grep -qF '"color": "brightgreen"' "$tmp/site/badge.json" && ok "badge green" || 
 grep -q '<html lang="de">' "$tmp/site/index.html" && grep -qF 'aktuell' "$tmp/site/index.html" \
   && grep -q '<html lang="en">' "$tmp/site/en.html" && grep -qF 'up to date' "$tmp/site/en.html" \
   && grep -qF 'href="en.html"' "$tmp/site/index.html" && grep -qF 'prefers-color-scheme:dark' "$tmp/site/index.html" \
-  && [ "$(grep -c '<tr><td>' "$tmp/site/en.html")" -eq 6 ] && grep -qF 'GRUB (VM) and Go come with buildroot' "$tmp/site/en.html" \
+  && [ "$(grep -c '<tr><td>' "$tmp/site/en.html")" -eq 9 ] && grep -qF 'GRUB (VM) and Go come with buildroot' "$tmp/site/en.html" \
   && grep -qF '<th>Support bis</th>' "$tmp/site/index.html" && grep -qF 'kein veröffentlichter Supportzeitraum' "$tmp/site/index.html" \
-  && ok "the report pages: German and English, six components, the support column, dark mode" || bad "the report pages"
+  && ok "the report pages: German and English, nine components, the support column, dark mode" || bad "the report pages"
+grep -qF '<a href="https://hobbyquaker.github.io/OpenCCU-Base/">der OpenCCU-Base-Commit-Bericht</a>' "$tmp/site/index.html" \
+  && grep -qF '<a href="https://hobbyquaker.github.io/OpenCCU-Base/">the OpenCCU-Base commit report</a>' "$tmp/site/en.html" \
+  && ok "both pages link the OpenCCU-Base commit report" || bad "both pages link the OpenCCU-Base commit report"
+grep -qF '| JVM (Azul Zulu) | 21.0.12.1 (Zulu 21.52.203, JRE) | 21.0.12.1 (Zulu 21.52.203, JRE) | 2031-09 | up to date |' "$tmp/sum" \
+  && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base v1.0.0-rc.3) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU 3.89.11.20260919: 1.60.1 (the same jar) | no published support period | up to date |' "$tmp/sum" \
+  && grep -qF '| OpenCCU-Base commits above our line | lite at: libXmlRpc: regenerate (#190) (2026-10-13) | 0 commit(s) above the line | no published support period | up to date |' "$tmp/sum" \
+  && grep -qF '<td>homematicip/OpenCCU-Base main: 1.60.1 (dasselbe Jar) · OpenCCU 3.89.11.20260919: 1.60.1 (dasselbe Jar)</td>' "$tmp/site/index.html" \
+  && ok "the JVM, HMIPServer and OpenCCU-Base rows" || { bad "the JVM, HMIPServer and OpenCCU-Base rows"; cat "$tmp/sum"; }
 
 base; tags buildroot-tags.txt 2026.08.2; expect "buildroot: a newer point release" 0 "$UPD" "::warning::update available - buildroot: buildroot 2026.08.2 is out"
 grep -qF '"color": "yellow"' "$tmp/site/badge.json" && ok "badge yellow" || bad "badge yellow"
@@ -189,6 +262,78 @@ expect "firmware: rpi3 and rpi4 differ" 0 "$UPD" "rpi3 and rpi4 pin different fi
 base; printf '2026-10-30  1  x  default  1\n' >>"$tmp/fx/eeprom-versions.txt"; expect "rpi-eeprom: a newer default release" 0 "$UPD" "rpi-eeprom 2026-10-30 is the default release (we pin 2026-09-23)"
 base; printf '2026-11-30  1  x  latest  1\n' >>"$tmp/fx/eeprom-versions.txt"; expect "rpi-eeprom: a newer latest release does not count" 0 "up to date"
 base; tree 2026.08.1 6.18.58 stable_20260911 2026.10 $FW_OURS 2026-10-23; expect "rpi-eeprom: ours newer than default is a note" 0 "up to date" "ours is newer than default (channel latest)"
+
+# the JVM against Azul's newest Zulu 21 build per architecture
+base; azul x64 21.52.203-ca-jre21.0.12.1 21.54.107-ca-jre21.0.13; azul aarch64 21.54.107-ca-jre21.0.13
+expect "JVM: a newer Java 21 build for both architectures" 0 "$UPD" "Zulu 21.54.107 (Java 21.0.13) is out for aarch64, x64; we pin 21.52.203 (Java 21.0.12.1)"
+base; azul x64 21.53.1-ca-jre21.0.12.1
+expect "JVM: the same Java in a newer Zulu build, one architecture" 0 "$UPD" "Zulu 21.53.1 (Java 21.0.12.1) is out for x64"
+grep -qF '| JVM (Azul Zulu) | 21.0.12.1 (Zulu 21.52.203, JRE) | 21.0.12.1 (Zulu 21.52.203, JRE) aarch64 / 21.0.12.1 (Zulu 21.53.1, JRE) x64 |' "$tmp/sum" \
+  && ok "JVM: architectures that differ are named" || { bad "JVM: architectures that differ are named"; grep JVM "$tmp/sum"; }
+base; azul x64 21.50.19-ca-jre21.0.11; azul aarch64 21.50.19-ca-jre21.0.11
+expect "JVM: ours newer than Azul's newest is a note" 0 "up to date" "ours is newer than Azul's newest GA build"
+base; azul x64 21.52.203-ca-jre21.0.12.1 22.1.1-ca-jre22.0.1
+expect "JVM: another Java major does not count" 0 "up to date"
+base; zulu_eol 2027-04-30; expect "JVM: Zulu 21's end of support within six months" 0 "$UPD" "Azul Zulu 21 reaches its end of support in 6 month(s) (2027-04)"
+base; zulu_eol 2027-05-31; expect "JVM: seven months ahead is a date only" 0 "up to date"
+base; zulu_eol 2031-09-30 true; expect "JVM: Zulu marked end of life" 0 "$UPD" "Azul Zulu 21 is end of life"
+base; echo 'nope' >"$tmp/fx/zulu-eol.json"; expect "JVM: endoflife.date unreadable is a note, not a failed check" 0 "up to date" "end of support of Zulu 21 unknown"
+base; rm "$tmp/fx/zulu-eol.json"; expect "JVM: endoflife.date unreachable is a note, not a failed check" 0 "up to date" "end of support of Zulu 21 unknown"
+base; rm "$tmp/fx/openccu-release.json"; expect "OpenCCU's latest release unreachable: exit 3" 3 "check failed" "::error::upstream unreachable"
+base; echo '{"message": "Not Found"}' >"$tmp/fx/openccu-release.json"; expect "OpenCCU's latest release without a tag: exit 3" 3 "check failed" "the latest release has no tag"
+base; rm "$tmp/fx/azul-x64.json"; expect "Azul's metadata API unreachable: exit 3" 3 "check failed" "azul-x64.json"
+base; echo '[{"name": "zulu21.54.107-ca-jre21.0.13-linux_musl_x64.tar.gz"}]' >"$tmp/fx/azul-x64.json"; expect "Azul's metadata API without a glibc JRE for x64: exit 3" 3 "check failed" "no Zulu 21 JRE for linux_x64"
+base; rm "$tmp/root/buildroot-external/package/java-azul/java-azul.mk"; expect "our java-azul.mk missing: exit 2" 2 "check failed" "java-azul.mk"
+
+# HMIPServer: the jar by its blob sha, the version by range
+base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS 1.61.11-SNAPSHOT
+expect "HMIPServer: OpenCCU's release ships a newer snapshot" 0 "$UPD" "ships a newer HMIPServer, a snapshot: 1.61.11-SNAPSHOT (ours: 1.60.1) - see the OpenCCU-Base report https://hobbyquaker.github.io/OpenCCU-Base/"
+grep -qF '<li><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 liefert einen neueren HMIPServer, einen Snapshot' "$tmp/site/index.html" \
+  && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base v1.0.0-rc.3) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU 3.89.11.20260919: 1.61.11-SNAPSHOT (snapshot) |' "$tmp/sum" \
+  && ok "HMIPServer: the snapshot finding links the OpenCCU-Base report, both versions shown" || bad "HMIPServer: the snapshot finding links the OpenCCU-Base report, both versions shown"
+base; contents homematicip_OpenCCU-Base-main $JAR_EQ3; jar $JAR_EQ3 1.61.11-SNAPSHOT
+expect "HMIPServer: a newer snapshot at homematicip is shown, not a finding" 0 "up to date" "homematicip/OpenCCU-Base main has a newer one: 1.61.11-SNAPSHOT (snapshot) - information, not a finding"
+grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base v1.0.0-rc.3) | homematicip/OpenCCU-Base main: 1.61.11-SNAPSHOT (snapshot) · OpenCCU 3.89.11.20260919: 1.60.1 (the same jar) | no published support period | up to date |' "$tmp/sum" \
+  && grep -qF '<td>homematicip/OpenCCU-Base main: 1.61.11-SNAPSHOT (Snapshot) · OpenCCU 3.89.11.20260919: 1.60.1 (dasselbe Jar)</td>' "$tmp/site/index.html" \
+  && ok "HMIPServer: both comparisons in the row" || { bad "HMIPServer: both comparisons in the row"; grep HMIP "$tmp/sum"; }
+base; contents homematicip_OpenCCU-Base-main $JAR_EQ3; jar $JAR_EQ3 1.62.0
+expect "HMIPServer: a newer release at homematicip is not a finding either" 0 "up to date" "has a newer one: 1.62.0 - information"
+base; contents homematicip_OpenCCU-Base-main $JAR_EQ3; jar $JAR_EQ3 1.62.0; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS 1.61.2
+expect "HMIPServer: the OpenCCU release newer is a finding, homematicip shown beside it" 0 "$UPD" "OpenCCU 3.89.11.20260919 ships a newer HMIPServer: 1.61.2 (ours: 1.60.1)"
+grep -qF 'homematicip/OpenCCU-Base main: 1.62.0 · OpenCCU 3.89.11.20260919: 1.61.2 |' "$tmp/sum" && [ "$(grep -c '::warning::update available - HMIPServer' "$tmp/out")" -eq 1 ] \
+  && ok "HMIPServer: one finding, both versions" || bad "HMIPServer: one finding, both versions"
+base; contents homematicip_OpenCCU-Base-main $JAR_EQ3
+expect "HMIPServer: homematicip's different jar unreachable: exit 3" 3 "check failed" "jar-$JAR_EQ3"
+base; echo '{"message": "Not Found"}' >"$tmp/fx/eq3-repo.json"
+expect "HMIPServer: homematicip/OpenCCU-Base without a default branch: exit 3" 3 "check failed" "no default branch"
+base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS 1.62.0 stored
+expect "HMIPServer: a newer release (a stored entry)" 0 "$UPD" "ships a newer HMIPServer: 1.62.0 (ours: 1.60.1)"
+base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS 1.58.4
+expect "HMIPServer: an older one is a note" 0 "up to date" "OpenCCU 3.89.11.20260919 ships an older one"
+base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS 1.60.1
+expect "HMIPServer: another build of the same version is a note" 0 "up to date" "a different build of the same version"
+base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS; jar $JAR_THEIRS ""
+expect "HMIPServer: a different jar without a readable version is a finding" 0 "$UPD" "ships a different HMIPServer.jar (its version is not readable)"
+base; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_THEIRS
+expect "HMIPServer: OpenCCU's different jar unreachable: exit 3" 3 "check failed" "jar-$JAR_THEIRS"
+base; echo '[{"name": "HMServer.jar", "sha": "484534cedc7e2a4b711600c09b7a908e83593c04"}]' >"$tmp/fx/contents-OpenCCU_OpenCCU-Base-3.89.11.json"
+expect "HMIPServer: no jar in OpenCCU's OpenCCU-Base: exit 3" 3 "check failed" "no opt/HMServer/HMIPServer.jar"
+base; base_mk "$tmp/fx/openccu-$OCCU-openccu-base.mk" 3.89.11 'https://example.org/x.tar.gz'
+expect "HMIPServer: OpenCCU's openccu-base.mk not on GitHub: exit 3" 3 "check failed" "no GitHub OPENCCU_BASE_SITE"
+base; base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 'https://example.org/x.tar.gz'
+expect "HMIPServer: our openccu-base.mk not on GitHub: exit 2" 2 "check failed" "openccu-base.mk"
+
+# OpenCCU-Base: the commits above our line
+base; base_report 2026-10-24 'webui: default objects (#222)' 'rfd: a fix (#230)'
+expect "OpenCCU-Base: commits above the line, one finding each" 0 "$UPD" "not taken yet: 2026-10-12 rfd: a fix (#230) https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000002"
+[ "$(grep -c '::warning::update available - OpenCCU-Base commits above our line' "$tmp/out")" -eq 2 ] \
+  && grep -qF '<li><a href="https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000001">noch nicht übernommen: 2026-10-11 webui: default objects (#222)</a></li>' "$tmp/site/index.html" \
+  && grep -qF '<td>2 commit(s) above the line</td>' "$tmp/site/en.html" && grep -qF '<td>2 Commit(s) über der Linie</td>' "$tmp/site/index.html" \
+  && ok "OpenCCU-Base: two warnings, the subjects linked, the count" || bad "OpenCCU-Base: two warnings, the subjects linked, the count"
+base; base_report 2026-10-21; expect "OpenCCU-Base: a stale report is a note" 0 "up to date" "the OpenCCU-Base report is from 2026-10-21"
+base; base_report 2026-10-22; run >/dev/null; grep -qF 'report is from' "$tmp/out" && bad "OpenCCU-Base: two days old is not stale" || ok "OpenCCU-Base: two days old is not stale"
+base; rm "$tmp/fx/base-report.json"; expect "OpenCCU-Base report unreachable: exit 3" 3 "check failed" "base-report.json"
+base; echo '{"boundary": null}' >"$tmp/fx/base-report.json"; expect "OpenCCU-Base report without its commits: exit 3" 3 "check failed" "report.json"
 
 base; rm "$tmp/fx/releases.json"; expect "kernel.org unreachable: exit 3, grey" 3 "check failed" "::error::upstream unreachable"
 grep -qF '"color": "lightgrey"' "$tmp/site/badge.json" && grep -qF 'Prüfung fehlgeschlagen' "$tmp/site/index.html" \

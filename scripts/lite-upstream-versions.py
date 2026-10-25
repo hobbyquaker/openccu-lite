@@ -40,8 +40,32 @@
 #                         firmware-2711/versions.txt of raspberrypi/rpi-eeprom, the "default" channel
 #                         only (never "latest"). Current: no default release newer than ours.
 #   GRUB (VM) and Go come with buildroot and are covered by its check.
-#   The report's "supported until" column: buildroot and the kernels as above; U-Boot, the Raspberry Pi
-#   firmware and rpi-eeprom publish no support period, and the report says so.
+#   JVM                   JAVA_AZUL_VERSION of package/java-azul (the Azul Zulu runtime HMIPServer runs
+#                         on) against the newest GA Zulu build of our Java major and package type (JRE)
+#                         for each architecture we download (linux_aarch64, linux_x64), from Azul's
+#                         metadata API (no key). Current: no newer build (Java version, then Zulu
+#                         version) for either. The support column: endoflife.date's azul-zulu cycle of
+#                         our Java major (Azul's published dates), a finding from EOL_WARN_MONTHS before
+#                         it; unreadable is a note.
+#   HMIPServer            opt/HMServer/HMIPServer.jar of the OpenCCU-Base our package/openccu-base pins
+#                         (the fork's tag), shown against two others: eQ-3's own repository
+#                         homematicip/OpenCCU-Base (its default branch head; information only, a newer
+#                         one there - often a -SNAPSHOT - is a note, never a finding) and the OpenCCU-Base
+#                         version the latest OpenCCU release pins (a finding when ours is older, or when
+#                         its different jar has no readable version). The jar is identified by its git
+#                         blob sha (GitHub's contents API lists it without the 40 MB). The version is the
+#                         one of eQ-3's server-core module, read from the jar's
+#                         META-INF/maven/.../pom.properties with HTTP range requests (the zip's central
+#                         directory and that one entry, about 3 MB) - ours always, another only when its
+#                         sha differs from ours. A -SNAPSHOT is named as such (openccu-lite keeps eQ-3's
+#                         release build).
+#   OpenCCU-Base commits  the filtered OpenCCU-Base report (BASE_REPORT, report.json, kept by the fork's
+#                         workflow every 6 hours): the commits on the paths openccu-lite uses above the
+#                         line of the fork's lite. Current: none; each one is a finding, linked. A report
+#                         older than BASE_REPORT_STALE_DAYS is a note.
+#   The report's "supported until" column: buildroot, the kernels and the JVM as above; U-Boot, the
+#   Raspberry Pi firmware, rpi-eeprom, HMIPServer and the OpenCCU-Base commits have no published support
+#   period, and the report says so.
 #
 # Findings are not an error: they are ::warning:: lines, the report and a yellow badge, and the exit
 # code stays 0. An error is: 2 a pin not found in the tree, 3 upstream unreachable or not parseable,
@@ -56,7 +80,10 @@
 #   --fixtures DIR reads upstream from files instead of the network (the offline test):
 #     buildroot-tags.txt, rpi-tags.txt, uboot-tags.txt, firmware-tags.txt (git ls-remote output),
 #     releases.json, releases.html, buildroot-download.html, rpi-head.txt (git ls-remote --symref HEAD), rpi-Makefile-<tag>,
-#     firmware-git_hash-<commit or tag>, eeprom-versions.txt
+#     firmware-git_hash-<commit or tag>, eeprom-versions.txt, openccu-release.json (releases/latest),
+#     openccu-<tag>-openccu-base.mk (the release's package file), eq3-repo.json (homematicip/OpenCCU-Base), azul-aarch64.json, azul-x64.json,
+#     contents-<owner>_<repo>-<ref>.json (the opt/HMServer listing), jar-<blob sha> (the jar, read by
+#     range), zulu-eol.json, base-report.json
 #   --today YYYY-MM-DD the date the EOL warning counts from (the tests; default today, UTC)
 import argparse
 import datetime
@@ -64,9 +91,11 @@ import html
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import urllib.request
+import zlib
 
 RPI = ["aarch64-rpi3", "aarch64-rpi4"]
 VM = "x86_64-ova"
@@ -85,6 +114,18 @@ BUILDROOT_LTS_EOL_WARN_MONTHS = 6    # an LTS series: supported three years, war
 BUILDROOT_DOWNLOAD = "https://buildroot.org/download.html"
 NO_PERIOD = ("no published support period", "kein veröffentlichter Supportzeitraum")
 PAGE = "https://hobbyquaker.github.io/openccu-lite/"
+OPENCCU = "OpenCCU/OpenCCU"
+GH_API = "https://api.github.com/"
+GH_RAW = "https://raw.githubusercontent.com/{repo}/{ref}/{path}"
+HMIP_DIR = "opt/HMServer"
+HMIP_JAR = "HMIPServer.jar"
+HMIP_POM = "META-INF/maven/de.eq3.cbcs.server/server-core/pom.properties"
+ZULU_EOL = "https://endoflife.date/api/v1/products/azul-zulu/"
+AZUL_API = "https://api.azul.com/metadata/v1/zulu/packages/"
+AZUL_ARCHES = ["aarch64", "x64"]   # the architectures java-azul.mk downloads (linux_aarch64, linux_x64)
+BASE_REPORT = "https://hobbyquaker.github.io/OpenCCU-Base/"
+EQ3_BASE = "homematicip/OpenCCU-Base"   # eQ-3's own OpenCCU-Base repository
+BASE_REPORT_STALE_DAYS = 2
 
 
 class PinError(Exception):
@@ -154,13 +195,55 @@ class Upstream:
         self.cache[fixture] = tags
         return tags
 
+    def api(self, path, fixture):
+        """a GitHub API GET as JSON (GITHUB_TOKEN, when set, against the rate limit)"""
+        try:
+            return json.loads(self.http(GH_API + path, fixture))
+        except ValueError as e:
+            raise UpstreamError(f"{GH_API}{path}: {e}") from e
+
+    def ranged(self, url, start, length, fixture):
+        """bytes [start, start+length) of a file; start < 0 is that many bytes from its end (length ignored);
+        returns (bytes, the file's size). Live with an HTTP Range request; a server that ignores it gives
+        the whole file, which is kept."""
+        key = "range:" + fixture
+        whole = self.cache.get(key)
+        if whole is None and self.fixtures:
+            try:
+                with open(os.path.join(self.fixtures, fixture), "rb") as f:
+                    whole = self.cache[key] = f.read()
+            except OSError as e:
+                raise UpstreamError(f"fixture {fixture}: {e}") from e
+        if whole is not None:
+            size = len(whole)
+            a = max(size + start, 0) if start < 0 else start
+            return whole[a:size if start < 0 else a + length], size
+        rng = f"bytes={start}" if start < 0 else f"bytes={start}-{start + length - 1}"
+        req = urllib.request.Request(url, headers={"User-Agent": "openccu-lite-upstream-versions", "Range": rng})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                body = resp.read()
+                if resp.status == 206:
+                    m = re.search(r"/(\d+)$", resp.headers.get("Content-Range", ""))
+                    if not m:
+                        raise UpstreamError(f"{url}: a partial answer without its size")
+                    return body, int(m.group(1))
+        except (OSError, ValueError) as e:
+            raise UpstreamError(f"{url}: {e}") from e
+        self.cache[key] = body
+        return self.ranged(url, start, length, fixture)
+
     def http(self, url, fixture):
         if fixture in self.cache:
             return self.cache[fixture]
         if self.fixtures:
             body = self._fixture(fixture)
         else:
-            req = urllib.request.Request(url, headers={"User-Agent": "openccu-lite-upstream-versions"})
+            headers = {"User-Agent": "openccu-lite-upstream-versions"}
+            token = os.environ.get("GITHUB_TOKEN")
+            if token and url.startswith(GH_API):
+                headers["Authorization"] = f"Bearer {token}"
+            req = urllib.request.Request(url, headers=headers)
             try:
                 with urllib.request.urlopen(req, timeout=60) as resp:
                     body = resp.read().decode("utf-8")
@@ -173,13 +256,13 @@ class Upstream:
 class Row:
     def __init__(self, key, en, de, link):
         self.key, self.en, self.de, self.link = key, en, de, link
-        self.ours = self.newest = "-"
+        self.ours = self.newest = "-"   # a string, or (en, de)
         self.until = NO_PERIOD
-        self.findings = []   # [(en, de)]
+        self.findings = []   # [(en, de, link or None)]
         self.notes = []      # [(en, de)]
 
-    def due(self, en, de):
-        self.findings.append((en, de))
+    def due(self, en, de, link=None):
+        self.findings.append((en, de, link))
 
     def note(self, en, de):
         self.notes.append((en, de))
@@ -548,7 +631,264 @@ def check_rpi_eeprom(root, up):
     return r
 
 
-CHECKS = [check_buildroot, check_rpi_kernel, check_vm_kernel, check_uboot, check_rpi_firmware, check_rpi_eeprom]
+# ---- the JVM (Azul Zulu) and HMIPServer (against the latest OpenCCU release)
+
+def openccu_release(up):
+    """(tag, page) of OpenCCU/OpenCCU's latest release"""
+    rel = up.api(f"repos/{OPENCCU}/releases/latest", "openccu-release.json")
+    tag = rel.get("tag_name") if isinstance(rel, dict) else None
+    if not tag or not re.match(r"^[\w.-]+$", tag):
+        raise UpstreamError(f"{OPENCCU}: the latest release has no tag")
+    return tag, rel.get("html_url") or f"https://github.com/{OPENCCU}/releases/tag/{tag}"
+
+
+def openccu_file(up, tag, rel):
+    return up.http(GH_RAW.format(repo=OPENCCU, ref=tag, path=rel), f"openccu-{tag}-{os.path.basename(rel)}")
+
+
+ZULU_RE = re.compile(r"^(\d+(?:\.\d+)*)-ca-(jre|jdk)(\d+(?:\.\d+)*)$")
+JAVA_MK = "buildroot-external/package/java-azul/java-azul.mk"
+JAVA_VAR = r"^JAVA_AZUL_VERSION\s*=\s*(\S+)\s*$"
+
+
+def zulu(v):
+    """(java version, zulu version, jre|jdk) of a JAVA_AZUL_VERSION such as 21.52.203-ca-jre21.0.12.1"""
+    m = ZULU_RE.match(v)
+    if not m:
+        return None
+    return m.group(3), m.group(1), m.group(2)
+
+
+def zulu_text(z):
+    return f"{z[0]} (Zulu {z[1]}, {z[2].upper()})"
+
+
+def zulu_eol(up, major):
+    """((year, month), iseol) of endoflife.date's azul-zulu cycle `major`; None when not readable"""
+    try:
+        d = json.loads(up.http(ZULU_EOL, "zulu-eol.json"))
+        for x in d["result"]["releases"]:
+            if str(x.get("name")) == major:
+                m = re.match(r"^(\d{4})-(\d{2})-\d{2}$", x.get("eolFrom") or "")
+                return ((int(m.group(1)), int(m.group(2))), bool(x.get("isEol"))) if m else None
+    except (UpstreamError, ValueError, KeyError, TypeError):
+        return None
+    return None
+
+
+def azul_newest(up, major, kind, arch):
+    """(java version, zulu version) of the newest GA Zulu `major` build of package type `kind` for linux_<arch>
+    (glibc, tar.gz) from Azul's metadata API"""
+    url = (f"{AZUL_API}?java_version={major}&os=linux&arch={arch}&archive_type=tar.gz&java_package_type={kind}"
+           "&javafx_bundled=false&crac_supported=false&latest=true&release_status=ga&availability_types=CA&page_size=20")
+    try:
+        lst = json.loads(up.http(url, f"azul-{arch}.json"))
+    except ValueError as e:
+        raise UpstreamError(f"Azul's metadata API ({arch}): {e}") from e
+    found = []
+    for x in lst if isinstance(lst, list) else []:
+        m = re.match(rf"^zulu(\d+(?:\.\d+)*)-ca-{kind}(\d+(?:\.\d+)*)-linux_{re.escape(arch)}\.tar\.gz$",
+                     str(x.get("name", "")) if isinstance(x, dict) else "")
+        if m and m.group(2).split(".")[0] == major:
+            found.append((m.group(2), m.group(1)))
+    if not found:
+        raise UpstreamError(f"Azul's metadata API: no Zulu {major} {kind.upper()} for linux_{arch}")
+    return max(found, key=lambda z: (ver_key(z[0]), ver_key(z[1])))
+
+
+def check_jvm(root, up):
+    r = Row("jvm", "JVM (Azul Zulu)", "JVM (Azul Zulu)", "https://www.azul.com/downloads/?package=jre#zulu")
+    v = pin(root, JAVA_MK, JAVA_VAR, "JAVA_AZUL_VERSION")
+    ours = zulu(v)
+    if not ours:
+        raise PinError(f"{JAVA_MK}: JAVA_AZUL_VERSION {v!r} is not <zulu>-ca-<jre|jdk><java>")
+    r.ours = zulu_text(ours)
+    major = ours[0].split(".")[0]
+    ko = (ver_key(ours[0]), ver_key(ours[1]))
+    newest = {a: azul_newest(up, major, ours[2], a) for a in AZUL_ARCHES}
+    shown = sorted(set(newest.values()), key=lambda z: (ver_key(z[0]), ver_key(z[1])))
+    r.newest = " / ".join(f"{z[0]} (Zulu {z[1]}, {ours[2].upper()})"
+                          + ("" if len(shown) == 1 else " " + ", ".join(a for a in AZUL_ARCHES if newest[a] == z))
+                          for z in shown)
+    for z in shown:
+        if (ver_key(z[0]), ver_key(z[1])) > ko:
+            who = ", ".join(a for a in AZUL_ARCHES if newest[a] == z)
+            r.due(f"Zulu {z[1]} (Java {z[0]}) is out for {who}; we pin {ours[1]} (Java {ours[0]})",
+                  f"Zulu {z[1]} (Java {z[0]}) ist erschienen für {who}; wir: {ours[1]} (Java {ours[0]})")
+    if all((ver_key(z[0]), ver_key(z[1])) < ko for z in shown):
+        r.note("ours is newer than Azul's newest GA build", "unsere ist neuer als Azuls neuester GA-Build")
+    eol = zulu_eol(up, major)
+    if eol is None:
+        r.until = ("unknown", "unbekannt")
+        r.note(f"end of support of Zulu {major} unknown (endoflife.date not readable)",
+               f"Supportende von Zulu {major} unbekannt (endoflife.date nicht lesbar)")
+    elif eol[1]:
+        r.until = ("end of life", "end of life")
+        r.due(f"Azul Zulu {major} is end of life", f"Azul Zulu {major} ist end of life")
+    else:
+        eol_within(r, f"Azul Zulu {major}", f"Azul Zulu {major}", eol[0], up.today, EOL_WARN_MONTHS)
+    return r
+
+
+BASE_MK = "buildroot-external/package/openccu-base/openccu-base.mk"
+
+
+def base_source(text):
+    """(owner/repo, ref) of an openccu-base.mk: OPENCCU_BASE_VERSION and the GitHub repository of its SITE"""
+    v = re.search(r"^OPENCCU_BASE_VERSION\s*=\s*(\S+)\s*$", text, re.M)
+    site = re.search(r"^OPENCCU_BASE_SITE\s*=\s*(.+?)\s*$", text, re.M)
+    if not v or not site:
+        return None
+    m = (re.match(r"^\$\(call github,([\w.-]+),([\w.-]+),", site.group(1))
+         or re.match(r"^https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?/?$", site.group(1)))
+    return (f"{m.group(1)}/{m.group(2)}", v.group(1)) if m else None
+
+
+def jar_blob(up, repo, ref):
+    lst = up.api(f"repos/{repo}/contents/{HMIP_DIR}?ref={ref}", f"contents-{repo.replace('/', '_')}-{ref}.json")
+    for x in lst if isinstance(lst, list) else []:
+        if isinstance(x, dict) and x.get("name") == HMIP_JAR and re.match(r"^[0-9a-f]{40}$", x.get("sha") or ""):
+            return x["sha"]
+    raise UpstreamError(f"{repo} {ref}: no {HMIP_DIR}/{HMIP_JAR}")
+
+
+def zip_member(up, url, fixture, member):
+    """one member of a remote zip, read by range: the end record, the central directory, the entry; None
+    when the archive has no such member or cannot be read as a plain zip"""
+    tail, size = up.ranged(url, -65557, 0, fixture)
+    e = tail.rfind(b"PK\x05\x06")
+    if e < 0 or len(tail) < e + 22:
+        return None
+    cd_size, cd_off = struct.unpack("<II", tail[e + 12:e + 20])
+    if cd_off + cd_size > size:
+        return None
+    cd, _ = up.ranged(url, cd_off, cd_size, fixture)
+    want, i = member.encode(), 0
+    while i + 46 <= len(cd) and cd[i:i + 4] == b"PK\x01\x02":
+        method, = struct.unpack("<H", cd[i + 10:i + 12])
+        csize, usize, nlen, xlen, clen = struct.unpack("<IIHHH", cd[i + 20:i + 34])
+        off, = struct.unpack("<I", cd[i + 42:i + 46])
+        if cd[i + 46:i + 46 + nlen] == want:
+            head, _ = up.ranged(url, off, 30, fixture)
+            if head[:4] != b"PK\x03\x04":
+                return None
+            ln, lx = struct.unpack("<HH", head[26:30])
+            data, _ = up.ranged(url, off + 30 + ln + lx, csize, fixture)
+            try:
+                out = data if method == 0 else zlib.decompressobj(-15).decompress(data) if method == 8 else None
+            except zlib.error:
+                return None
+            return out if out is not None and len(out) == usize else None
+        i += 46 + nlen + xlen + clen
+    return None
+
+
+def jar_version(up, repo, ref, blob):
+    """the server-core version of the jar, or None when it has none"""
+    url = GH_RAW.format(repo=repo, ref=ref, path=f"{HMIP_DIR}/{HMIP_JAR}")
+    pom = zip_member(up, url, f"jar-{blob}", HMIP_POM)
+    m = re.search(r"^version=(\S+)\s*$", pom.decode("utf-8", "replace"), re.M) if pom else None
+    return m.group(1) if m else None
+
+
+def snap(v):
+    return v is not None and "SNAPSHOT" in v.upper()
+
+
+def check_hmipserver(root, up):
+    r = Row("hmipserver", "HMIPServer", "HMIPServer", f"https://github.com/{EQ3_BASE}")
+    ours = base_source(read(root, BASE_MK))
+    if not ours:
+        raise PinError(f"{BASE_MK}: no OPENCCU_BASE_VERSION or no GitHub OPENCCU_BASE_SITE")
+    bo = jar_blob(up, *ours)
+    vo = jar_version(up, *ours, bo)
+    r.ours = f"{vo or '?'} (OpenCCU-Base {ours[1]})"
+
+    # eQ-3's own repository, its default branch: shown, never a finding
+    info = up.api(f"repos/{EQ3_BASE}", "eq3-repo.json")
+    branch = info.get("default_branch") if isinstance(info, dict) else None
+    if not branch or not re.match(r"^[\w./-]+$", branch):
+        raise UpstreamError(f"{EQ3_BASE}: no default branch")
+    be = jar_blob(up, EQ3_BASE, branch)
+    ve = vo if be == bo else jar_version(up, EQ3_BASE, branch, be)
+    if be == bo:
+        eq3 = (f"{EQ3_BASE} {branch}: {vo or '?'} (the same jar)", f"{EQ3_BASE} {branch}: {vo or '?'} (dasselbe Jar)")
+    else:
+        mark = (" (snapshot)", " (Snapshot)") if snap(ve) else ("", "")
+        eq3 = (f"{EQ3_BASE} {branch}: {ve or '?'}{mark[0]}", f"{EQ3_BASE} {branch}: {ve or '?'}{mark[1]}")
+        if not ve or not vo:
+            r.note(f"{EQ3_BASE} {branch} has a different jar (its version is not readable)",
+                   f"{EQ3_BASE} {branch} hat ein anderes Jar (seine Version ist nicht lesbar)")
+        elif ver_key(ve) > ver_key(vo):
+            r.note(f"{EQ3_BASE} {branch} has a newer one: {ve}{mark[0]} - information, not a finding (see the "
+                   "OpenCCU-Base report)",
+                   f"{EQ3_BASE} {branch} hat einen neueren: {ve}{mark[1]} - zur Information, kein Befund (siehe "
+                   "den OpenCCU-Base-Bericht)")
+
+    # the latest OpenCCU release: a finding when ours is older
+    tag, _ = openccu_release(up)
+    theirs = base_source(openccu_file(up, tag, "buildroot-external/package/openccu-base/openccu-base.mk"))
+    if not theirs:
+        raise UpstreamError(f"OpenCCU {tag}: no OPENCCU_BASE_VERSION or no GitHub OPENCCU_BASE_SITE in package/openccu-base")
+    bt = jar_blob(up, *theirs)
+    if bt == bo:
+        occu = (f"OpenCCU {tag}: {vo or '?'} (the same jar)", f"OpenCCU {tag}: {vo or '?'} (dasselbe Jar)")
+    else:
+        vt = jar_version(up, *theirs, bt)
+        occu = (f"OpenCCU {tag}: {vt or '?'}" + (" (snapshot)" if snap(vt) else ""),
+                f"OpenCCU {tag}: {vt or '?'}" + (" (Snapshot)" if snap(vt) else ""))
+        r.note(f"git blob ours {bo[:12]}, OpenCCU's {bt[:12]}", f"Git-Blob unserer {bo[:12]}, OpenCCUs {bt[:12]}")
+        if not vo or not vt:
+            r.due(f"OpenCCU {tag} ships a different HMIPServer.jar (its version is not readable)",
+                  f"OpenCCU {tag} liefert ein anderes HMIPServer.jar (seine Version ist nicht lesbar)")
+        elif ver_key(vt) > ver_key(vo) and snap(vt):
+            r.due(f"OpenCCU {tag} ships a newer HMIPServer, a snapshot: {vt} (ours: {vo}) - see the OpenCCU-Base report",
+                  f"OpenCCU {tag} liefert einen neueren HMIPServer, einen Snapshot: {vt} (unserer: {vo}) - siehe den "
+                  "OpenCCU-Base-Bericht", BASE_REPORT)
+        elif ver_key(vt) > ver_key(vo):
+            r.due(f"OpenCCU {tag} ships a newer HMIPServer: {vt} (ours: {vo})",
+                  f"OpenCCU {tag} liefert einen neueren HMIPServer: {vt} (unserer: {vo})")
+        elif ver_key(vt) == ver_key(vo):
+            r.note(f"OpenCCU {tag}: a different build of the same version",
+                   f"OpenCCU {tag}: ein anderer Build derselben Version")
+        else:
+            r.note(f"OpenCCU {tag} ships an older one", f"OpenCCU {tag} liefert einen älteren")
+    r.newest = (f"{eq3[0]} · {occu[0]}", f"{eq3[1]} · {occu[1]}")
+    return r
+
+
+# ---- OpenCCU-Base: relevant commits above our line
+
+def check_base_commits(root, up):
+    r = Row("openccu-base-commits", "OpenCCU-Base commits above our line",
+            "OpenCCU-Base-Commits über unserer Linie", BASE_REPORT)
+    try:
+        d = json.loads(up.http(BASE_REPORT + "report.json", "base-report.json"))
+        above, line = d["above"], d["boundary"]
+        if not isinstance(above, list) or not all(isinstance(c, dict) and c.get("subject") and c.get("url")
+                                                  for c in above):
+            raise ValueError("above is not a list of commits")
+    except (ValueError, KeyError, TypeError) as e:
+        raise UpstreamError(f"the OpenCCU-Base report's report.json: {e}") from e
+    if line:
+        r.ours = (f"lite at: {line.get('subject', '?')} ({str(line.get('date', ''))[:10]})",
+                  f"lite bei: {line.get('subject', '?')} ({str(line.get('date', ''))[:10]})")
+    else:
+        r.ours = ("lite has no upstream commit of main", "lite hat keinen Upstream-Commit von main")
+    r.newest = (f"{len(above)} commit(s) above the line", f"{len(above)} Commit(s) über der Linie")
+    for c in above:
+        when = str(c.get("date", ""))[:10]
+        r.due(f"not taken yet: {when} {c['subject']}", f"noch nicht übernommen: {when} {c['subject']}", c["url"])
+    gen = re.match(r"^(\d{4}-\d{2}-\d{2})", str(d.get("generated", "")))
+    if not gen:
+        r.note("the report has no generation date", "der Bericht hat kein Erstellungsdatum")
+    elif (up.today - datetime.date.fromisoformat(gen.group(1))).days > BASE_REPORT_STALE_DAYS:
+        r.note(f"the OpenCCU-Base report is from {gen.group(1)}", f"der OpenCCU-Base-Bericht ist vom {gen.group(1)}")
+    return r
+
+
+CHECKS = [check_buildroot, check_rpi_kernel, check_vm_kernel, check_uboot, check_rpi_firmware, check_rpi_eeprom,
+          check_jvm, check_hmipserver, check_base_commits]
 
 
 # ---- output
@@ -570,13 +910,22 @@ TEXT = {
            "until": "supported until", "status": "Status", "ok": "up to date", "due": "update available", "checked": "Checked",
            "run": "workflow run", "lang": ("Deutsch", "index.html"), "failed": "Check failed",
            "intro": "Daily comparison of the versions openccu-lite pins with their upstream releases. "
-                    "The rules are in scripts/lite-upstream-versions.py."},
+                    "The rules are in scripts/lite-upstream-versions.py.",
+           "base": ("What OpenCCU-Base changed in the components openccu-lite uses, and where our fork stands:",
+                    "the OpenCCU-Base commit report")},
     "de": {"title": "openccu-lite: Upstream-Versionen", "comp": "Komponente", "ours": "unsere", "newest": "neueste upstream",
            "until": "Support bis", "status": "Status", "ok": "aktuell", "due": "Update verfügbar", "checked": "Geprüft",
            "run": "Workflow-Lauf", "lang": ("English", "en.html"), "failed": "Prüfung fehlgeschlagen",
            "intro": "Täglicher Vergleich der Versionen, die openccu-lite verwendet, mit ihren Upstream-Releases. "
-                    "Die Regeln stehen in scripts/lite-upstream-versions.py."},
+                    "Die Regeln stehen in scripts/lite-upstream-versions.py.",
+           "base": ("Was OpenCCU-Base an den Komponenten geändert hat, die openccu-lite verwendet, und wo unser Fork steht:",
+                    "der OpenCCU-Base-Commit-Bericht")},
 }
+
+
+def loc(x, li):
+    """a cell that is one string, or (en, de)"""
+    return x[li] if isinstance(x, tuple) else x
 
 
 def page(lang, rows, error, when, run_url):
@@ -587,6 +936,7 @@ def page(lang, rows, error, when, run_url):
            f"<title>{e(t['title'])}</title><style>{CSS}</style></head><body><main>",
            f"<h1>{e(t['title'])}</h1>",
            f"<p>{e(t['intro'])}</p>",
+           f'<p>{e(t["base"][0])} <a href="{e(BASE_REPORT)}">{e(t["base"][1])}</a>.</p>',
            f"<p>{e(t['checked'])}: {e(when)}"
            + (f' · <a href="{e(run_url)}">{e(t["run"])}</a>' if run_url else "")
            + f' · <a href="{t["lang"][1]}">{t["lang"][0]}</a></p>']
@@ -597,9 +947,10 @@ def page(lang, rows, error, when, run_url):
                    f'<th>{e(t["newest"])}</th><th>{e(t["until"])}</th><th>{e(t["status"])}</th></tr>')
         for r in rows:
             st = f'<span class="due">{e(t["due"])}</span>' if r.findings else f'<span class="ok">{e(t["ok"])}</span>'
-            items = [f"<li>{e(f[li])}</li>" for f in r.findings] + [f'<li class="note">{e(n[li])}</li>' for n in r.notes]
+            items = [f'<li><a href="{e(f[2])}">{e(f[li])}</a></li>' if f[2] else f"<li>{e(f[li])}</li>"
+                     for f in r.findings] + [f'<li class="note">{e(n[li])}</li>' for n in r.notes]
             name = r.en if lang == "en" else r.de
-            out.append(f'<tr><td><a href="{e(r.link)}">{e(name)}</a></td><td>{e(r.ours)}</td><td>{e(r.newest)}</td>'
+            out.append(f'<tr><td><a href="{e(r.link)}">{e(name)}</a></td><td>{e(loc(r.ours, li))}</td><td>{e(loc(r.newest, li))}</td>'
                        f"<td>{e(r.until[li])}</td><td>{st}" + (f"<ul>{''.join(items)}</ul>" if items else "") + "</td></tr>")
         out.append("</table></div>")
     out.append("</main></body></html>\n")
@@ -656,11 +1007,12 @@ def main(argv=None):
         return code
 
     head = ("component", "ours", "newest", "supported until", "status")
-    tab = [(r.en, r.ours, r.newest, r.until[0], "update available" if r.findings else "up to date") for r in rows]
+    tab = [(r.en, loc(r.ours, 0), loc(r.newest, 0), r.until[0], "update available" if r.findings else "up to date")
+           for r in rows]
     w = [max(len(x[i]) for x in tab + [head]) for i in range(5)]
     for x in [head] + tab:
         print("  ".join(c.ljust(w[i]) for i, c in enumerate(x)).rstrip())
-    due = [f"{r.en}: {f[0]}" for r in rows for f in r.findings]
+    due = [f"{r.en}: {f[0]}" + (f" {f[2]}" if f[2] else "") for r in rows for f in r.findings]
     for r in rows:
         for n in r.notes:
             print(f"note - {r.en}: {n[0]}")
@@ -674,7 +1026,7 @@ def main(argv=None):
             f.write("\n" + (f"**{len(due)} finding(s).**\n" if due else "**All current.**\n"))
             for d in due:
                 f.write(f"- {d}\n")
-            f.write(f"\nReport: {PAGE}\n")
+            f.write(f"\nReport: {PAGE}\nOpenCCU-Base commit report: {BASE_REPORT}\n")
     print(f"\n{len(due)} finding(s)" if due else "\nall current")
     return 0
 
