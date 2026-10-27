@@ -3,10 +3,11 @@
 # longer the OpenCCU base tag with a suffix - the base tag is BASE in the same file, and its first
 # three parts go into /VERSION's VERSION= line (task 396). The Makefile includes this after its own
 # PRODUCT_VERSION line, and only the lite products are affected.
-# D-88: every build is 1.0.0-rc.<N> (1.0.0-dev.<N> until dev.45, 1.0.0-beta.<N> until beta.14), one
-# number per build round (all products from the same fork commit and pins), N from the project's
-# build list (never reused):
-#   make PRODUCT=... LITE_VERSION=1.0.0-rc.<N> release
+# D-88: every prerelease build is <VERSION>.<N> (1.0.0-dev.<N> until dev.45, 1.0.0-beta.<N> until
+# beta.14, 1.0.0-rc.<N> until rc.3), one number per build round (all products from the same fork
+# commit and pins), N from the project's build list (never reused); a release is LITE-VERSION's
+# VERSION itself (1.0.0):
+#   make PRODUCT=... LITE_VERSION=1.0.0 release
 # The -snapshot.<sha> form of D-44 is not used any more.
 LITE_BASE:=$(shell sed -n 's/^BASE=//p' LITE-VERSION)
 LITE_VERSION?=$(shell sed -n 's/^VERSION=//p' LITE-VERSION)

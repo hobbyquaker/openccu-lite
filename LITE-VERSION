@@ -1,12 +1,13 @@
 # openccu-lite release identity (ROADMAP D-44, replacing D-37). Read by lite-version.mk.
 # VERSION is openccu-lite's own semantic version - the release identity, the /VERSION LITE= line,
 # the artefact names (openccu-lite-<product>-<version>.<ext>) and the tag (v<version>).
-# D-88: while it is 1.0.0-rc, every build is 1.0.0-rc.<N>, N one up with every build round -
-# passed as LITE_VERSION=1.0.0-rc.<N>, N from the project's build list (never reused). The dev
-# series ended with 1.0.0-dev.45, the beta series with 1.0.0-beta.14; the update check orders
-# dev < alpha < beta < rc (task 291).
+# 1.0.0 is the first release. A prerelease build of the next version carries its prerelease part
+# here (1.0.1-beta, ...) and is passed as LITE_VERSION=<VERSION>.<N>, N from the project's build
+# list (never reused); a release is built with LITE-VERSION's VERSION as it is. The dev series
+# ended with 1.0.0-dev.45, the beta series with 1.0.0-beta.14, the rc series with 1.0.0-rc.3; the
+# update check orders dev < alpha < beta < rc < the release (task 291).
 # BASE is the OpenCCU tag this branch is rebased on, and the first thing a bug report names.
 # /VERSION's VERSION= line carries its first three parts (3.89.11), the eQ-3/OpenCCU-Base release,
 # as a CCU3's /VERSION does (task 396; board/lite/version-file.sh).
-VERSION=1.0.0-rc
+VERSION=1.0.0
 BASE=3.89.11.20260919
