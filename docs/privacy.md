@@ -70,7 +70,7 @@ The firmware of paired Homematic and HmIP devices comes from eQ-3's update serve
   checkbox): 5 minutes after the start when the last run is older than a day, then daily; a failed run is tried again
   after an hour. No request is made while no device is paired.
 - **Sends:** the product `HM-CCU3` and `<VERSION>`, the base (OpenCCU) firmware version of the system, as in
-  `/VERSION`, e.g. `3.89.11.20260919`; the User-Agent.
+  `/VERSION`, e.g. `3.89.11`; the User-Agent.
 - **The download, in the same run:** for every paired device type whose firmware on the server is newer than what
   the system already holds, `GET …/firmware/download?cmd=download&product=<DEVICE TYPE>&serial=0`. So eQ-3 learns
   which device types (e.g. `HmIP-BBL`) are paired and not up to date. The serial is always `0`: **no device serial

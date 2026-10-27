@@ -9,47 +9,9 @@
 # Stop on error
 set -e
 
-# /VERSION carries upstream's product and platform names plus VARIANT=lite
-# (D-17, D-31): the firmware updater compares PRODUCT/PLATFORM, so update
-# packages stay interchangeable with OpenCCU in both directions, and
-# openccu-lite identifies itself by the extra line.
-#
-# Since D-39/D-43 every lite product is named <arch>[-<form>] and carries no
-# upstream name to strip, so the case below is the whole mapping and it must
-# list every product in configs/. What upstream's own image writes is what the
-# recovery compares on an in-place update, so a product missing here would
-# leave its own name in PLATFORM and could never be updated again (B-27).
-# The sed in the else branch is what the older "-lite"/"-lite-systemd" names
-# needed; it stays for a snapshot branch that still builds one, and is a no-op
-# for upstream's own products.
-#
-# The LXC products (task 34) are the one pair whose upstream PRODUCT and PLATFORM differ:
-# upstream's configs are lxc_amd64 / lxc_arm64 and board/post-build.sh writes PLATFORM from the
-# Makefile's PRODUCT_PLATFORM, which strips the "_amd64"/"_arm64" - so PLATFORM=lxc, which is
-# what every "HM_HOST =~ oci|lxc" test in the init scripts looks for.
-LITE_UPSTREAM_PLATFORM=""
-case "${PRODUCT}" in
-	aarch64-rpi3)   LITE_UPSTREAM_PRODUCT="rpi3" ;;
-	aarch64-rpi4)   LITE_UPSTREAM_PRODUCT="rpi4" ;;
-	aarch64-rpi5)   LITE_UPSTREAM_PRODUCT="rpi5" ;;
-	x86_64-ova)     LITE_UPSTREAM_PRODUCT="ova"  ;;
-	lxc-lite_amd64) LITE_UPSTREAM_PRODUCT="lxc_amd64"; LITE_UPSTREAM_PLATFORM="lxc" ;;
-	lxc-lite_arm64) LITE_UPSTREAM_PRODUCT="lxc_arm64"; LITE_UPSTREAM_PLATFORM="lxc" ;;
-	*)              LITE_UPSTREAM_PRODUCT=""     ;;
-esac
-if [ -n "${LITE_UPSTREAM_PRODUCT}" ]; then
-	sed -i -e "s/^PRODUCT=.*/PRODUCT=${LITE_UPSTREAM_PRODUCT}/" -e "s/^PLATFORM=.*/PLATFORM=${LITE_UPSTREAM_PLATFORM:-${LITE_UPSTREAM_PRODUCT}}/" "${TARGET_DIR}/VERSION"
-else
-	sed -i -e 's/^PRODUCT=\(.*\)-lite\(-systemd\)\?\(_.*\)\?$/PRODUCT=\1\3/' -e 's/^PLATFORM=\(.*\)-lite\(-systemd\)\?$/PLATFORM=\1/' "${TARGET_DIR}/VERSION"
-fi
-grep -q "^VARIANT=" "${TARGET_DIR}/VERSION" || echo "VARIANT=lite" >>"${TARGET_DIR}/VERSION"
-# D-44 (was D-37): VERSION stays the OpenCCU base tag (what the recovery
-# compares); LITE is openccu-lite's own semantic version, the release
-# identity occulited shows and compares against the feed
-if [ -n "${LITE_BASE:-}" ]; then
-  sed -i -e "s/^VERSION=.*/VERSION=${LITE_BASE}/" "${TARGET_DIR}/VERSION"
-  grep -q "^LITE=" "${TARGET_DIR}/VERSION" || echo "LITE=${LITE_VERSION:-0.0.0}" >>"${TARGET_DIR}/VERSION"
-fi
+# /VERSION: upstream's PRODUCT/PLATFORM, VARIANT=lite, the base's firmware version and LITE=
+# (D-17, D-31, D-44, task 396) - the script says why
+sh "$(dirname "$0")/version-file.sh" "${TARGET_DIR}"
 
 # The firmware's own ReGa consumers. There is no ReGaHss here, so these
 # would fail on every invocation; delete them rather than leave them to

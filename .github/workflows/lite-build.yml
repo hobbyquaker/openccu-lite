@@ -80,6 +80,10 @@ jobs:
         # with BR2_PACKAGE_RPI_EEPROM_OFFER (the lite products), the package installs them under
         # /usr/share/rpi-eeprom/ for occulited's Hardware page, upstream's products keep their layout
         run: sh scripts/testcases/lite-rpi-eeprom-offer-test.sh
+      - name: /VERSION's lite lines and the three-part firmware version
+        # task 396: VERSION=3.89.11 from BASE=3.89.11.20260919 (as a CCU3 writes it), upstream's
+        # PRODUCT/PLATFORM for every lite product (B-27), VARIANT=lite, LITE=
+        run: sh scripts/testcases/lite-version-file-test.sh
       - name: The binaries carry the build's hardening flags
         run: sh scripts/testcases/lite-hardening-guard-test.sh
       - name: occulited in the image is the pinned commit

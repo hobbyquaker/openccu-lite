@@ -1,7 +1,7 @@
 # openccu-lite (D-44): a lite product's version is openccu-lite's own semantic version from
 # LITE-VERSION (1.0.0-alpha.0, 1.0.0-beta.1, 1.0.0, 1.1.0 ...), never the build date and no
-# longer the OpenCCU base tag with a suffix - the base tag is BASE in the same file and goes into
-# /VERSION's VERSION= line for the recovery. The Makefile includes this after its own
+# longer the OpenCCU base tag with a suffix - the base tag is BASE in the same file, and its first
+# three parts go into /VERSION's VERSION= line (task 396). The Makefile includes this after its own
 # PRODUCT_VERSION line, and only the lite products are affected.
 # D-88: every build is 1.0.0-rc.<N> (1.0.0-dev.<N> until dev.45, 1.0.0-beta.<N> until beta.14), one
 # number per build round (all products from the same fork commit and pins), N from the project's
