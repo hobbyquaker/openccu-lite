@@ -10,16 +10,21 @@ RPI_EEPROM_LICENSE = BSD-3-Clause, MIT, uIP, custom
 RPI_EEPROM_LICENSE_FILES = LICENSE
 RPI_EEPROM_INSTALL_IMAGES = YES
 
+# openccu-lite (task 394): the images come from the "default" channel, the one Raspberry Pi OS's
+# rpi-eeprom-update installs by default, not from "latest" (the "stable" link points there): the
+# bootloader is written into the SPI flash, where proven beats new. scripts/update-rpi-eeprom.sh
+# picks the newest pieeprom-*.bin of default/; occulited's Hardware page offers an image only when
+# it is newer than the flashed one, so a Pi that has flashed a newer latest keeps it.
 ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI4),y)
   # Raspberry Pi 4 (2711)
-  RPI_EEPROM_FIRMWARE_PATH = firmware-2711/stable/pieeprom-2026-10-15.bin
-  RPI_EEPROM_RECOVERY_PATH = firmware-2711/stable/recovery.bin
-  RPI_EEPROM_VL805_GLOB = firmware-2711/stable/vl805-*.bin
+  RPI_EEPROM_FIRMWARE_PATH = firmware-2711/default/pieeprom-2026-09-23.bin
+  RPI_EEPROM_RECOVERY_PATH = firmware-2711/default/recovery.bin
+  RPI_EEPROM_VL805_GLOB = firmware-2711/default/vl805-*.bin
   RPI_EEPROM_CHIP = 2711
 else ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI5),y)
   # Raspberry Pi 5 (2712)
-  RPI_EEPROM_FIRMWARE_PATH = firmware-2712/stable/pieeprom-2026-10-15.bin
-  RPI_EEPROM_RECOVERY_PATH = firmware-2712/stable/recovery.bin
+  RPI_EEPROM_FIRMWARE_PATH = firmware-2712/default/pieeprom-2026-09-25.bin
+  RPI_EEPROM_RECOVERY_PATH = firmware-2712/default/recovery.bin
   RPI_EEPROM_CHIP = 2712
 endif
 

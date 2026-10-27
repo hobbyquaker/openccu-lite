@@ -27,7 +27,10 @@ EXIT_SUCCESS=0
 EXIT_UPDATE_REQUIRED=1
 EXIT_FAILED=2
 
-if [ -f "/sys/firmware/devicetree/base/system/linux,revision" ]; then
+# openccu-lite (task 394): BOARD_INFO from the environment for the testcase
+if [ -n "${BOARD_INFO}" ]; then
+  :
+elif [ -f "/sys/firmware/devicetree/base/system/linux,revision" ]; then
   BOARD_INFO="$(od -v -An -t x1 /sys/firmware/devicetree/base/system/linux,revision | tr -d ' \n')"
 elif grep -q Revision /proc/cpuinfo; then
   BOARD_INFO="$(sed -n '/^Revision/s/^.*: \(.*\)/\1/p' < /proc/cpuinfo)"
@@ -77,9 +80,14 @@ fi
 BOOTLOADER_CURRENT_VERSION=$(printf "%d" "0x$(od "${DT_BOOTLOADER_TS}" -v -An -t x1 | tr -d ' ' )")
 BOOTLOADER_UPDATE_VERSION=$(strings "${BOOTLOADER_UPDATE_IMAGE}" | grep BUILD_TIMESTAMP | sed 's/.*=//g')
 
-if [[ "${BOOTLOADER_CURRENT_VERSION}" != "${BOOTLOADER_UPDATE_VERSION}" ]]; then
+# openccu-lite (task 394): an update only when the image is newer, rpi-eeprom-update's own rule -
+# the image comes from the default channel, and a Pi that flashed a newer latest keeps it
+if [ "${BOOTLOADER_UPDATE_VERSION:-0}" -gt "${BOOTLOADER_CURRENT_VERSION:-0}" ] 2>/dev/null; then
   echo "BOOTLOADER: update available"
   res=${EXIT_UPDATE_REQUIRED}
+elif [ "${BOOTLOADER_UPDATE_VERSION:-0}" -lt "${BOOTLOADER_CURRENT_VERSION:-0}" ] 2>/dev/null; then
+  echo "BOOTLOADER: up to date (the running bootloader is newer than the image's)"
+  res=${EXIT_SUCCESS}
 else
   echo "BOOTLOADER: up to date"
   res=${EXIT_SUCCESS}

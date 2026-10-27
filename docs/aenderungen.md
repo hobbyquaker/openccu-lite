@@ -38,6 +38,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - Taste am Funkmodul (RPI-RF-MOD auf der Stiftleiste): einfacher, doppelter und langer Druck mit einstellbaren Aktionen (Warnungen der LED stummschalten, Finden, Neustart, Neustart ins Recovery-System); beim Einschalten gedrückt gehalten weiterhin das Recovery-System
 - HDMI auf dem Raspberry Pi standardmäßig aus, abgeschaltet erst nach dem Start (ein Monitor zeigt den Start und das Recovery-System), auf der Seite Hardware ohne Neustart wieder einschaltbar
 - Der Bootloader im EEPROM des Raspberry Pi 4 wird nicht mehr beim ersten Start nach einem Update von selbst neu geschrieben: Die Seite Hardware zeigt die installierte und die im System-Image mitgelieferte Version und bietet das Update an, die Statusseite weist darauf hin
+- Der Bootloader des Raspberry Pi 4 kommt aus dem Kanal „default“ von rpi-eeprom statt aus „latest“; angeboten wird er nur, wenn er neuer ist als der geschriebene
 - Lizenzseite mit allen Bestandteilen und SBOM zum Herunterladen
 - Neustart, Herunterfahren und Start ins Recovery-System aus der Oberfläche
 - Beim ersten Start eine Begrüßung mit Übernahme aus einer Sicherung und der Wahl des Nur-HmIP-Betriebs

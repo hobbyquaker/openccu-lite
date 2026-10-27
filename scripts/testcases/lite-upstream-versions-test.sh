@@ -45,7 +45,7 @@ tree() {
     } >"$tmp/root/$C/aarch64-$p.config"
   done
   echo 'BR2_PACKAGE_RPI_EEPROM=y' >>"$tmp/root/$C/aarch64-rpi4.config"
-  printf 'ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI4),y)\n  RPI_EEPROM_FIRMWARE_PATH = firmware-2711/stable/pieeprom-%s.bin\n' "$6" \
+  printf 'ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI4),y)\n  RPI_EEPROM_FIRMWARE_PATH = firmware-2711/default/pieeprom-%s.bin\n' "$6" \
     >"$tmp/root/buildroot-external/package/rpi-eeprom/rpi-eeprom.mk"
   java_mk "$tmp/root/buildroot-external/package/java-azul/java-azul.mk" 21.52.203-ca-jre21.0.12.1
   base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 '$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
