@@ -140,6 +140,11 @@ lighty.r.resp_header["X-Echo-Session"] = #seen > 0 and table.concat(seen, " | ")
 -- B-230: the forwarding headers as the backend received them
 local h = lighty.r.req_header
 lighty.r.resp_header["X-Echo-Forwarded"] = "for=" .. (h["X-Forwarded-For"] or "-") .. ";proto=" .. (h["X-Forwarded-Proto"] or "-") .. ";host=" .. (h["X-Forwarded-Host"] or "-") .. ";fwd=" .. (h["Forwarded"] or "-")
+-- occulited B-121: an answer that brings its own Cache-Control, as occulited's shell and API and
+-- AddonStatic do
+local p = lighty.r.req_attr["uri.path"] or ""
+if p:find("immutable", 1, true) then lighty.r.resp_header["Cache-Control"] = "public, max-age=31536000, immutable" end
+if p:find("nostore", 1, true) then lighty.r.resp_header["Cache-Control"] = "no-store" end
 lighty.r.resp_header["Content-Type"] = "text/plain"
 lighty.r.resp_body:set({ "echo\n" })
 return 200
@@ -151,7 +156,7 @@ server.bind = "127.0.0.1"
 server.port = $OCC_PORT
 server.pid-file = "/var/run/backend.pid"
 index-file.names = ("index.html")
-\$HTTP["url"] =~ "^/(addons/|api/echo\$|echo\$)" {
+\$HTTP["url"] =~ "^/(addons/|api/echo|echo|assets/)" {
   magnet.attract-raw-url-to = ( "/tmp/echo.lua" )
 }
 EOF
@@ -388,6 +393,8 @@ class H(http.server.BaseHTTPRequestHandler):
         self.send_header("X-Echo-Session", seen)
         self.send_header("X-Echo-Forwarded", fwd)
         self.send_header("X-Echo-Identity", ident)
+        if "immutable" in self.path:
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
         self.send_header("Content-Length", "5")
         self.end_headers()
         self.wfile.write(b"echo\n")
@@ -652,6 +659,42 @@ else
   echo "skip  the gate half: this occulited's gate does not remove the forwarding headers"
 fi
 }
+echo "---- Cache-Control: an answer's own passes, the default only where it has none (occulited B-121)"
+# The base setenv.conf sets Cache-Control on every answer; occulited's fragment takes it out of
+# setenv for its blocks and occulite-starting.lua sets the same default on an answer without one.
+# cachectl <label> <the one Cache-Control wanted> curl arguments...
+cachectl() {
+  label=$1 want=$2
+  shift 2
+  got=$(curl -sk -o /dev/null -D - --max-time 5 "$@" | tr -d '\r' | sed -n 's/^[Cc]ache-[Cc]ontrol: //p' | paste -sd '|' -)
+  if [ "$got" = "$want" ]; then ok "$label: $got"; else bad "$label: got '$got', want '$want'"; fi
+}
+DEF="private, no-cache, must-revalidate, no-transform, max-age=0"
+IMG="private, must-revalidate, no-transform, max-age=120"
+IMM="public, max-age=31536000, immutable"
+if grep -q 'setenv.set-response-header = ( "Server" => "" )' /etc/lighttpd/conf.d/occulited.conf; then
+# shellcheck disable=SC2086
+{
+cachectl "an addon file through occulited, its own immutable" "$IMM" $R -H "$HC" $S/addons/x/frame/assets/index-immutable.js
+cachectl "an addon file through occulited without one: the default" "$DEF" $R -H "$HC" $S/addons/x/frame/index.html
+cachectl "an addon picture through occulited without one: the picture default" "$IMG" $R -H "$HC" $S/addons/x/logo.png
+cachectl "an addon's own backend (drop-in), its own immutable, HTTP/2" "$IMM" $R --http2 -H "$SC" $S/addons/echo/assets/immutable.js
+cachectl "an addon's own backend without one: the default" "$DEF" $R -H "$HC" $S/addons/echo/
+cachectl "the gate's own 401 (no session): the default" "$DEF" $R $S/addons/echo/assets/immutable.js
+cachectl "the shell's hashed asset, its own immutable" "$IMM" $R $S/assets/index-immutable.js
+cachectl "the shell without one: the default" "$DEF" $R $S/echo
+cachectl "the API's own no-store" "no-store" $R $S/api/echo-nostore
+cachectl "the API without one: the default" "$DEF" $R $S/api/echo
+cachectl "an addon path outside /addons/ (/description.xml) without one: the default" "$DEF" $R $S/description.xml
+cachectl "an addon's own socket, outside occulited's fragment: setenv.conf's own replaces it" "$DEF" "http://$IP:8282/immutable"
+header "an addon answer keeps setenv's add-response-header list (X-Frame-Options)" '^x-frame-options: SAMEORIGIN' $R -H "$HC" $S/addons/x/frame/assets/index-immutable.js
+header "the shell keeps setenv's add-response-header list (Referrer-Policy)" '^referrer-policy: no-referrer' $R $S/assets/index-immutable.js
+if curl -sk -o /dev/null -D - --max-time 5 $R -H "$HC" $S/addons/x/frame/index.html | tr -d '\r' | grep -Eiq '^server: .+'; then bad "an addon answer names a Server"; else ok "an addon answer names no Server"; fi
+}
+else
+  echo "skip  Cache-Control: this occulited's fragment still lets setenv.conf replace every answer's (before B-121)"
+fi
+
 kill "$ECHO_PID"
 rm -f /etc/config/lighttpd/echo.conf
 
@@ -702,6 +745,14 @@ expect "a POST to DEVDB.tcl: 403" 403 - $R -X POST -d a=b $S/config/devdescr/DEV
 expect "a PUT to a picture: 403" 403 - $R -X PUT -d a=b $S/config/img/devices/250/131_hmip-wrc6.png
 }
 if curl -sk --max-time 5 $R $S/config/img/devices/250/ | grep -qi 'index of'; then bad "the 250 px directory is listed"; else ok "the 250 px directory is not listed"; fi
+
+if grep -q 'setenv.set-response-header = ( "Server" => "" )' /etc/lighttpd/conf.d/occulited.conf; then
+# shellcheck disable=SC2086
+{
+cachectl "a device picture lighttpd serves itself: the picture default (B-121)" "$IMG" $R $S/config/img/devices/250/131_hmip-wrc6.png
+cachectl "DEVDB.tcl, which lighttpd serves itself: the default (B-121)" "$DEF" $R $S/config/devdescr/DEVDB.tcl
+}
+fi
 
 echo "---- what the unprivileged lighttpd touched"
 # the sandboxed unit lets lighttpd write its runtime directory and the upload directories, nothing

@@ -59,8 +59,11 @@ lighttpd in a container (`scripts/lite-lighttpd-redirect-test.sh` in the fork).
 
 **The shell's response headers.** lighttpd adds upstream's set to every answer (`conf.d/setenv.conf`:
 `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
-`Cache-Control: private, no-cache`, an emptied `Server`; `X-XSS-Protection` is upstream's and inert in every
-current browser) and HSTS where it is switched on. **The shell's own answers** — the page, its assets, the
+`Cache-Control: private, no-cache` (two minutes for pictures), an emptied `Server`; `X-XSS-Protection` is upstream's
+and inert in every current browser) and HSTS where it is switched on. **Cache-Control is a default, not an override**
+for what occulited and the addons answer (occulited B-121): an answer that sets its own keeps it - `no-store` on
+the API's secrets, `immutable` on the shell's and an addon's content-hashed assets - and only an answer without one
+gets setenv.conf's value. **The shell's own answers** — the page, its assets, the
 client-side routes — carry a **Content-Security-Policy** and a **Permissions-Policy** set by occulited itself
 (task 259, F-5; `internal/ui/csp.txt` in occulited): `default-src 'self'; script-src 'self'; style-src 'self'
 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self';
