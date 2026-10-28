@@ -23,11 +23,16 @@ Init-System, das Logging oder die Funkmodulerkennung wurden von Grund auf neu ge
 
 - **Stabil.** Weniger Bestandteile heißt weniger, was ausfallen kann, und eine hohe Testabdeckung schützt vor
   Regressionsfehlern.
-- **Sicher.** Addons und Systemdienste laufen unter eigenen Benutzern mit eingeschränkten Rechten, Ports sind standardmäßig
-  geschlossen, die Anmeldung geht auch per OAuth und mit Passkeys, Zertifikate kommen auf Wunsch automatisch, Sicherungen
-  lassen sich verschlüsseln. Details: [Sicherheit](docs/security.md).
-- **Offlinefähig.** Im [lokalen Schlüsselmodus](docs/lokaler-schluesselmodus.md) lässt sich eine Zentrale auch ohne
-  Internetverbindung und ohne Abhängigkeit vom Schlüsselserver von eQ-3 betreiben.
+- **Sicher.** Addons und Systemdienste laufen unter eigenen Benutzern mit eingeschränkten Rechten, Ports sind
+  standardmäßig geschlossen, Authentifizierung mit Passkeys, OAuth und Tokens, Zertifikate per ACME, verschlüsselte
+  Sicherungen. Programme und Addons sprechen die Schnittstellenprozesse über lite-rpc an, mit API-Tokens, deren Scopes
+  festlegen, was sie dürfen: lesen, bedienen, konfigurieren oder verwalten.
+- **Privat.** Keine Telemetrie. Im [lokalen Schlüsselmodus](docs/lokaler-schluesselmodus.md) lässt sich eine Zentrale
+  auch ohne Internetverbindung und ohne Abhängigkeit vom Schlüsselserver von eQ-3 betreiben, sonstige ausgehende
+  Verbindungen (Update-Checks) gibt es nur mit Zustimmung des Benutzers. Details: [Datenschutz](docs/privacy.md).
+- **Freie Funkkonfiguration.** Welches Funkmodul welche Schnittstelle bedient, ist frei wählbar. Das ermöglicht
+  besondere Konfigurationen, etwa getrennte Funkmodule für BidCos-RF und HmIP-RF oder einen reinen HmIP-Betrieb ohne
+  BidCos. [Beispiele](docs/walkthrough/README.md#beispiele-für-funk-konfigurationen) zeigt der Rundgang.
 - **Minimal.** openccu-lite bringt nur mit, was eine Zentrale wirklich braucht. Alles andere kommt als Addon dazu, und
   zwar nur das, was tatsächlich genutzt wird.
 

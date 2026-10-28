@@ -23,10 +23,15 @@ the init system, the logging and the radio module detection have been redesigned
 
 - **Stable.** Fewer parts means less that can fail, and a high test coverage guards against regressions.
 - **Secure.** Addons and system services run under their own users with restricted rights, ports are closed by
-  default, logging in also works with OAuth and with passkeys, certificates come automatically on request, backups can
-  be encrypted. Details: [Security](docs/security.md).
-- **Offline-capable.** In the [local key mode](docs/lokaler-schluesselmodus.md) a central unit can run without an
-  internet connection and without depending on eQ-3's key server.
+  default, authentication with passkeys, OAuth and tokens, certificates via ACME, encrypted backups. Programs and addons
+  reach the interface processes through lite-rpc, with API tokens whose scopes set what they may do: read, operate,
+  configure or administer.
+- **Private.** No telemetry. In the [local key mode](docs/lokaler-schluesselmodus.md) a central unit can run without an
+  internet connection and without depending on eQ-3's key server; other outgoing connections (update checks) happen
+  only with the user's consent. Details: [Privacy](docs/privacy.md).
+- **Free radio configuration.** Which radio module serves which interface can be chosen freely. That allows special
+  setups, for example separate radio modules for BidCos-RF and HmIP-RF, or an HmIP-only mode without BidCos. The
+  walkthrough shows [examples](docs/walkthrough/README.md#beispiele-für-funk-konfigurationen) (German).
 - **Minimal.** openccu-lite ships only what a central unit really needs. Everything else comes as an addon, and only
   what is actually used.
 
