@@ -399,6 +399,7 @@ class H(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"echo\n")
     do_POST = do_GET
+    do_HEAD = do_GET
     def log_message(self, *a):
         pass
 class S(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -693,6 +694,38 @@ if curl -sk -o /dev/null -D - --max-time 5 $R -H "$HC" $S/addons/x/frame/index.h
 }
 else
   echo "skip  Cache-Control: this occulited's fragment still lets setenv.conf replace every answer's (before B-121)"
+fi
+
+if grep -q 'public-views' /etc/lighttpd/occulite-gate.lua; then
+  echo "---- the public Control app's addon views at the gate"
+  # occulited mirrors the segments of the addons with views in the App while its public mode is
+  # on; the gate lets an anonymous GET or HEAD there through, marked X-Occulite-Auth: public
+  # pubseen <label> <status> <X-Echo-Identity or none> curl arguments...
+  pubseen() {
+    label=$1 want_code=$2 want_id=$3
+    shift 3
+    head=$(curl -sk -o /dev/null -D - --max-time 3 "$@" | tr -d '\r')
+    code=$(echo "$head" | sed -n '1s/^HTTP\/[0-9.]* \([0-9]*\).*/\1/p')
+    id=$(echo "$head" | sed -n 's/^[Xx]-[Ee]cho-[Ii]dentity: //p')
+    sess=$(echo "$head" | sed -n 's/^[Xx]-[Ee]cho-[Ss]ession: //p')
+    [ -n "$id" ] || id=none
+    if [ "$code" = "$want_code" ] && [ "$id" = "$want_id" ] && { [ "$id" = none ] || [ "$sess" = "-" ]; }; then ok "$label: $code $id"; else bad "$label: got $code $id (session '$sess'), want $want_code $want_id"; fi
+  }
+  mkdir -p /var/run/occulite/public-views
+  # shellcheck disable=SC2086
+  {
+  pubseen "no mirror file: an anonymous GET is refused" 401 none $R $S/addons/echo/
+  : >/var/run/occulite/public-views/echo
+  pubseen "a public segment: an anonymous GET passes, marked public, no session" 200 "auth=public;token=-" $R $S/addons/echo/view
+  pubseen "a public segment over HTTP/2, forged identity and session headers" 200 "auth=public;token=-" $R --http2 $FORGED -H "X-Occulite-Auth: session" -H "X_Occulite_Token: admin" $S/addons/echo/
+  pubseen "a public segment: HEAD passes" 200 "auth=public;token=-" $R -I $S/addons/echo/
+  pubseen "a public segment: a POST is refused" 401 none $R -X POST -d a=b $S/addons/echo/
+  pubseen "another segment stays closed" 401 none $R $S/addons/cgi/settings.cgi
+  rm -f /var/run/occulite/public-views/echo
+  pubseen "the file gone (the public mode off): refused again" 401 none $R $S/addons/echo/
+  }
+else
+  echo "skip  the public views: this occulited's gate has no public pass (before its views in the App)"
 fi
 
 kill "$ECHO_PID"
