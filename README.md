@@ -43,16 +43,20 @@ eingebauten Addon-Katalog mit einem Klick installieren.
 
 ### Geräte anlernen und verwalten: freie Wahl
 
-Womit die Geräte angelernt und konfiguriert und die Direktverknüpfungen verwaltet werden, ist frei wählbar:
+Womit die Geräte angelernt und konfiguriert und die Direktverknüpfungen verwaltet werden, ist frei wählbar. Die
+folgenden Programme **können** als Addon auf openccu-lite installiert werden und sind dann in die Weboberfläche
+integriert, **müssen aber nicht**: Sie laufen genauso auf einem anderen Rechner. So bleibt die Zentrale ein möglichst
+schlankes Funk-Gateway.
 
-- [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) **muss gar nicht auf der Zentrale laufen**: Es
-  gibt ihn auch als Anwendung für Windows, macOS und Linux. Auf Wunsch lässt er sich trotzdem als Addon installieren und ist
-  dann in die Weboberfläche von openccu-lite integriert.
-- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) (Geräte und Direktverknüpfungen verwalten, MQTT, Home Assistant, Matter und mehr)
-- [ccu-addon-mui](https://github.com/firsttris/ccu-addon-mui) (Geräte und Direktverknüpfungen verwalten, schöne Bedienoberfläche)
+- [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) (Geräte und Direktverknüpfungen verwalten;
+  auch als Anwendung für Windows, macOS und Linux)
+- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) (Geräte und Direktverknüpfungen verwalten, Bedienoberfläche,
+  Charts, MQTT, Home Assistant, Matter und mehr; auch als Docker-Container oder Home-Assistant-Add-on)
 
 ### Weitere Addons
 
+- [ccu-addon-mui](https://github.com/firsttris/ccu-addon-mui) (Geräte und Direktverknüpfungen verwalten, schöne
+  Bedienoberfläche mit Charts)
 - [RedMatic](https://github.com/rdmtc/RedMatic) (Automation mit Node-RED, MQTT, Home Assistant, HomeKit, Matter und mehr)
 - [ccu-addon-mosquitto](https://github.com/homematic-community/ccu-addon-mosquitto) (MQTT-Broker)
 - [ccu-addon-battery](https://github.com/hobbyquaker/ccu-addon-battery) (Batteriewechsel erkennen, Statistiken zu Batterien)

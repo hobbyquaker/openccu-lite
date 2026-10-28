@@ -42,18 +42,20 @@ built-in addon catalogue with one click.
 
 ### Pairing and managing devices: a free choice
 
-What the devices are paired and configured with, and what manages the direct links, is a free choice:
+What the devices are paired and configured with, and what manages the direct links, is a free choice. The following
+programs **can** be installed as addons on openccu-lite, and are then integrated into its web interface, **but they do
+not have to be**: they run just as well on another computer. That way the central unit stays as lean a radio gateway as
+possible.
 
-- [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) **does not have to run on the central unit at
-  all**: it is also available as an application for Windows, macOS and Linux. It can still be installed as an addon,
-  and is then integrated into openccu-lite's web interface.
-- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) (managing devices and direct links, MQTT, Home Assistant,
-  Matter and more)
-- [ccu-addon-mui](https://github.com/firsttris/ccu-addon-mui) (managing devices and direct links, a user interface and
-  more)
+- [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) (managing devices and direct links; also as an
+  application for Windows, macOS and Linux)
+- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) (managing devices and direct links, a user interface,
+  charts, MQTT, Home Assistant, Matter and more; also as a Docker container or a Home Assistant add-on)
 
 ### More addons
 
+- [ccu-addon-mui](https://github.com/firsttris/ccu-addon-mui) (managing devices and direct links, a nice user
+  interface with charts)
 - [RedMatic](https://github.com/rdmtc/RedMatic) (automation with Node-RED, MQTT, Home Assistant, HomeKit, Matter and
   more)
 - [ccu-addon-mosquitto](https://github.com/homematic-community/ccu-addon-mosquitto) (MQTT broker)
