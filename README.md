@@ -1,75 +1,138 @@
-# openccu-lite
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/openccu-lite-dark@2x.png">
+    <img src="docs/images/openccu-lite-light@2x.png" alt="openccu-lite" width="428">
+  </picture>
+</h1>
 
 [![upstream versions](https://img.shields.io/endpoint?url=https://hobbyquaker.github.io/openccu-lite/badge.json)](https://hobbyquaker.github.io/openccu-lite/)
 
 [:uk: English README](README.en.md)
 
-Openccu-lite ist ein Fork des [OpenCCU-Projekts](https://github.com/OpenCCU/OpenCCU), der einige alte Softwareteile entfernt,
-die für Anwender, die ihre Automation anderswo (z. B. in Home Assistant, ioBroker, Node-RED, ...) betreiben, nicht notwendig sind:
-**Es gibt in openccu-lite keine ReGaHSS, keine WebUI-Programme, keine Homematic-Scripte und keine Diagramme.**
-Die alte CCU-WebUI wurde durch eine [neu entwickelte Oberfläche](docs/walkthrough/README.md) ersetzt, der neue Daemon ["occulited"](https://github.com/hobbyquaker/occulited)
-übernimmt die Aufgaben der Systemverwaltung. Systeminterna wie u.A. das Init-System, das Logging oder die Funkmodulerkennung wurden von Grund auf neu gestaltet, viele neue Security-Features wurden implementiert.
+openccu-lite ist eine Firmware für Homematic-Zentralen, ein Fork des [OpenCCU-Projekts](https://github.com/OpenCCU/OpenCCU).
+Sie richtet sich an alle, die ihre Automation anderswo betreiben, etwa in Home Assistant, ioBroker oder Node-RED, und
+von der Zentrale vor allem eines wollen: dass sie die Homematic-Geräte zuverlässig anbindet.
+
+Deshalb fehlt einiges, was eine CCU sonst mitbringt: **Es gibt in openccu-lite keine ReGaHSS, keine WebUI-Programme und 
+keine Homematic-Scripte.** Die alte CCU-WebUI wurde durch eine
+[neu entwickelte Oberfläche](docs/walkthrough/README.md) ersetzt, und der neue Systemdienst
+[occulited](https://github.com/hobbyquaker/occulited) übernimmt die Systemverwaltung. Systeminterna wie unter anderem das
+Init-System, das Logging oder die Funkmodulerkennung wurden von Grund auf neu gestaltet.
+
+## Schwerpunkte
+
+- **Stabil.** Weniger Bestandteile heißt weniger, was ausfallen kann, und eine hohe Testabdeckung schützt vor
+  Regressionsfehlern.
+- **Sicher.** Addons und Systemdienste laufen unter eigenen Benutzern mit eingeschränkten Rechten, Ports sind standardmäßig
+  geschlossen, die Anmeldung geht auch per OAuth und mit Passkeys, Zertifikate kommen auf Wunsch automatisch, Sicherungen
+  lassen sich verschlüsseln. Details: [Sicherheit](docs/security.md).
+- **Offlinefähig.** Im [lokalen Schlüsselmodus](docs/lokaler-schluesselmodus.md) lässt sich eine Zentrale auch ohne
+  Internetverbindung und ohne Abhängigkeit vom Schlüsselserver von eQ-3 betreiben.
+- **Minimal.** openccu-lite bringt nur mit, was eine Zentrale wirklich braucht. Alles andere kommt als Addon dazu, und
+  zwar nur das, was tatsächlich genutzt wird.
+
+## Addons: nur das, was gebraucht wird
+
+Die Firmware selbst bleibt bewusst klein. Was darüber hinaus gebraucht wird, lässt sich als Addon aus dem
+eingebauten Addon-Katalog mit einem Klick installieren.
+
+### Geräte anlernen und verwalten: freie Wahl
+
+Womit die Geräte angelernt und konfiguriert und die Direktverknüpfungen verwaltet werden, ist frei wählbar:
+
+- [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) **muss gar nicht auf der Zentrale laufen**: Es
+  gibt ihn auch als Anwendung für Windows, macOS und Linux. Auf Wunsch lässt er sich trotzdem als Addon installieren und ist
+  dann in die Weboberfläche von openccu-lite integriert.
+- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) (Geräte und Direktverknüpfungen verwalten, MQTT, Home Assistant, Matter und mehr)
+- [ccu-addon-mui](https://github.com/firsttris/ccu-addon-mui) (Geräte und Direktverknüpfungen verwalten, schöne Bedienoberfläche)
+
+### Weitere Addons
+
+- [RedMatic](https://github.com/rdmtc/RedMatic) (Automation mit Node-RED, MQTT, Home Assistant, HomeKit, Matter und mehr)
+- [ccu-addon-mosquitto](https://github.com/homematic-community/ccu-addon-mosquitto) (MQTT-Broker)
+- [ccu-addon-battery](https://github.com/hobbyquaker/ccu-addon-battery) (Batteriewechsel erkennen, Statistiken zu Batterien)
+- [ccu-addon-longpressdim](https://github.com/hobbyquaker/ccu-addon-longpressdim) (Dimmen mit langem Tastendruck über
+  Schnittstellengrenzen hinweg)
+
+Weitere Addons stehen im Katalog. Wie Addons auf openccu-lite funktionieren und wie sich ein bestehendes Addon anpassen lässt, steht unter [Addons](docs/addons.md).
 
 ## Installation
 
 Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https://github.com/hobbyquaker/openccu-lite/releases).
 
-- **Neuinstallation auf einem Raspberry Pi 3/4:** die `.zip` des Releases entpacken und die `.img` darin auf die SD-Karte schreiben.
-- **Neuinstallation als VM:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.).
-- **Proxmox-VM per Skript:** als root auf dem Proxmox-VE-Host legt ein Skript die VM in einem Schritt an (`--help`
-  zeigt die Optionen):
+- **Raspberry Pi 3/4:** die `.zip` des Releases entpacken und die `.img` darin auf die SD-Karte schreiben.
+- **Virtuelle Maschine:** die `.ova` importieren (Proxmox, VMware, VirtualBox usw.).
+- **Proxmox per Skript:** als root auf dem Proxmox-VE-Host legt ein Skript die VM in einem Schritt an (`--help` zeigt
+  die Optionen):
   `bash -c "$(wget -qLO - https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh)"`
 
 ## Wechsel von (Open)CCU zu openccu-lite
 
 In der OpenCCU-WebUI unter *Einstellungen → Systemsteuerung → Zentralen-Wartung → Software-Update durchführen* die
-`openccu-lite-<produkt>-<version>.zip` hochladen. Beim Update von einer original CCU3 Firmware die `-ccu3.tgz`
-verwenden. Anlernungen, Schlüssel, Addons, Namen, Räume und Gewerke werden übernommen [switching.de.md](docs/switching.de.md). WebUI-Programme und Variablen entfallen ersatzlos. Für den Weg zurück unbedingt vorher ein
-Backup anlegen!
+`openccu-lite-<produkt>-<version>.zip` hochladen, von einer originalen CCU3-Firmware die `-ccu3.tgz`. Anlernungen,
+Schlüssel, Addons, Namen, Räume und Gewerke werden übernommen, WebUI-Programme und Systemvariablen entfallen ersatzlos.
+Für den Weg zurück unbedingt vorher ein Backup anlegen! Alles Weitere: [Wechsel von und zu OpenCCU](docs/switching.de.md).
 
-## Update
+## Updates
+
+### So wird aktualisiert
 
 Auf der Seite *Updates* der Weboberfläche: *Jetzt prüfen*, *Herunterladen und bereitstellen*, *Neu starten und
-installieren*. Oder als root per SSH: `occulited update check` zeigt, ob es ein neueres Release gibt,
-`occulited update install` installiert es – nach einer Sicherung auf die eingerichteten Sicherungsziele und mit
-Prüfung der sha256-Summe; `occulited update install <version>` installiert eine bestimmte Version, auch eine ältere.
-Die Befehle und ihre Optionen (`--yes` für Skripte, `--no-backup`, `--file`, …) beschreibt
-[occulited's docs/config.md](https://github.com/hobbyquaker/occulited/blob/master/docs/config.md).
+installieren*. Vor der Installation wird eine Sicherung auf die eingerichteten Sicherungsziele geschrieben und die
+Prüfsumme kontrolliert. Per SSH geht dasselbe mit `occulited update check` und `occulited update install`
+([Befehle und Optionen](https://github.com/hobbyquaker/occulited/blob/master/docs/config.md)).
 
-## Geräte anlernen und konfigurieren, Direktverknüpfungen verwalten
+Welche Versionen angeboten werden, ist einstellbar: **stable** (nur fertige Releases, die Voreinstellung), **beta** (dazu
+Beta- und Release-Candidate-Versionen) oder **dev** (alles, auch Entwicklungsstände).
 
-Dafür den
-  [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) oder 
-  [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) aus dem Addon-Katalog installieren.
+### Was geplant ist
+
+- **Mit jedem neuen HMIPServer von eQ-3 erscheint ein neues Release** von openccu-lite, damit neue HmIP-Geräte und
+  Fehlerbehebungen von eQ-3 schnell ankommen.
+- **Die Schnittstellenprozesse rfd, hs485d und multimacd** kommen aus einem
+  [eigenen Fork von OpenCCU-Base](https://github.com/hobbyquaker/OpenCCU-Base). Er soll möglichst nah an OpenCCU bleiben;
+  welche Änderungen von OpenCCU schon übernommen sind, zeigt ein [Abgleich](https://hobbyquaker.github.io/OpenCCU-Base/).
+- **Ab Buildroot 2027.02 basiert openccu-lite auf den LTS-Versionen von Buildroot.** Sie werden länger mit
+  Sicherheitsupdates versorgt; dazwischen bleibt das System auf einer gepflegten Basis, und deren Point-Releases
+  lassen sich mit wenig Aufwand übernehmen.
+- Ob die Bestandteile aktuell sind (Buildroot, Kernel, Firmware, Java, HMIPServer, OpenCCU-Base), zeigt eine täglich
+  erneuerte [Übersicht](https://hobbyquaker.github.io/openccu-lite/).
 
 ## Dokumentation
 
-Ein Rundgang mit Bildern durch jede Seite der Weboberfläche: [docs/walkthrough](docs/walkthrough/README.md).
-Weiteres, meist auf Englisch, in [`docs/`](docs/) dieses Repositorys: der Wechsel von und zu OpenCCU
-([switching.de.md](docs/switching.de.md), auf Deutsch), was sich gegenüber OpenCCU ändert
-([aenderungen.md](docs/aenderungen.md), auf Deutsch), bekannte Probleme und was das System dagegen tut
-([bekannte-probleme.md](docs/bekannte-probleme.md), auf Deutsch), der lokale Schlüsselmodus für HmIP – offline-fähig,
-Funkmodultausch ohne Schlüsselserver von eQ-3 ([lokaler-schluesselmodus.md](docs/lokaler-schluesselmodus.md), auf
-Deutsch), Addons ([addons.md](docs/addons.md)), Sicherheit ([security.md](docs/security.md),
-[threat-model.md](docs/threat-model.md)), Datenschutz – was das System nach außen sendet
-([privacy.md](docs/privacy.md)), Zertifikate ([tls-acme.md](docs/tls-acme.md)) und das
-Portierungs-Kit für Addon-Maintainer ([porting-from-rega.md](docs/porting-from-rega.md)). Der
-Systemdienst mit der Weboberfläche ist [occulited](https://github.com/hobbyquaker/occulited); seine
-[`docs/`](https://github.com/hobbyquaker/occulited/tree/master/docs) beschreiben die Metadaten-,
-System- und Auth-API, `occulited.json`, das Addon-Manifest und den Katalog.
-Empfehlungen: [recommendations.de.md](docs/recommendations.de.md).
+**Erste Schritte**
+- [Rundgang durch die Weboberfläche](docs/walkthrough/README.md): jede Seite mit Bild
+- [Wechsel von und zu OpenCCU](docs/switching.de.md)
+- [Empfehlungen](docs/recommendations.de.md)
+- [Was sich gegenüber OpenCCU ändert](docs/aenderungen.md)
 
-Werkzeuge: [occulite-backup](https://github.com/hobbyquaker/occulite-backup) lädt die Sicherungen eines oder mehrerer
-Systeme per Cron oder Timer herunter (ein Shell-Skript, nur curl); [occulite-client](https://github.com/hobbyquaker/occulite-client)
-ist der Client für die APIs von openccu-lite (npm-Paket für Addons und eigene Programme).
+**Betrieb**
+- [Lokaler Schlüsselmodus für HmIP](docs/lokaler-schluesselmodus.md): offlinefähig, Funkmodultausch ohne den
+  Schlüsselserver von eQ-3
+- [Zertifikate](docs/tls-acme.md) (eigene oder automatisch per ACME)
+- [occulite-backup](https://github.com/hobbyquaker/occulite-backup): Sicherungen eines oder mehrerer Systeme per Cron
+  oder Timer herunterladen
+
+**Sicherheit und Datenschutz**
+- [Sicherheit](docs/security.md) und [Bedrohungsmodell](docs/threat-model.md) (englisch)
+- [Datenschutz](docs/privacy.md): was das System nach außen sendet (englisch)
+
+**Für Addon-Entwickler und eigene Programme**
+- [Addons auf openccu-lite](docs/addons.md) (englisch)
+- [Portierungs-Kit: von ReGa zu openccu-lite](docs/porting-from-rega.md) (englisch)
+- [ccu-addon-kit](https://github.com/hobbyquaker/ccu-addon-kit): Einstellungsseite, Dienststeuerung und Go-Bausteine
+  für Addons
+- [occulite-client](https://github.com/hobbyquaker/occulite-client): der Client für die APIs von openccu-lite (npm)
+- [occulited](https://github.com/hobbyquaker/occulited): der Systemdienst; seine
+  [Dokumentation](https://github.com/hobbyquaker/occulited/tree/master/docs) beschreibt die Metadaten-, System- und
+  Auth-API, `occulited.json`, das Addon-Manifest und den Katalog
 
 ## Fehler und Hilfe
 
 Fehler und Wünsche, für die Firmware wie für occulited: der
-[Issue-Tracker](https://github.com/hobbyquaker/openccu-lite/issues) dieses Repositorys
-([SUPPORT.md](SUPPORT.md)); Sicherheitsprobleme wie in [SECURITY.md](SECURITY.md) beschrieben.
-Tracker und Forumsbereich von OpenCCU sind für OpenCCU da — Probleme von openccu-lite bitte nicht
-dort melden.
+[Issue-Tracker](https://github.com/hobbyquaker/openccu-lite/issues) dieses Repositorys ([SUPPORT.md](SUPPORT.md));
+Sicherheitsprobleme wie in [SECURITY.md](SECURITY.md) beschrieben. Tracker und Forumsbereich von OpenCCU sind für
+OpenCCU da, Probleme mit openccu-lite bitte nicht dort melden.
 
 ## Lizenz
 
@@ -77,4 +140,8 @@ Apache-2.0 für alles hier Geschriebene; die `occu`-Bestandteile behalten die Be
 
 ## Haftungsausschluss
 
-openccu-lite wird OHNE JEDE AUSDRÜCKLICHE ODER IMPLIZIERTE GARANTIE bereitgestellt, einschließlich der Garantie zur Benutzung für den vorgesehenen oder einem bestimmten Zweck sowie jeglicher Rechtsverletzung, jedoch nicht darauf beschränkt. IN KEINEM FALL sind die Autoren oder Copyrightinhaber für jeglichen Schaden oder sonstige Ansprüche haftbar zu machen, ob infolge der Erfüllung eines Vertrages, eines Deliktes oder anders im Zusammenhang mit der Software oder sonstiger Verwendung der Software entstanden.
+openccu-lite wird OHNE JEDE AUSDRÜCKLICHE ODER IMPLIZIERTE GARANTIE bereitgestellt, einschließlich der Garantie zur
+Benutzung für den vorgesehenen oder einem bestimmten Zweck sowie jeglicher Rechtsverletzung, jedoch nicht darauf
+beschränkt. IN KEINEM FALL sind die Autoren oder Copyrightinhaber für jeglichen Schaden oder sonstige Ansprüche haftbar
+zu machen, ob infolge der Erfüllung eines Vertrages, eines Deliktes oder anders im Zusammenhang mit der Software oder
+sonstiger Verwendung der Software entstanden.
