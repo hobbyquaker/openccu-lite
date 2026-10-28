@@ -63,9 +63,21 @@
 #                         workflow every 6 hours): the commits on the paths openccu-lite uses above the
 #                         line of the fork's lite. Current: none; each one is a finding, linked. A report
 #                         older than BASE_REPORT_STALE_DAYS is a note. The count links to that report.
+#                         The report measures the fork's lite head (report.json "lite"): a release column
+#                         whose OpenCCU-Base pin (its tag in fork-base-tags.txt) is that commit is exact;
+#                         an older one shows its pin, lite's commits above the line as a lower bound, a
+#                         note, and "not measured exactly" instead of the check mark.
 #   The report's "supported until" column: buildroot, the kernels and the JVM as above; the
 #   Raspberry Pi firmware, rpi-eeprom, HMIPServer and the OpenCCU-Base commits have no published support
 #   period: their cell stays empty.
+#
+# The columns: one per release of the fork (RELEASES_REPO's GitHub releases): the one marked Latest, and the
+# newest pre-release only when it is newer than that (by version order; an older pre-release and drafts are
+# ignored). Each column reads the pins from the files at that release's tag (TreeAt: git show <tag>:<path> in
+# the --root checkout, a missing tag fetched shallow), never from the branch head. Each column's cell shows
+# its own status - a green check disc when that release is current; the newest-upstream and status columns,
+# the findings, the ::warning:: lines and the badge are the latest release's (what stable users run); a
+# pre-release's findings that the latest release does not have are listed in its cell.
 #
 # Findings are not an error: they are ::warning:: lines, the report and a yellow badge, and the exit
 # code stays 0. An error is: 2 a pin not found in the tree, 3 upstream unreachable or not parseable,
@@ -78,7 +90,7 @@
 # Usage: python3 scripts/lite-upstream-versions.py [--root DIR] [--fixtures DIR] [--summary FILE]
 #                                                   [--site DIR]
 #   --fixtures DIR reads upstream from files instead of the network (the offline test):
-#     buildroot-tags.txt, rpi-tags.txt, firmware-tags.txt (git ls-remote output),
+#     gh-release-latest.json, gh-releases.json (the fork's GitHub releases), buildroot-tags.txt, rpi-tags.txt, firmware-tags.txt (git ls-remote output),
 #     releases.json, releases.html, buildroot-download.html, rpi-head.txt (git ls-remote --symref HEAD), rpi-Makefile-<tag>,
 #     firmware-git_hash-<commit or tag>, eeprom-versions.txt, openccu-base-tags.txt (OpenCCU/OpenCCU-Base's
 #     tags, git ls-remote output), eq3-repo.json (homematicip/OpenCCU-Base), azul-aarch64.json, azul-x64.json,
@@ -262,6 +274,7 @@ class Row:
         self.until = NO_PERIOD
         self.findings = []   # [(en, de, link or None)]
         self.notes = []      # [(en, de)]
+        self.exact = True    # False: the release's value is not measured exactly (its cell gets no check mark)
 
     def due(self, en, de, link=None):
         self.findings.append((en, de, link))
@@ -270,12 +283,81 @@ class Row:
         self.notes.append((en, de))
 
 
+class TreeAt:
+    """the files of the fork at a release tag (git show <tag>:<path> in the --root checkout), not its working
+    tree: each report column is the release it names. A tag the checkout lacks (the workflow's shallow
+    checkout) is fetched once, shallow."""
+
+    def __init__(self, git_dir, tag):
+        self.git_dir, self.tag, self.fetched = git_dir, tag, False
+
+    def _git(self, *args):
+        try:
+            return subprocess.run(["git", "-C", self.git_dir, *args], capture_output=True, text=True, timeout=300,
+                                  check=False, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise PinError(f"git {args[0]} in {self.git_dir}: {e}") from e
+
+    def read(self, rel):
+        if not self.fetched and self._git("rev-parse", "-q", "--verify", f"refs/tags/{self.tag}").returncode != 0:
+            self.fetched = True
+            f = self._git("fetch", "-q", "--depth=1", "--no-tags", "origin", f"+refs/tags/{self.tag}:refs/tags/{self.tag}")
+            if f.returncode != 0:
+                raise PinError(f"release tag {self.tag} not in the checkout and not fetchable: {f.stderr.strip()}")
+        self.fetched = True
+        p = self._git("show", f"refs/tags/{self.tag}:{rel}")
+        if p.returncode != 0:
+            raise PinError(f"{rel} at {self.tag}: {p.stderr.strip()}")
+        return p.stdout
+
+
 def read(root, rel):
+    if isinstance(root, TreeAt):
+        return root.read(rel)
     try:
         with open(os.path.join(root, rel), encoding="utf-8") as f:
             return f.read()
     except OSError as e:
         raise PinError(f"{rel}: {e}") from e
+
+
+# ---- the releases the report has a column for
+
+RELEASES_REPO = "hobbyquaker/openccu-lite"
+SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$")
+
+
+def semver_key(tag):
+    """semantic version order: 1.1.0-dev.0 > 1.0.0 > 1.0.0-rc.4; None for a tag that is no version"""
+    m = SEMVER_RE.match(tag)
+    if not m:
+        return None
+    pre = m.group(4)
+    ids = tuple((0, int(x), "") if x.isdigit() else (1, 0, x) for x in pre.split(".")) if pre else ()
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))), 0 if pre else 1, ids
+
+
+def release_columns(up):
+    """[(tag, "latest")] - the GitHub release marked Latest - plus (tag, "pre-release") for the newest
+    pre-release when it is newer than that (by version order); older pre-releases and drafts are ignored"""
+    latest = up.api(f"repos/{RELEASES_REPO}/releases/latest", "gh-release-latest.json")
+    tag = latest.get("tag_name") if isinstance(latest, dict) else None
+    if not tag or not semver_key(tag):
+        raise UpstreamError(f"{RELEASES_REPO}: no latest release with a version tag")
+    lst = up.api(f"repos/{RELEASES_REPO}/releases?per_page=50", "gh-releases.json")
+    if not isinstance(lst, list):
+        raise UpstreamError(f"{RELEASES_REPO}: the release list is not a list")
+    pre = [x["tag_name"] for x in lst if isinstance(x, dict) and x.get("prerelease") and not x.get("draft")
+           and isinstance(x.get("tag_name"), str) and semver_key(x["tag_name"])
+           and semver_key(x["tag_name"]) > semver_key(tag)]
+    cols = [(tag, "latest")]
+    if pre:
+        cols.append((max(pre, key=semver_key), "pre-release"))
+    return cols
+
+
+def version_of(tag):
+    return tag[1:] if tag.startswith("v") else tag
 
 
 def pin(root, rel, regex, what):
@@ -856,7 +938,26 @@ def check_base_commits(root, up):
             raise ValueError("above is not a list of commits")
     except (ValueError, KeyError, TypeError) as e:
         raise UpstreamError(f"the OpenCCU-Base report's report.json: {e}") from e
-    if line:
+    # the report measures the fork's lite head; a release that pins that very commit gets its line, an older
+    # one (its OpenCCU-Base tag elsewhere) gets lite's commits above the line as a lower bound, said so
+    src = base_source(read(root, BASE_MK))
+    if not src:
+        raise PinError(f"{BASE_MK}: no OPENCCU_BASE_VERSION or no GitHub OPENCCU_BASE_SITE")
+    repo, ref = src
+    pinned = ref if re.match(r"^[0-9a-f]{40}$", ref) else \
+        up.tags(f"https://github.com/{repo}", "refs/tags/*", "fork-base-tags.txt").get(ref)
+    if not pinned:
+        raise UpstreamError(f"{repo}: no tag {ref}")
+    lite = str(d.get("lite") or "")
+    r.exact = pinned == lite
+    if not r.exact:
+        r.ours = (f"OpenCCU-Base {ref} ({pinned[:10]}), not lite's line ({lite[:10] or '?'})",
+                  f"OpenCCU-Base {ref} ({pinned[:10]}), nicht die Linie von lite ({lite[:10] or '?'})")
+        r.note(f"the OpenCCU-Base report measures the fork's lite ({lite[:10] or '?'}); this release pins {ref} "
+               f"({pinned[:10]}): at least the commits above lite's line are missing in it, not counted exactly",
+               f"der OpenCCU-Base-Bericht misst den lite des Forks ({lite[:10] or '?'}); dieses Release verwendet "
+               f"{ref} ({pinned[:10]}): mindestens die Commits über der Linie von lite fehlen darin, nicht genau gezählt")
+    elif line:
         r.ours = (f"lite at: {line.get('subject', '?')} ({str(line.get('date', ''))[:10]})",
                   f"lite bei: {line.get('subject', '?')} ({str(line.get('date', ''))[:10]})")
     else:
@@ -888,22 +989,27 @@ body{background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,sans-serif;mar
 main{max-width:960px;margin:0 auto}h1{font-size:1.5em;margin:0 0 4px}p{color:var(--muted);margin:4px 0 16px}
 a{color:inherit}.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%}
 th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}th{background:var(--head)}
-.ok{color:var(--ok);font-weight:600}.due{color:var(--due);font-weight:600}.err{color:var(--err);font-weight:600}
+.ok{color:var(--ok);font-weight:600}.ck{display:inline-block;width:16px;height:16px;flex:none;vertical-align:-3px;margin-left:4px}
+.ck circle{fill:var(--ok)}.ck path{fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.due{color:var(--due);font-weight:600}.err{color:var(--err);font-weight:600}
 ul{margin:4px 0 0;padding-left:18px}.note{color:var(--muted)}
 """
 
 TEXT = {
-    "en": {"title": "openccu-lite: upstream versions", "comp": "Component", "ours": "ours", "newest": "newest upstream",
-           "until": "supported until", "status": "Status", "ok": "up to date", "due": "update available", "checked": "Checked",
+    "en": {"title": "openccu-lite: upstream versions", "comp": "Component", "newest": "newest upstream",
+           "until": "supported until", "status": "Status", "ok": "up to date", "due": "update available", "inexact": "not measured exactly", "checked": "Checked",
            "run": "workflow run", "lang": ("Deutsch", "index.html"), "failed": "Check failed",
-           "intro": "Daily comparison of the versions openccu-lite pins with their upstream releases. "
+           "intro": "Daily comparison of the versions openccu-lite pins with their upstream releases: one column for the "
+                    "latest release, and one for the newest pre-release when there is one; the status is the latest "
+                    "release's. "
                     "The rules are in scripts/lite-upstream-versions.py.",
            "base": ("What OpenCCU-Base changed in the components openccu-lite uses, and where our fork stands:",
                     "the OpenCCU-Base commit report")},
-    "de": {"title": "openccu-lite: Upstream-Versionen", "comp": "Komponente", "ours": "unsere", "newest": "neueste upstream",
-           "until": "Support bis", "status": "Status", "ok": "aktuell", "due": "Update verfügbar", "checked": "Geprüft",
+    "de": {"title": "openccu-lite: Upstream-Versionen", "comp": "Komponente", "newest": "neueste upstream",
+           "until": "Support bis", "status": "Status", "ok": "aktuell", "due": "Update verfügbar", "inexact": "nicht genau gemessen", "checked": "Geprüft",
            "run": "Workflow-Lauf", "lang": ("English", "en.html"), "failed": "Prüfung fehlgeschlagen",
-           "intro": "Täglicher Vergleich der Versionen, die openccu-lite verwendet, mit ihren Upstream-Releases. "
+           "intro": "Täglicher Vergleich der Versionen, die openccu-lite verwendet, mit ihren Upstream-Releases: eine Spalte "
+                    "für das neueste Release und eine für das neueste Pre-Release, wenn es eines gibt; der Status ist "
+                    "der des neuesten Releases. "
                     "Die Regeln stehen in scripts/lite-upstream-versions.py.",
            "base": ("Was OpenCCU-Base an den Komponenten geändert hat, die openccu-lite verwendet, und wo unser Fork steht:",
                     "der OpenCCU-Base-Commit-Bericht")},
@@ -915,7 +1021,31 @@ def loc(x, li):
     return x[li] if isinstance(x, tuple) else x
 
 
-def page(lang, rows, error, when, run_url):
+def col_head(tag, kind):
+    """the release column's header, the same in both languages (the maintainer's wording)"""
+    return f"openccu-lite {version_of(tag)} ({kind})"
+
+
+def ok_icon(label):
+    """a white check mark on a green disc, inline: the same 16 px box in every current cell"""
+    a = html.escape(label)
+    return (f'<svg class="ck" role="img" aria-label="{a}" viewBox="0 0 16 16" width="16" height="16">'
+            f'<title>{a}</title><circle cx="8" cy="8" r="8"/><path d="M4.4 8.3l2.4 2.4 4.8-5"/></svg>')
+
+
+def components(cols):
+    """per component the rows of every column, [(row of the latest release, row of the pre-release)...]"""
+    return list(zip(*(rows for _, _, rows in cols)))
+
+
+def until_text(cols, rs, li):
+    """the support column: the latest release's; both when the pre-release's differs"""
+    if len(rs) > 1 and rs[1].until != rs[0].until:
+        return " · ".join(f"{version_of(c[0])}: {r.until[li] or '-'}" for c, r in zip(cols, rs))
+    return rs[0].until[li]
+
+
+def page(lang, cols, error, when, run_url):
     t, e = TEXT[lang], html.escape
     li = 0 if lang == "en" else 1
     out = [f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
@@ -930,23 +1060,40 @@ def page(lang, rows, error, when, run_url):
     if error:
         out.append(f'<p class="err">{e(t["failed"])}: {e(error)}</p>')
     else:
-        out.append(f'<div class="wrap"><table><tr><th>{e(t["comp"])}</th><th>{e(t["ours"])}</th>'
-                   f'<th>{e(t["newest"])}</th><th>{e(t["until"])}</th><th>{e(t["status"])}</th></tr>')
-        for r in rows:
+        status = t["status"] + (f" ({version_of(cols[0][0])})" if len(cols) > 1 else "")
+        out.append(f'<div class="wrap"><table><tr><th>{e(t["comp"])}</th>'
+                   + "".join(f"<th>{e(col_head(tag, kind))}</th>" for tag, kind, _ in cols)
+                   + f'<th>{e(t["newest"])}</th><th>{e(t["until"])}</th><th>{e(status)}</th></tr>')
+        for rs in components(cols):
+            r = rs[0]
             st = f'<span class="due">{e(t["due"])}</span>' if r.findings else f'<span class="ok">{e(t["ok"])}</span>'
             items = [f'<li><a href="{e(f[2])}">{e(f[li])}</a></li>' if f[2] else f"<li>{e(f[li])}</li>"
                      for f in r.findings] + [f'<li class="note">{e(n[li])}</li>' for n in r.notes]
             name = r.en if lang == "en" else r.de
             newest = (f'<a href="{e(r.newest_link)}">{e(loc(r.newest, li))}</a>' if r.newest_link
                       else e(loc(r.newest, li)))
-            out.append(f'<tr><td><a href="{e(r.link)}">{e(name)}</a></td><td>{e(loc(r.ours, li))}</td><td>{newest}</td>'
-                       f"<td>{e(r.until[li])}</td><td>{st}" + (f"<ul>{''.join(items)}</ul>" if items else "") + "</td></tr>")
+            cells = []
+            for c in rs:
+                if not c.findings and not c.exact:
+                    mark = f' <span class="note">{e(t["inexact"])}</span>'
+                elif not c.findings:
+                    mark = " " + ok_icon(t["ok"])
+                else:
+                    mark = f' <span class="due">{e(t["due"])}</span>'
+                    if c is not r:   # a pre-release's own findings, where they are not the latest's
+                        own = [f for f in c.findings if f[0] not in {x[0] for x in r.findings}]
+                        mark += ("<ul>" + "".join(f'<li><a href="{e(f[2])}">{e(f[li])}</a></li>' if f[2]
+                                                  else f"<li>{e(f[li])}</li>" for f in own) + "</ul>") if own else ""
+                cells.append(f"<td>{e(loc(c.ours, li))}{mark}</td>")
+            out.append(f'<tr><td><a href="{e(r.link)}">{e(name)}</a></td>{"".join(cells)}<td>{newest}</td>'
+                       f"<td>{e(until_text(cols, rs, li))}</td><td>{st}"
+                       + (f"<ul>{''.join(items)}</ul>" if items else "") + "</td></tr>")
         out.append("</table></div>")
     out.append("</main></body></html>\n")
     return "\n".join(out)
 
 
-def write_site(d, rows, error):
+def write_site(d, cols, error):
     os.makedirs(d, exist_ok=True)
     when = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     run_url = None
@@ -955,10 +1102,11 @@ def write_site(d, rows, error):
                    f"/actions/runs/{os.environ['GITHUB_RUN_ID']}")
     for lang, name in (("de", "index.html"), ("en", "en.html")):
         with open(os.path.join(d, name), "w", encoding="utf-8") as f:
-            f.write(page(lang, rows, error, when, run_url))
+            f.write(page(lang, cols, error, when, run_url))
+    # the badge follows the latest release (what stable users run), never the pre-release
     if error:
         badge = ("check failed", "lightgrey")
-    elif any(r.findings for r in rows):
+    elif any(r.findings for r in cols[0][2]):
         badge = ("updates available", "yellow")
     else:
         badge = ("up to date", "brightgreen")
@@ -969,17 +1117,19 @@ def write_site(d, rows, error):
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    ap.add_argument("--root", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."),
+                    help="the fork's git checkout; each release column reads the files at its tag")
     ap.add_argument("--fixtures")
     ap.add_argument("--summary", default=os.environ.get("GITHUB_STEP_SUMMARY"))
     ap.add_argument("--site")
     ap.add_argument("--today", type=datetime.date.fromisoformat, help="the date the EOL warning counts from (tests)")
     a = ap.parse_args(argv)
     up = Upstream(a.fixtures, a.today)
-    rows, error, code = [], None, 0
+    cols, error, code = [], None, 0
     try:
-        for check in CHECKS:
-            rows.append(check(a.root, up))
+        for tag, kind in release_columns(up):
+            tree = TreeAt(a.root, tag)
+            cols.append((tag, kind, [check(tree, up) for check in CHECKS]))
     except UpstreamError as e:
         error, code = f"upstream unreachable or not parseable - nothing was checked: {e}", 3
     except PinError as e:
@@ -987,7 +1137,7 @@ def main(argv=None):
     except Exception as e:  # noqa: BLE001 - a bug here still gives a grey badge, not a stale one
         error, code = f"the check itself failed: {e!r}", 4
     if a.site:
-        write_site(a.site, rows, error)
+        write_site(a.site, cols, error)
     if error:
         print(f"::error::{error}")
         if a.summary:
@@ -995,26 +1145,41 @@ def main(argv=None):
                 f.write(f"## Upstream versions\n\n**Check failed:** {error}\n")
         return code
 
-    head = ("component", "ours", "newest", "supported until", "status")
-    tab = [(r.en, loc(r.ours, 0), loc(r.newest, 0), r.until[0], "update available" if r.findings else "up to date")
-           for r in rows]
-    w = [max(len(x[i]) for x in tab + [head]) for i in range(5)]
+    heads = [col_head(tag, kind) for tag, kind, _ in cols]
+    status = "status" + (f" ({version_of(cols[0][0])})" if len(cols) > 1 else "")
+    head = ("component", *heads, "newest", "supported until", status)
+    tab = [(rs[0].en, *(loc(r.ours, 0) for r in rs), loc(rs[0].newest, 0), until_text(cols, rs, 0),
+            "update available" if rs[0].findings else "up to date") for rs in components(cols)]
+    n = len(head)
+    w = [max(len(x[i]) for x in tab + [head]) for i in range(n)]
     for x in [head] + tab:
         print("  ".join(c.ljust(w[i]) for i, c in enumerate(x)).rstrip())
-    due = [f"{r.en}: {f[0]}" + (f" {f[2]}" if f[2] else "") for r in rows for f in r.findings]
-    for r in rows:
-        for n in r.notes:
-            print(f"note - {r.en}: {n[0]}")
+    due = [f"{r.en}: {f[0]}" + (f" {f[2]}" if f[2] else "") for r in cols[0][2] for f in r.findings]
+    for r in cols[0][2]:
+        for nt in r.notes:
+            print(f"note - {r.en}: {nt[0]}")
     for d in due:
         print(f"::warning::update available - {d}")
+    pre_due = []
+    if len(cols) > 1:
+        v = version_of(cols[1][0])
+        for r0, r1 in zip(cols[0][2], cols[1][2]):
+            pre_due += [f"{r1.en}: {f[0]}" for f in r1.findings if f[0] not in {x[0] for x in r0.findings}]
+        for d in pre_due:
+            print(f"note - pre-release {v}: {d}")
     if a.summary:
         with open(a.summary, "a", encoding="utf-8") as f:
-            f.write("## Upstream versions\n\n| component | ours | newest upstream | supported until | status |\n| --- | --- | --- | --- | --- |\n")
+            f.write("## Upstream versions\n\n| " + " | ".join(("component", *heads, "newest upstream", "supported until",
+                                                              status)) + " |\n|" + " --- |" * n + "\n")
             for x in tab:
                 f.write("| " + " | ".join(x) + " |\n")
             f.write("\n" + (f"**{len(due)} finding(s).**\n" if due else "**All current.**\n"))
             for d in due:
                 f.write(f"- {d}\n")
+            if pre_due:
+                f.write(f"\nOnly in the pre-release {version_of(cols[1][0])}:\n")
+                for d in pre_due:
+                    f.write(f"- {d}\n")
             f.write(f"\nReport: {PAGE}\nOpenCCU-Base commit report: {BASE_REPORT}\n")
     print(f"\n{len(due)} finding(s)" if due else "\nall current")
     return 0

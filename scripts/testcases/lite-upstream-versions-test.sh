@@ -15,7 +15,11 @@
 # 2 (pin) or 3 (upstream) with a grey badge - never green; the report pages (with the link to the
 # OpenCCU-Base report) and the job summary. U-Boot is not checked (it follows buildroot's version from the
 # LTS 2027.02 on, bumped deliberately until then) and the pages carry no "GRUB (VM) and Go" note: both
-# fail the test when they come back.
+# fail the test when they come back. The release columns: the tree is a git repository, each release column
+# reads its tag (never the head); one column for the Latest release, a second only for a newer pre-release
+# (an older one and drafts ignored); a current cell carries the check disc, an outdated one does not; the
+# badge follows the latest release; the OpenCCU-Base row is exact only for the release that pins the
+# report's lite commit.
 #
 # Usage: sh scripts/testcases/lite-upstream-versions-test.sh    (from the fork's checkout)
 set -u
@@ -32,6 +36,9 @@ K_NEW=bbbb000000000000000000000000000000000000
 JAR_OURS=f22c000000000000000000000000000000000000
 JAR_THEIRS=e5ea000000000000000000000000000000000000
 JAR_EQ3=e3e3000000000000000000000000000000000000
+BASE_LITE=d771beda340ded1293ac3a1903372791a7b6a377    # the fork's OpenCCU-Base lite head, the report's "lite"
+BASE_OLD=8b96a44a74011dd0822bc258863022032b6f67e2     # an older fork tag
+ICON='<svg class="ck" role="img"'
 
 # a tree: <buildroot> <ova kernel> <rpi tag> <u-boot> <firmware commit> <eeprom date> (the U-Boot pin stays in
 # the configs, as in the fork, and must not be read)
@@ -49,6 +56,19 @@ tree() {
     >"$tmp/root/buildroot-external/package/rpi-eeprom/rpi-eeprom.mk"
   java_mk "$tmp/root/buildroot-external/package/java-azul/java-azul.mk" 21.52.203-ca-jre21.0.12.1
   base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 '$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
+  git -C "$tmp/root" init -q
+}
+G() { git -C "$tmp/root" -c user.name=t -c user.email=t@t -c commit.gpgsign=false -c tag.gpgsign=false "$@"; }
+snap_tag() { # <tag>: the tree as it is now, committed and tagged (annotated, as the fork's release tags)
+  G add -A . && G commit -q --allow-empty -m "$1" && G tag -f -a -m "$1" "$1" >/dev/null
+}
+gh_releases() { # <latest tag> [<tag>:<prerelease>:<draft>]... - the fork's GitHub releases, newest first
+  printf '{"tag_name": "%s", "prerelease": false, "draft": false}\n' "$1" >"$tmp/fx/gh-release-latest.json"
+  { printf '['; sep=""
+    for x in "$@"; do
+      case $x in *:*) t=${x%%:*}; r=${x#*:}; pr=${r%%:*}; dr=${r#*:} ;; *) t=$x; pr=false; dr=false ;; esac
+      printf '%s{"tag_name": "%s", "prerelease": %s, "draft": %s}' "$sep" "$t" "$pr" "$dr"; sep=", "
+    done; printf ']\n'; } >"$tmp/fx/gh-releases.json"
 }
 java_mk() { # <file> <JAVA_AZUL_VERSION>
   mkdir -p "$(dirname "$1")"
@@ -86,7 +106,7 @@ zulu_eol() { # <eolFrom of 21> [isEol]
 }
 base_report() { # <generated date> <subject>... of the commits above the line
   g=$1; shift
-  { printf '{"generated": "%s 10:52 UTC", "boundary": {"sha": "423cde2b", "subject": "libXmlRpc: regenerate (#190)", "date": "2026-10-13T23:34:42+02:00"}, "above": [' "$g"
+  { printf '{"generated": "%s 10:52 UTC", "lite": "'$BASE_LITE'", "boundary": {"sha": "423cde2b", "subject": "libXmlRpc: regenerate (#190)", "date": "2026-10-13T23:34:42+02:00"}, "above": [' "$g"
     sep=""; n=0
     for subj in "$@"; do n=$((n+1)); printf '%s{"subject": "%s", "date": "2026-10-1%sT10:00:00Z", "url": "https://github.com/OpenCCU/OpenCCU-Base/commit/%040d"}' "$sep" "$subj" "$n" "$n"; sep=", "; done
     printf ']}\n'; } >"$tmp/fx/base-report.json"
@@ -136,6 +156,10 @@ base() { # a current world
   jar $JAR_OURS 1.60.1
   zulu_eol 2031-09-30
   base_report 2026-10-24
+  printf '%s\trefs/tags/v1.0.0-rc.3\n%s\trefs/tags/v1.0.0-rc.3^{}\n%s\trefs/tags/v0.9.0\n' 5326f00465ef5156de967283d61f16f7e900deb5 $BASE_LITE $BASE_OLD \
+    >"$tmp/fx/fork-base-tags.txt"
+  gh_releases v1.0.0 v1.0.0
+  AUTOTAG=1
 }
 kernel_eol() { # <projected EOL of 6.18> - kernel.org's longterm table
   printf '<table><caption>Longterm release kernels</caption>\n<thead><tr><th class="head">Version</th><th>Maintainer</th><th>Released</th><th>Projected EOL</th></tr></thead>\n<tbody valign="top">\n<tr><td>6.18</td>\n<td>Greg &amp; Sasha</td>\n<td>2025-11-30</td>\n<td>%s</td>\n</tr>\n<tr><td>6.12</td>\n<td>Greg</td>\n<td>2024-11-17</td>\n<td>Dec, 2028</td>\n</tr>\n</tbody></table>\n' "$1" >"$tmp/fx/releases.html"
@@ -143,7 +167,7 @@ kernel_eol() { # <projected EOL of 6.18> - kernel.org's longterm table
 br_eol() { # <end of support of 2026.08> [<of the LTS 2025.02>] - buildroot.org's download table, with a commented-out row
   printf '<tr>\n  <th>Stable</th>\n  <th>2026.08.1.x</th>\n  <td>%s</td>\n</tr>\n<!--\n<tr><th>Stable</th><th>2026.08.x</th><td>January 2020</td></tr>\n-->\n<tr><th>Old stable</th><th>2026.05.x</th><td>September 2026</td></tr>\n<tr><th>Long-term support</th><th>2025.02.x</th><td>%s</td></tr>\n' "$1" "${2:-March 2028}" >"$tmp/fx/buildroot-download.html"
 }
-run() { rm -rf "$tmp/sum" "$tmp/site"; python3 "$PY" --root "$tmp/root" --fixtures "$tmp/fx" --today 2026-10-24 --summary "$tmp/sum" --site "$tmp/site" >"$tmp/out" 2>&1; echo $?; }
+run() { [ "$AUTOTAG" = 1 ] && snap_tag v1.0.0; rm -rf "$tmp/sum" "$tmp/site"; python3 "$PY" --root "$tmp/root" --fixtures "$tmp/fx" --today 2026-10-24 --summary "$tmp/sum" --site "$tmp/site" >"$tmp/out" 2>&1; echo $?; }
 expect() { # <what> <exit code> <badge message> [text in the output]
   rc=$(run)
   if [ "$rc" = "$2" ] && grep -qF "\"message\": \"$3\"" "$tmp/site/badge.json" 2>/dev/null \
@@ -200,7 +224,7 @@ grep -qF '| JVM (Azul Zulu) | 21.0.12.1 (Zulu 21.52.203, JRE) | 21.0.12.1 (Zulu 
   && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base 3.89.11) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU/OpenCCU-Base 3.89.11: 1.60.1 (the same jar) |  | up to date |' "$tmp/sum" \
   && grep -qF '| OpenCCU-Base commits above our line | lite at: libXmlRpc: regenerate (#190) (2026-10-13) | 0 commit(s) above the line |  | up to date |' "$tmp/sum" \
   && grep -qF '<td>homematicip/OpenCCU-Base main: 1.60.1 (dasselbe Jar) · OpenCCU/OpenCCU-Base 3.89.11: 1.60.1 (dasselbe Jar)</td>' "$tmp/site/index.html" \
-  && grep -qF '<td>1.60.1 (OpenCCU-Base 3.89.11)</td>' "$tmp/site/index.html" && grep -qF '<td>1.60.1 (OpenCCU-Base 3.89.11)</td>' "$tmp/site/en.html" \
+  && grep -qF "<td>1.60.1 (OpenCCU-Base 3.89.11) $ICON" "$tmp/site/index.html" && grep -qF "<td>1.60.1 (OpenCCU-Base 3.89.11) $ICON" "$tmp/site/en.html" \
   && ! grep -qF 'v1.0.0-rc.3' "$tmp/site/index.html" "$tmp/site/en.html" \
   && ok "the JVM, HMIPServer and OpenCCU-Base rows" || { bad "the JVM, HMIPServer and OpenCCU-Base rows"; cat "$tmp/sum"; }
 
@@ -352,7 +376,7 @@ grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base 3.89.11) | homematicip/OpenCCU-Bas
 base; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS; jar $JAR_THEIRS 1.60.1
 contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_EQ3; echo '[]' >"$tmp/fx/contents-OpenCCU_OpenCCU-Base-3.89.9.json"
 expect "HMIPServer: our jar in no OpenCCU-Base tag is a note" 0 "up to date" "our jar is in none of the 10 newest version tags of OpenCCU/OpenCCU-Base"
-grep -qF '<td>1.60.1 (in keinem OpenCCU-Base-Tag)</td>' "$tmp/site/index.html" && grep -qF '<td>1.60.1 (in no OpenCCU-Base tag)</td>' "$tmp/site/en.html" \
+grep -qF '<td>1.60.1 (in keinem OpenCCU-Base-Tag) ' "$tmp/site/index.html" && grep -qF '<td>1.60.1 (in no OpenCCU-Base tag) ' "$tmp/site/en.html" \
   && ok "HMIPServer: no tag of ours is said so" || bad "HMIPServer: no tag of ours is said so"
 base; base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 'https://example.org/x.tar.gz'
 expect "HMIPServer: our openccu-base.mk not on GitHub: exit 2" 2 "check failed" "openccu-base.mk"
@@ -369,6 +393,69 @@ base; base_report 2026-10-21; expect "OpenCCU-Base: a stale report is a note" 0 
 base; base_report 2026-10-22; run >/dev/null; grep -qF 'report is from' "$tmp/out" && bad "OpenCCU-Base: two days old is not stale" || ok "OpenCCU-Base: two days old is not stale"
 base; rm "$tmp/fx/base-report.json"; expect "OpenCCU-Base report unreachable: exit 3" 3 "check failed" "base-report.json"
 base; echo '{"boundary": null}' >"$tmp/fx/base-report.json"; expect "OpenCCU-Base report without its commits: exit 3" 3 "check failed" "report.json"
+
+# the release columns: each from its tag, one for Latest, a second only for a newer pre-release
+base; expect "one release: one column" 0 "up to date" "all current"
+grep -qF '<th>Komponente</th><th>openccu-lite 1.0.0 (latest)</th><th>neueste upstream</th>' "$tmp/site/index.html" \
+  && grep -qF '<th>Component</th><th>openccu-lite 1.0.0 (latest)</th><th>newest upstream</th>' "$tmp/site/en.html" \
+  && grep -qF '<th>Status</th></tr>' "$tmp/site/en.html" && ! grep -qF 'pre-release)' "$tmp/site/index.html" "$tmp/site/en.html" "$tmp/sum" \
+  && ! grep -qF '<th>unsere</th>' "$tmp/site/index.html" && ! grep -qF '<th>ours</th>' "$tmp/site/en.html" \
+  && grep -qF '| component | openccu-lite 1.0.0 (latest) | newest upstream | supported until | status |' "$tmp/sum" \
+  && ok "one release: the header names it, no pre-release column, no 'ours'" || { bad "one release: the header"; grep -F '<th>' "$tmp/site/en.html"; cat "$tmp/sum"; }
+[ "$(grep -c "$ICON" "$tmp/site/en.html")" -eq 8 ] && grep -qF 'aria-label="aktuell"' "$tmp/site/index.html" \
+  && grep -qF '<title>up to date</title>' "$tmp/site/en.html" && grep -qF '.ck circle{fill:var(--ok)}' "$tmp/site/en.html" \
+  && ok "current cells: the check disc with its accessible name, one per row" || bad "current cells: the check disc with its accessible name, one per row"
+
+# latest 1.0.0 pins buildroot 2026.08.1 (2026.08.2 is out), the pre-release 1.1.0-dev.0 2026.08.2, the head 2026.05.2
+base; tags buildroot-tags.txt 2026.08.2; AUTOTAG=0
+snap_tag v1.0.0
+sed -i 's/^BUILDROOT_VERSION=.*/BUILDROOT_VERSION=2026.08.2/' "$tmp/root/Makefile"; snap_tag v1.1.0-dev.0
+sed -i 's/^BUILDROOT_VERSION=.*/BUILDROOT_VERSION=2026.05.2/' "$tmp/root/Makefile"; G add -A .; G commit -q -m head
+gh_releases v1.0.0 v1.1.0-dev.0:true:false v1.0.0 v1.0.0-rc.3
+expect "latest + a newer pre-release: two columns, the badge follows the latest" 0 "$UPD" "buildroot 2026.08.2 is out (we pin 2026.08.1)"
+grep -qF '<th>openccu-lite 1.0.0 (latest)</th><th>openccu-lite 1.1.0-dev.0 (pre-release)</th><th>neueste upstream</th>' "$tmp/site/index.html" \
+  && grep -qF '<th>Status (1.0.0)</th>' "$tmp/site/en.html" \
+  && grep -qF '| buildroot | 2026.08.1 | 2026.08.2 | 2026.08.2 | 2027-06 | update available |' "$tmp/sum" \
+  && grep -qF '| component | openccu-lite 1.0.0 (latest) | openccu-lite 1.1.0-dev.0 (pre-release) | newest upstream | supported until | status (1.0.0) |' "$tmp/sum" \
+  && ! grep -qF '2026.05.2' "$tmp/sum" "$tmp/site/en.html" \
+  && ok "two columns, each from its own tag, never the head" || { bad "two columns, each from its own tag, never the head"; cat "$tmp/sum"; }
+grep -qF "<td>2026.08.1 <span class=\"due\">update available</span></td><td>2026.08.2 $ICON" "$tmp/site/en.html" \
+  && grep -qF "<td>2026.08.1 <span class=\"due\">Update verfügbar</span></td><td>2026.08.2 $ICON" "$tmp/site/index.html" \
+  && ! grep -qF "<td>2026.08.1 $ICON" "$tmp/site/en.html" \
+  && ok "an outdated cell has no check disc, the current one has it" || { bad "an outdated cell has no check disc, the current one has it"; grep buildroot.org "$tmp/site/en.html"; }
+# the pre-release behind where the latest is current: its own finding in its cell, the badge stays green
+base; AUTOTAG=0; snap_tag v1.0.0
+set_cfg aarch64-rpi3 BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION https://github.com/raspberrypi/linux/archive/stable_20260609.tar.gz
+set_cfg aarch64-rpi4 BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION https://github.com/raspberrypi/linux/archive/stable_20260609.tar.gz
+snap_tag v1.1.0-dev.0; gh_releases v1.0.0 v1.1.0-dev.0:true:false v1.0.0
+expect "a pre-release's own finding does not turn the badge yellow" 0 "up to date" "note - pre-release 1.1.0-dev.0: Raspberry Pi kernel (rpi3, rpi4): raspberrypi/linux stable_20260911"
+grep -qF '<td>stable_20260609 (6.18.34) <span class="due">update available</span><ul><li>raspberrypi/linux stable_20260911 (kernel 6.18.50) is out (we pin stable_20260609)</li>' "$tmp/site/en.html" \
+  && grep -qF "<td>stable_20260911 (6.18.50) $ICON" "$tmp/site/en.html" && grep -qF 'Only in the pre-release 1.1.0-dev.0:' "$tmp/sum" \
+  && ok "the pre-release's finding listed in its cell and the summary" || { bad "the pre-release's finding listed in its cell and the summary"; grep raspberrypi/linux/tags "$tmp/site/en.html"; }
+# an older pre-release, a draft and a non-version tag are ignored
+base; AUTOTAG=0; snap_tag v1.0.0; snap_tag v1.0.0-rc.4; snap_tag v1.2.0
+gh_releases v1.0.0 v1.0.0-rc.4:true:false v1.2.0:true:true nightly:true:false v1.0.0
+expect "an older pre-release, a draft and a non-version tag: one column" 0 "up to date"
+! grep -qF 'pre-release)' "$tmp/site/en.html" "$tmp/sum" && ok "older pre-release ignored" || bad "older pre-release ignored"
+# the newest of several newer pre-releases by version order (1.10.0-dev.0 > 1.9.0-rc.1 > 1.9.0-dev.3)
+base; AUTOTAG=0; snap_tag v1.0.0; snap_tag v1.9.0-dev.3; snap_tag v1.9.0-rc.1; snap_tag v1.10.0-dev.0
+gh_releases v1.0.0 v1.9.0-rc.1:true:false v1.10.0-dev.0:true:false v1.9.0-dev.3:true:false v1.0.0
+expect "several pre-releases: the newest by version order" 0 "up to date"
+grep -qF '<th>openccu-lite 1.10.0-dev.0 (pre-release)</th>' "$tmp/site/en.html" && ok "1.10.0-dev.0 chosen" || bad "1.10.0-dev.0 chosen"
+# a release whose tag the checkout lacks and cannot fetch: exit 2; no latest release: exit 3
+base; AUTOTAG=0; snap_tag v1.0.0; gh_releases v1.0.0 v1.1.0-dev.0:true:false
+expect "a release tag not in the checkout: exit 2" 2 "check failed" "release tag v1.1.0-dev.0 not in the checkout"
+base; echo '{"message": "Not Found"}' >"$tmp/fx/gh-release-latest.json"
+expect "no latest release: exit 3" 3 "check failed" "no latest release"
+# the OpenCCU-Base row: exact only for the release that pins the report's lite commit
+base; AUTOTAG=0; base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v0.9.0 '$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
+contents hobbyquaker_OpenCCU-Base-v0.9.0 $JAR_OURS; snap_tag v1.0.0
+base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 '$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
+snap_tag v1.1.0-dev.0; gh_releases v1.0.0 v1.1.0-dev.0:true:false v1.0.0
+expect "OpenCCU-Base: an older pin than lite's is a note" 0 "up to date" "this release pins v0.9.0 (8b96a44a74)"
+grep -qF '<td>OpenCCU-Base v0.9.0 (8b96a44a74), not lite&#x27;s line (d771beda34) <span class="note">not measured exactly</span></td><td>lite at: libXmlRpc: regenerate (#190) (2026-10-13) '"$ICON" "$tmp/site/en.html" \
+  && ok "OpenCCU-Base: the older release not measured exactly, no check disc; lite's release exact" || { bad "OpenCCU-Base: the older release not measured exactly"; grep 'OpenCCU-Base commits' "$tmp/site/en.html"; }
+base; : >"$tmp/fx/fork-base-tags.txt"; expect "OpenCCU-Base: the release's pin tag unknown: exit 3" 3 "check failed" "no tag v1.0.0-rc.3"
 
 base; rm "$tmp/fx/releases.json"; expect "kernel.org unreachable: exit 3, grey" 3 "check failed" "::error::upstream unreachable"
 grep -qF '"color": "lightgrey"' "$tmp/site/badge.json" && grep -qF 'Prüfung fehlgeschlagen' "$tmp/site/index.html" \

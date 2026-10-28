@@ -6,6 +6,9 @@
 # the rule for "current" are in its header) and writes a report page, which this publishes on GitHub
 # Pages (source "GitHub Actions"): https://hobbyquaker.github.io/openccu-lite/, with badge.json for the
 # README's badge - green "up to date", yellow "updates available", grey "check failed".
+# The report has a column for the release marked Latest and, when there is a newer one, for the newest
+# pre-release; each reads the pins at its release tag (the script fetches a tag the shallow checkout
+# lacks). The badge follows the latest release.
 #
 # Outdated components are not a failure: the run is green, the report and the badge say what is due,
 # with a warning annotation each. The run is red only when the check itself fails (a pin not found, an
@@ -43,7 +46,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: The pins against upstream
         env:
-          # GitHub's API (OpenCCU's latest release, the HMIPServer.jar blob shas) above the anonymous rate limit
+          # GitHub's API (the fork's releases, the HMIPServer.jar blob shas) above the anonymous rate limit
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/lite-upstream-versions.py --site "$RUNNER_TEMP/site"
       - uses: actions/upload-pages-artifact@v3
