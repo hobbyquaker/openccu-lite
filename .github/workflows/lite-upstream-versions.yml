@@ -15,6 +15,18 @@
 # upstream unreachable or not parseable - the page then says "check failed") or the deployment does.
 # It only reports: no pull request, no issue, no commit.
 #
+# When a release is published (a pre-release too), the run first refreshes the OpenCCU-Base fork's
+# comparison (its filtered.yml, https://hobbyquaker.github.io/OpenCCU-Base/), whose report.json the
+# report reads, and waits for that run and its Pages deployment; then the report runs. The scheduled
+# and the manual runs refresh it first as well. The dispatch in the other repository needs the secret
+# OCB_DISPATCH_TOKEN (a fine-grained token for hobbyquaker/OpenCCU-Base with Actions: read and write
+# only - GITHUB_TOKEN cannot dispatch there); without it the refresh is skipped with a notice and the
+# report reads the comparison of the fork's last scheduled run (every 6 hours).
+# The github-pages environment deploys from main only, and a release run's ref is its tag: so on a
+# release the report itself is not run here but dispatched on main (base_refreshed=true, which skips
+# a second refresh). The report job's concurrency group keeps a release and the cron from running
+# it twice at once.
+#
 # Runs on GitHub only (the network check; the project's own runner runs the script's offline test in
 # lite-build.yml's check job, GitHub's lite-check.yml does too). lite-only file, never part of an
 # upstream PR.
@@ -24,21 +36,104 @@ on:
   schedule:
     - cron: '17 5 * * *'
   workflow_dispatch:
+    inputs:
+      base_refreshed:
+        description: The OpenCCU-Base comparison was just refreshed (skip the dispatch there)
+        type: boolean
+        default: false
+  release:
+    # fires for pre-releases as well
+    types: [published]
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
+permissions: {}
 
 jobs:
+  base:
+    if: github.server_url == 'https://github.com' && !inputs.base_refreshed
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: openccu-base-refresh
+      cancel-in-progress: false
+    steps:
+      - name: Refresh the OpenCCU-Base comparison and wait for it
+        env:
+          GH_TOKEN: ${{ secrets.OCB_DISPATCH_TOKEN }}
+          BASE_REPO: hobbyquaker/OpenCCU-Base
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::notice title=OpenCCU-Base comparison not refreshed::the secret OCB_DISPATCH_TOKEN is not set; the report reads the comparison of $BASE_REPO's last scheduled filtered run"
+            exit 0
+          fi
+          deadline=$((SECONDS + 25 * 60))
+          # wait_run <id> <what>: until the run is completed; fails unless it succeeded
+          wait_run() {
+            local s
+            while :; do
+              s=$(gh api "repos/$BASE_REPO/actions/runs/$1" --jq '"\(.status) \(.conclusion // "-")"')
+              [ "${s%% *}" = completed ] && break
+              [ "$SECONDS" -lt "$deadline" ] || { echo "::error::$2 (https://github.com/$BASE_REPO/actions/runs/$1) not finished in time"; return 1; }
+              sleep 15
+            done
+            [ "${s#* }" = success ] || { echo "::error::$2 (https://github.com/$BASE_REPO/actions/runs/$1) ended: ${s#* }"; return 1; }
+            echo "$2 succeeded: https://github.com/$BASE_REPO/actions/runs/$1"
+          }
+          since=$(date -u -d '-30 seconds' +%Y-%m-%dT%H:%M:%SZ)
+          gh workflow run filtered.yml -R "$BASE_REPO" --ref main
+          run=
+          for _ in $(seq 1 30); do
+            sleep 10
+            run=$(gh api -X GET "repos/$BASE_REPO/actions/workflows/filtered.yml/runs" \
+              -f event=workflow_dispatch -f created=">=$since" -F per_page=1 --jq '.workflow_runs[0].id // empty')
+            [ -n "$run" ] && break
+          done
+          [ -n "$run" ] || { echo "::error::the dispatched filtered run did not appear in $BASE_REPO"; exit 1; }
+          wait_run "$run" "filtered"
+          # the report is served by Pages from gh-pages: wait for the deployment of its head
+          # (a run whose report did not change pushes nothing; that head's deployment is done already)
+          sha=$(gh api "repos/$BASE_REPO/branches/gh-pages" --jq .commit.sha)
+          pages=
+          for _ in $(seq 1 18); do
+            pages=$(gh api -X GET "repos/$BASE_REPO/actions/runs" -f event=dynamic -f head_sha="$sha" -F per_page=1 \
+              --jq '.workflow_runs[0].id // empty')
+            [ -n "$pages" ] && break
+            sleep 10
+          done
+          if [ -n "$pages" ]; then
+            wait_run "$pages" "the Pages deployment of gh-pages ${sha:0:10}"
+          else
+            echo "::warning::no Pages deployment found for gh-pages ${sha:0:10} in $BASE_REPO; the report may read the page before it"
+          fi
+
+  relay:
+    # a release run's ref is its tag, which the github-pages environment does not deploy from
+    needs: base
+    if: ${{ !cancelled() && github.event_name == 'release' && github.server_url == 'https://github.com' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Run the report on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.event.repository.default_branch }}
+        run: gh workflow run lite-upstream-versions.yml -R "$GITHUB_REPOSITORY" --ref "$REF" -f base_refreshed=true
+
   versions:
-    if: github.server_url == 'https://github.com'
+    # also when the refresh failed: the report then reads the comparison as it is
+    needs: base
+    if: ${{ !cancelled() && github.event_name != 'release' && github.server_url == 'https://github.com' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
