@@ -49,9 +49,10 @@ pb_case() {
   [ -e "$d/target/etc/init.d/S50crond" ] && bad "post-build.sh ($1): buildroot's S50crond stays" || ok "post-build.sh ($1): buildroot's S50crond removed as before"
 }
 pb_case lite '# BR2_PACKAGE_BLUEZ5_UTILS is not set\n# BR2_PACKAGE_XINETD is not set\n# BR2_PACKAGE_NUT is not set\nBR2_PACKAGE_LIGHTTPD=y\n' ""
-pb_case classic 'BR2_PACKAGE_BLUEZ5_UTILS=y\nBR2_PACKAGE_XINETD=y\nBR2_PACKAGE_SER2NET=y\nBR2_PACKAGE_NUT=y\nBR2_PACKAGE_NETSNMP=y\nBR2_PACKAGE_OPENVPN=y\n' "$PKG_SCRIPTS"
-pb_case mixed 'BR2_PACKAGE_OPENVPN=y\nBR2_PACKAGE_NUT_DRIVERS=y\n# BR2_PACKAGE_NUT is not set\nBR2_PACKAGE_XINETD=y\n' "S49xinetd S60openvpn"
-# every symbol the loop names is a real one the product configs know
+pb_case classic 'BR2_PACKAGE_BLUEZ5_UTILS=y\nBR2_PACKAGE_XINETD=y\nBR2_PACKAGE_SER2NET=y\nBR2_PACKAGE_NUT=y\nBR2_PACKAGE_NETSNMP=y\nBR2_PACKAGE_NETSNMP_SERVER=y\nBR2_PACKAGE_OPENVPN=y\n' "$PKG_SCRIPTS"
+pb_case mixed 'BR2_PACKAGE_OPENVPN=y\nBR2_PACKAGE_NUT_DRIVERS=y\n# BR2_PACKAGE_NUT is not set\nBR2_PACKAGE_XINETD=y\nBR2_PACKAGE_NETSNMP=y\n# BR2_PACKAGE_NETSNMP_SERVER is not set\n' "S49xinetd S60openvpn"
+# every package the loop names is one the product configs know (S59snmpd follows netsnmp's
+# server sub-option, BR2_PACKAGE_NETSNMP_SERVER, which buildroot sets by default with the package)
 for sym in BR2_PACKAGE_BLUEZ5_UTILS BR2_PACKAGE_XINETD BR2_PACKAGE_SER2NET BR2_PACKAGE_NUT BR2_PACKAGE_NETSNMP BR2_PACKAGE_OPENVPN; do
   grep -rqE "^(# )?$sym(=| )" "$EXT/Buildroot.config" "$EXT/configs/" && ok "post-build.sh: $sym is a symbol the configs know" || bad "post-build.sh: $sym appears in no config"
 done

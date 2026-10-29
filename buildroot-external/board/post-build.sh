@@ -21,19 +21,18 @@ echo "PLATFORM=${PRODUCT_PLATFORM}" >>"${TARGET_DIR}/VERSION"
 rm -f "${TARGET_DIR}/etc/init.d/S50crond"
 rm -f "${TARGET_DIR}/etc/init.d/S35iptables"
 
-# remove the init scripts of optional packages this platform does not build: the overlays
-# carry one for every daemon a platform may select, and without its daemon a script is dead
-# weight in /etc/init.d (each exits at its "test -x", but is still listed and started)
+# remove the init scripts of optional packages the configuration does not
+# select: the overlays ship one for every daemon a product may build
 for initscript_pkg in \
-	S40bluetoothd:BR2_PACKAGE_BLUEZ5_UTILS \
-	S49xinetd:BR2_PACKAGE_XINETD \
-	S50ser2net:BR2_PACKAGE_SER2NET \
-	S51nut:BR2_PACKAGE_NUT \
-	S59snmpd:BR2_PACKAGE_NETSNMP \
-	S60openvpn:BR2_PACKAGE_OPENVPN; do
-	if ! grep -q "^${initscript_pkg#*:}=y$" "${BR2_CONFIG}"; then
-		rm -f "${TARGET_DIR}/etc/init.d/${initscript_pkg%%:*}"
-	fi
+  S40bluetoothd:BR2_PACKAGE_BLUEZ5_UTILS \
+  S49xinetd:BR2_PACKAGE_XINETD \
+  S50ser2net:BR2_PACKAGE_SER2NET \
+  S51nut:BR2_PACKAGE_NUT \
+  S59snmpd:BR2_PACKAGE_NETSNMP_SERVER \
+  S60openvpn:BR2_PACKAGE_OPENVPN; do
+  if ! grep -q "^${initscript_pkg#*:}=y$" "${BR2_CONFIG}"; then
+    rm -f "${TARGET_DIR}/etc/init.d/${initscript_pkg%%:*}"
+  fi
 done
 
 # link VERSION in /boot on rootfs
