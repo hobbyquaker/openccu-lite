@@ -16,7 +16,7 @@
 #
 ################################################################################
 
-GENERIC_RAW_UART_VERSION = v1.1.0-dev.2
+GENERIC_RAW_UART_VERSION = v1.1.0-dev.4
 GENERIC_RAW_UART_SITE = $(call github,hobbyquaker,piVCCU,$(GENERIC_RAW_UART_VERSION))
 GENERIC_RAW_UART_LICENSE = GPL2
 GENERIC_RAW_UART_LICENSE_FILES = LICENSE
