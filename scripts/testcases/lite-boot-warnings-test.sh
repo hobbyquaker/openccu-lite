@@ -88,6 +88,17 @@ out=$(sh "$CHECK" "$ALLOW" "$T/other" 2>&1); rc=$?
 [ "$rc" = 1 ] && ok "other error texts of the same lines still fail" || bad "other texts: rc $rc: $out"
 case "$out" in *"7 warning(s), 7 not"*) ok "all seven other texts named, the helper's i/o timeout among them (occulited B-71)";; *) bad "other count: $out";; esac
 
+# B-318: TCG under a loaded runner stretches the kernel's timer once; the number varies, the line is the VM's
+cat > "$T/hrtimer" <<'EOF'
+  | Oct 13 10:02:11 localhost kernel: hrtimer: interrupt took 4529170 ns
+  | Oct 13 10:02:11 localhost kernel: hrtimer: interrupt took 81904 ns
+EOF
+out=$(sh "$CHECK" "$ALLOW" "$T/hrtimer" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "the allowlist takes the QEMU boot's hrtimer line (B-318)" || bad "hrtimer: rc $rc: $out"
+printf '  | Oct 13 10:02:11 localhost kernel: hrtimer: interrupt took too long\n' > "$T/hrtimer2"
+sh "$CHECK" "$ALLOW" "$T/hrtimer2" >/dev/null 2>&1; rc=$?
+[ "$rc" = 1 ] && ok "another hrtimer text still fails" || bad "another hrtimer text: rc $rc"
+
 # the causes task 345 removed, which the allowlist leaves out: each fix is still in place
 EXT="$HERE/buildroot-external"
 PBS="$EXT/board/lite/post-build-systemd.sh"

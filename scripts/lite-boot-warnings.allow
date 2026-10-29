@@ -16,6 +16,7 @@
 ^\(udev-worker\): cpu[0-9]+: Process '/bin/sh -c '\[ -e /dev/xen/xenbus \] && \[ -e /sys/devices/system/cpu/cpu[0-9]+/online \] && echo 1 > /sys/devices/system/cpu/cpu[0-9]+/online'' failed with exit code 1\.$ ## a Xen CPU hotplug rule; its test is false outside Xen and udev reports the false test as a failure
 ^systemd: systemd-udevd\.service: unit configures an IP firewall, but the local system does not support BPF/cgroup firewalling\.$ ## udevd's upstream IPAddressDeny=; the kernel has no cgroup BPF firewall, and udevd needs none
 ^systemd: systemd-udevd\.service: \(This warning is only shown for the first unit using IP firewalling\.\)$ ## the line above's second half
+^kernel: hrtimer: interrupt took [0-9]+ ns$ ## TCG emulates the timer interrupt in software: on a loaded runner one takes long enough that the kernel stretches its timer and says so once (B-318); this list is the QEMU boot's, real hardware is not judged by it
 
 # --- the kernel and the boot (every image) ---
 ^kernel: check access for rdinit=/init failed: -2, ignoring$ ## no initramfs; the kernel looks for one first

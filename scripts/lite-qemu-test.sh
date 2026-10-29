@@ -28,7 +28,13 @@ IMG=${1:?disk image}
 PORT=${2:-8090}
 say() { printf '%s %s\n' "$(date +%T)" "$*"; }
 FAILED=0
-fail() { say "FAIL: $*"; FAILED=1; }
+fail() { say "FAIL: $*"; FAILED=1; ENV_ONLY=0; }
+# task 376: a failure that is GitHub's anonymous quota on this host's address, not the image - said
+# apart, and the run's exit is 3 instead of 1 when nothing else failed
+QUOTA_MET=0
+ENV_ONLY=1
+envfail() { say "FAIL (environment: GitHub's quota, not the image): $*"; FAILED=1; QUOTA_MET=1; }
+is_quota() { case "$1" in *"rate limit"*) return 0;; esac; return 1; }  # occulited's "GitHub rate limit", the API's "API rate limit exceeded"
 
 say "image $IMG ($(du -h "$IMG" | cut -f1))"
 # The rootfs without mounting: buildroot leaves the filesystem that went into the image next to
@@ -489,24 +495,48 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
     # "unknown" to the install, so check the catalogue first and say why an entry is missing
     curl -s --max-time 30 -H "$AUTH" "$BASE/api/system/v1/catalog" >"$WORK/catalog.json"
     for id in $ADDONS; do
-      grep -q "\"id\":\"$id\"" "$WORK/catalog.json" || fail "$id is not in the catalogue after the refresh; the entries' errors: $(grep -o '"error":"[^"]*"' "$WORK/catalog.json" | sort -u | tr '\n' ' ' | cut -c1-600)"
+      grep -q "\"id\":\"$id\"" "$WORK/catalog.json" && continue
+      E=$(grep -o '"error":"[^"]*"' "$WORK/catalog.json" | sort -u | tr '\n' ' ' | cut -c1-600)
+      if is_quota "$E"; then envfail "$id is not in the catalogue after the refresh: $E"; else fail "$id is not in the catalogue after the refresh; the entries' errors: $E"; fi
     done
     for id in $ADDONS; do
       [ "$FAILED" = 0 ] || break
       qemu_check "before the install of $id"
-      say "addons: installing $id from the catalogue"
-      T0=$(date +%s)
-      code=$(curl -s -o "$WORK/install.json" -w '%{http_code}' --max-time 30 -X POST -H "$AUTH" -H 'Content-Type: application/json' -d '{}' "$BASE/api/system/v1/catalog/$id/install")
-      [ "$code" = 202 ] || { fail "install of $id not accepted ($code): $(cat "$WORK/install.json")"; continue; }
-      P=""
-      for _ in $(seq 1 300); do
-        qemu_check "during the install of $id"
-        P=$(curl -s --max-time 10 -H "$AUTH" "$BASE/api/system/v1/catalog/progress")
-        case "$P" in *'"phase":"done"'*|*'"phase":"failed"'*) break;; esac
-        sleep 5
+      # task 376: an install GitHub's quota refuses ("GitHub rate limit, try again in N min") waits
+      # for the reset (github_budget, the same cap) and is tried once more; refused again, or with
+      # the reset too far, it is the environment's failure, not the image's
+      try=1
+      while :; do
+        say "addons: installing $id from the catalogue${try#1}"
+        T0=$(date +%s)
+        code=$(curl -s -o "$WORK/install.json" -w '%{http_code}' --max-time 30 -X POST -H "$AUTH" -H 'Content-Type: application/json' -d '{}' "$BASE/api/system/v1/catalog/$id/install")
+        P=""
+        if [ "$code" = 202 ]; then
+          for _ in $(seq 1 300); do
+            qemu_check "during the install of $id"
+            P=$(curl -s --max-time 10 -H "$AUTH" "$BASE/api/system/v1/catalog/progress")
+            case "$P" in *'"phase":"done"'*|*'"phase":"failed"'*) break;; esac
+            sleep 5
+          done
+          say "addons: $id after $(( $(date +%s) - T0 )) s: $(printf '%s' "$P" | sed 's/"result":{.*//' | cut -c1-300)"
+          case "$P" in *'"phase":"done"'*) break;; esac
+          WHY=$(printf '%s' "$P" | cut -c1-400)
+        else
+          WHY="not accepted ($code): $(cat "$WORK/install.json")"
+        fi
+        if ! is_quota "$WHY"; then break; fi
+        QUOTA_MET=1
+        if [ "$try" = 1 ]; then
+          R=$(github_budget "${LITE_QEMU_GITHUB_NEED:-30}" "${LITE_QEMU_GITHUB_WAIT:-3900}") && { say "addons: GitHub's quota refused $id; $R - once more"; try=2; continue; }
+          say "addons: GitHub's quota refused $id: $R"
+        fi
+        break
       done
-      say "addons: $id after $(( $(date +%s) - T0 )) s: $(printf '%s' "$P" | sed 's/"result":{.*//' | cut -c1-300)"
-      case "$P" in *'"phase":"done"'*) ;; *) fail "$id did not install: $(printf '%s' "$P" | cut -c1-400)"; continue;; esac
+      if [ "$code" != 202 ]; then
+        if is_quota "$WHY"; then envfail "install of $id $WHY"; else fail "install of $id $WHY"; fi
+        continue
+      fi
+      case "$P" in *'"phase":"done"'*) ;; *) if is_quota "$WHY"; then envfail "$id did not install: $WHY"; else fail "$id did not install: $WHY"; fi; continue;; esac
       A=$(curl -s --max-time 30 -H "$AUTH" "$BASE/api/system/v1/addons")
       case "$A" in *"\"id\":\"$id\""*) ;; *) fail "$id is not in the addon list after the install";; esac
       # the unit may still be activating (a Node.js addon on an emulated CPU): wait for it to settle, up to 60 s
@@ -575,8 +605,14 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   for b in -1 0; do
     say "guest (boot 2): the warnings of journal boot $b"
     guest "journalctl -b $b -p warning -q --no-pager -o short" >"$WORK/warnings$b.txt"
-    if ! sh "$(dirname "$0")/lite-boot-warnings.sh" "${LITE_BOOT_WARNINGS_ALLOW:-$(dirname "$0")/lite-boot-warnings.allow}" "$WORK/warnings$b.txt"; then
-      if [ "${LITE_BOOT_WARNINGS:-}" = report ]; then say "(report only: LITE_BOOT_WARNINGS=report)"; else fail "journal boot $b: a warning that is not in lite-boot-warnings.allow (above)"; fi
+    if ! sh "$(dirname "$0")/lite-boot-warnings.sh" "${LITE_BOOT_WARNINGS_ALLOW:-$(dirname "$0")/lite-boot-warnings.allow}" "$WORK/warnings$b.txt" >"$WORK/warncheck$b.txt"; then
+      cat "$WORK/warncheck$b.txt"
+      if [ "${LITE_BOOT_WARNINGS:-}" = report ]; then say "(report only: LITE_BOOT_WARNINGS=report)"
+      # task 376: when the run met GitHub's quota, occulited's lines about it are the environment's
+      elif [ "$QUOTA_MET" = 1 ] && ! grep '^new warning: ' "$WORK/warncheck$b.txt" | grep -qv 'rate limit'; then envfail "journal boot $b: only occulited's lines about GitHub's quota are new (above)"
+      else fail "journal boot $b: a warning that is not in lite-boot-warnings.allow (above)"; fi
+    else
+      cat "$WORK/warncheck$b.txt"
     fi
   done
   # the seeded gateway is a documentation address nobody answers: the firmware update skips it with
@@ -620,4 +656,6 @@ qemu_stop
 oom_report
 # the cleanup trap removes the work dir; on a failure it keeps the serial log next to it
 if [ "$FAILED" = 0 ]; then say "OK"; exit 0; fi
+# task 376: only GitHub's quota failed - the environment, not the image: run again after the reset
+if [ "$ENV_ONLY" = 1 ] && [ "$QUOTA_MET" = 1 ]; then say "FAIL: only GitHub's quota (the environment), not the image - run again after the reset (exit 3)"; exit 3; fi
 exit 1

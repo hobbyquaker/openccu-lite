@@ -20,7 +20,15 @@ ok() { echo "ok   $1"; }
 bad() { echo "FAIL $1"; fails=$((fails+1)); }
 
 awk '/^github_budget\(\) \{$/ {p=1} p {print} p && /^\}$/ {p=0}' "$S" >"$T/fn.sh"
-grep -q '^github_budget() {$' "$T/fn.sh" && ok "github_budget found in lite-qemu-test.sh" || { bad "github_budget() not found in lite-qemu-test.sh"; echo "failures: $fails"; exit 1; }
+grep -q '^github_budget() {$' "$T/fn.sh" && ok "github_budget found in lite-qemu-test.sh" || { bad "github_budget() not found in lite-qemu-test.sh"; # task 376: occulited's refusal by GitHub's quota is the environment's failure, any other the image's
+grep -q '^is_quota() { case "$1" in \*"rate limit"\*' "$S" && ok "is_quota found in lite-qemu-test.sh" || bad "is_quota() not found in lite-qemu-test.sh"
+eval "$(grep '^is_quota() {' "$S")"
+is_quota '{"phase":"failed","error":"GitHub rate limit, try again in 42 min: the release list of rdmtc/RedMatic cannot be read now"}' && ok "the install's quota refusal is the environment" || bad "quota refusal not recognised"
+is_quota '{"phase":"failed","error":"checksum mismatch"}' && bad "an image failure taken for the quota" || ok "another install failure is the image's"
+grep -q 'exit 3; fi' "$S" && ok "only the quota failed: exit 3" || bad "no exit 3 for a quota-only failure"
+grep -q 'once more"; try=2; continue' "$S" && ok "a quota refusal is tried once more after the reset" || bad "no retry after the reset"
+
+echo "failures: $fails"; exit 1; }
 
 mkdir -p "$T/bin"
 cat >"$T/bin/curl" <<EOS
@@ -73,7 +81,7 @@ run 0 0 "12 3000"
 # the e2e asks before its catalogue refresh, with room for the refresh and the installs
 grep -q 'R=$(github_budget "${LITE_QEMU_GITHUB_NEED:-[2-9][0-9]}" "${LITE_QEMU_GITHUB_WAIT:-[0-9]*}") || fail' "$S" \
   && ok "the addon e2e checks the budget first (20 calls or more)" || bad "the addon e2e does not call github_budget with a need of 20 or more"
-awk '/github_budget "\$\{LITE_QEMU_GITHUB_NEED/ {b=NR} /catalog\/refresh/ && !r {r=NR} END {exit !(b && r && b < r)}' "$S" \
+awk '/github_budget "\$\{LITE_QEMU_GITHUB_NEED/ && !b {b=NR} /catalog\/refresh/ && !r {r=NR} END {exit !(b && r && b < r)}' "$S" \
   && ok "before the catalogue refresh" || bad "github_budget is not called before the catalogue refresh"
 
 echo "failures: $fails"
