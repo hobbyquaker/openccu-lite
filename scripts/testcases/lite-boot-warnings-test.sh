@@ -117,5 +117,29 @@ has "$U/lighttpd.service" 'LogFilterPatterns=~^\(\.\./src/gw_backend\.c\.[0-9]+\
 # wired into the boot test
 grep -q 'lite-boot-warnings.sh' "$HERE/scripts/lite-qemu-test.sh" && ok "lite-qemu-test.sh runs the check" || bad "lite-qemu-test.sh does not run lite-boot-warnings.sh"
 
+# B-334: boot 2's hmipserver lines when rfd resets its request (dev.4 run 2, under runner load):
+# the reset, the retry and their headers pass; another exception, another target or a header
+# with another method do not
+cat > "$T/b334" <<'EOF'
+  | Oct 29 02:29:55 openccu-lite-3456 hmipserver[886]: de.eq3.cbcs.util.EQ3LoggerOutputStream [Timer-1] Oct 29, 2026 2:29:55 AM org.apache.http.impl.client.DefaultHttpClient tryExecute
+  | Oct 29 02:29:55 openccu-lite-3456 hmipserver[886]: de.eq3.cbcs.util.EQ3LoggerOutputStream [Timer-1] INFO: I/O exception (java.net.SocketException) caught when processing request to {}->http://127.0.0.1:32001: Connection reset by peer
+  | Oct 29 02:29:55 openccu-lite-3456 hmipserver[886]: de.eq3.cbcs.util.EQ3LoggerOutputStream [Timer-1] Oct 29, 2026 2:29:55 AM org.apache.http.impl.client.DefaultHttpClient tryExecute
+  | Oct 29 02:29:55 openccu-lite-3456 hmipserver[886]: de.eq3.cbcs.util.EQ3LoggerOutputStream [Timer-1] INFO: Retrying request to {}->http://127.0.0.1:32001
+  | Oct 29 12:01:02 openccu-lite-3456 hmipserver[886]: de.eq3.cbcs.util.EQ3LoggerOutputStream [Timer-2] Oct 9, 2026 12:01:02 PM org.apache.http.impl.client.DefaultHttpClient tryExecute
+EOF
+out=$(sh "$CHECK" "$ALLOW" "$T/b334" 2>&1); rc=$?
+[ "$rc" = 0 ] && ok "boot 2's hmipserver reset and retry against rfd pass (B-334)" || bad "B-334 lines: rc $rc: $out"
+case "$out" in *"5 warning(s), 0 not"*) ok "all five counted";; *) bad "B-334 count: $out";; esac
+cat > "$T/b334other" <<'EOF'
+  | Oct 29 02:29:55 openccu-lite-3456 hmipserver[886]: de.eq3.cbcs.util.EQ3LoggerOutputStream [Timer-1] INFO: I/O exception (java.net.SocketException) caught when processing request to {}->http://127.0.0.1:32001: Broken pipe
+  | Oct 29 02:29:55 openccu-lite-3456 hmipserver[886]: de.eq3.cbcs.util.EQ3LoggerOutputStream [Timer-1] INFO: I/O exception (java.net.SocketException) caught when processing request to {}->http://127.0.0.1:2010: Connection reset by peer
+  | Oct 29 02:29:55 openccu-lite-3456 hmipserver[886]: de.eq3.cbcs.util.EQ3LoggerOutputStream [Timer-1] INFO: Retrying request to {}->http://192.0.2.1:80
+  | Oct 29 02:29:55 openccu-lite-3456 hmipserver[886]: de.eq3.cbcs.util.EQ3LoggerOutputStream [Timer-1] Oct 29, 2026 2:29:55 AM org.apache.http.impl.client.DefaultHttpClient execute
+  | Oct 29 02:29:55 openccu-lite-3456 hmipserver[886]: de.eq3.cbcs.util.EQ3LoggerOutputStream [Timer-1] SEVERE: something else
+EOF
+out=$(sh "$CHECK" "$ALLOW" "$T/b334other" 2>&1); rc=$?
+[ "$rc" = 1 ] && ok "other hmipserver HTTP client lines still fail" || bad "B-334 other lines: rc $rc: $out"
+case "$out" in *"5 warning(s), 5 not"*) ok "all five of them new";; *) bad "B-334 other count: $out";; esac
+
 [ "$fails" = 0 ] && { echo "lite-boot-warnings-test: all checks passed"; exit 0; }
 echo "lite-boot-warnings-test: $fails failed"; exit 1

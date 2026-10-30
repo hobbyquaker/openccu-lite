@@ -289,6 +289,29 @@ settle_snippet() {
   printf 'u=%s; n=0; s=$(systemctl is-active $u); while [ "$s" = activating ] && [ $n -lt %d ]; do sleep 2; n=$((n+2)); s=$(systemctl is-active $u); done; echo "$s after ${n}s, result $(systemctl show -p Result --value $u)"' "$1" "$2"
 }
 
+# kill_restart_snippet <unit> <seconds>: the guest-side one-liner that kills <unit>'s main process
+# with SIGKILL and waits, up to <seconds>, first for systemd to count the restart (NRestarts goes
+# up) and then for the unit to be active again, and prints "restarted=yes" only when it is active
+# on a new main PID with one more restart - else "restarted=no" and what it saw. B-334: one fixed
+# 8 s sleep met lighttpd still "activating" (NRestarts already 1) twice while Gitea CI loaded the
+# runner (dev.4, load 14-19); a quiet runner had it back within 8 s. A daemon that does not come
+# back still fails, at the bound. lite-qemu-settle-test.sh runs it against a stub systemctl.
+kill_restart_snippet() {
+  printf 'u=%s; P=$(systemctl show -p MainPID --value $u); N=$(systemctl show -p NRestarts --value $u); [ "${P:-0}" != 0 ] && kill -9 "$P"; n=0; while [ "$(systemctl show -p NRestarts --value $u)" = "$N" ] && [ $n -lt %d ]; do sleep 1; n=$((n+1)); done; s=$(systemctl is-active $u); while [ "$s" != active ] && [ "$s" != failed ] && [ $n -lt %d ]; do sleep 1; n=$((n+1)); s=$(systemctl is-active $u); done; M=$(systemctl show -p NRestarts --value $u); Q=$(systemctl show -p MainPID --value $u); r=no; [ "$s" = active ] && [ "$M" != "$N" ] && [ "${Q:-0}" != 0 ] && [ "$Q" != "$P" ] && r=yes; echo "restarted=$r: $s after ${n}s, restarts $N -> $M, main pid $P -> $Q"' "$1" "$2" "$2"
+}
+
+# initscript_restart_snippet <unit> <init script> <daemon process> <seconds>: the guest-side
+# one-liner for a hand-invoked "<init script> restart", which the wrapper turns into
+# "systemctl restart --no-block <unit>" (B-3). It waits, up to <seconds>, for the unit to be active
+# before the restart, then for the restart to be over: the unit active on a new main PID with
+# exactly one <daemon process>, and prints "settled=yes" only then. B-334: the old wait took the
+# unit's state right after the --no-block call, which was still the old daemon's "active" - it
+# said "settled after 0s", and the next check met the restart's "activating". B-317's 30 s bounds
+# were too short under a loaded runner. lite-qemu-settle-test.sh runs it against stubs.
+initscript_restart_snippet() {
+  printf 'u=%s; i=0; while [ $i -lt %d ] && [ "$(systemctl is-active $u)" != active ]; do sleep 1; i=$((i+1)); done; echo "active before the restart after ${i}s: $(systemctl show -p ActiveState -p SubState -p NRestarts --value $u | tr "\\n" " ")"; P=$(systemctl show -p MainPID --value $u); %s restart; i=0; while [ $i -lt %d ]; do s=$(systemctl is-active $u); Q=$(systemctl show -p MainPID --value $u); a=$(pgrep -x %s | wc -l); [ "$s" = active ] && [ "${Q:-0}" != 0 ] && [ "$Q" != "$P" ] && [ "$a" = 1 ] && break; sleep 1; i=$((i+1)); done; r=no; [ "$s" = active ] && [ "${Q:-0}" != 0 ] && [ "$Q" != "$P" ] && [ "$a" = 1 ] && r=yes; echo "settled=$r: $s, main pid $P -> $Q, $a %s, after ${i}s"' "$1" "$4" "$2" "$4" "$3" "$3"
+}
+
 # page_wait <url> <cookie> <seconds>: the host-side wait for an addon's page behind the gate. An
 # addon's unit is active once its rc.d start has returned (Type=oneshot, RemainAfterExit), while a
 # Node.js server behind lighttpd's proxy listens some seconds later, and the proxy answers 503
@@ -435,15 +458,21 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   R=$(guest 'for u in lighttpd sshd chrony rfd hs485d hmipserver multimacd crond; do systemctl show -p RemainAfterExit --value $u.service; done | grep -c yes'); case "$R" in *'| 0'*) ;; *) fail "a daemon unit still has RemainAfterExit=yes (B-3)";; esac
   # every other check here fails closed; this one used to pass on a timeout or an empty answer
   R=$(guest 'systemctl show -p MainPID --value lighttpd.service'); case "$R" in *'| '[1-9]*) ;; *) fail "lighttpd.service has no main PID, or the guest did not answer (B-3): $R";; esac
-  say "guest: killing lighttpd - the unit must notice and restart it"; guest 'P=$(systemctl show -p MainPID --value lighttpd.service); kill -9 $P; sleep 8; systemctl show -p MainPID -p NRestarts -p ActiveState --value lighttpd.service | tr "\n" " "; echo'
-  R=$(guest 'sleep 4; systemctl is-active lighttpd.service'); case "$R" in *'| active'*) ;; *) fail "lighttpd.service did not come back after its daemon was killed (B-3)";; esac
+  # B-334: no fixed sleep - the restart is waited for (up to 90 s under TCG on a loaded runner)
+  say "guest: killing lighttpd - the unit must notice and restart it"
+  R=$(guest "$(kill_restart_snippet lighttpd.service 90)"); printf '%s\n' "$R"
+  case "$R" in *'| restarted=yes'*) ;; *) fail "lighttpd.service did not come back after its daemon was killed (B-3)";; esac
   wait_http "after killing lighttpd"
   # B-3: an init script called by hand goes to systemctl, not around it
   # B-317: no fixed sleeps. Under runner load the restart came while lighttpd was still in its
   # restart backoff from the kill above, and 6 s were not enough for it to come back: the restart
-  # waits for the unit to be settled and active, and the checks wait (up to 30 s) for it to be
-  # active again with exactly one lighttpd-angel. Each wait says how long it took.
-  say "guest: the init-script wrapper"; guest 'ls -l /etc/init.d/S50lighttpd /etc/init.d/S50lighttpd.script; i=0; while [ $i -lt 30 ] && [ "$(systemctl is-active lighttpd.service)" != active ]; do sleep 1; i=$((i+1)); done; echo "active before the restart after ${i}s: $(systemctl show -p ActiveState -p SubState -p NRestarts --value lighttpd.service | tr "\n" " ")"; P=$(systemctl show -p MainPID --value lighttpd.service); /etc/init.d/S50lighttpd restart; i=0; while [ $i -lt 30 ]; do [ "$(systemctl is-active lighttpd.service)" = active ] && [ "$(pgrep -x lighttpd-angel | wc -l)" = 1 ] && break; sleep 1; i=$((i+1)); done; Q=$(systemctl show -p MainPID --value lighttpd.service); echo "main pid $P -> $Q, settled after ${i}s"; systemctl show -p ControlGroup --value lighttpd.service; pgrep -x lighttpd-angel | wc -l'
+  # waits for the unit to be settled and active, and the checks wait for it to be active again on
+  # a new main PID with exactly one lighttpd-angel - up to 90 s each since B-334, whose loaded runs
+  # outlasted 30 s (initscript_restart_snippet). Each wait says how long it took.
+  say "guest: the init-script wrapper"; guest 'ls -l /etc/init.d/S50lighttpd /etc/init.d/S50lighttpd.script'
+  R=$(guest "$(initscript_restart_snippet lighttpd.service /etc/init.d/S50lighttpd lighttpd-angel 90)"); printf '%s\n' "$R"
+  case "$R" in *'| settled=yes'*) ;; *) fail "a hand-invoked S50lighttpd restart did not settle: lighttpd.service active on a new main PID with one lighttpd-angel (B-3, B-334)";; esac
+  guest 'systemctl show -p ControlGroup --value lighttpd.service; pgrep -x lighttpd-angel | wc -l'
   R=$(guest 'pgrep -x lighttpd-angel | wc -l'); case "$R" in *'| 1'*) ;; *) fail "a hand-invoked S50lighttpd restart left the daemon outside its unit (B-3)";; esac
   R=$(guest 'systemctl is-active lighttpd.service'); case "$R" in *'| active'*) ;; *) fail "lighttpd.service not active after a hand-invoked restart";; esac
   # B-5: the end-of-boot hint
