@@ -73,6 +73,9 @@ build-$(PRODUCT)/show-info.json: build-$(PRODUCT)/.config | buildroot-$(BUILDROO
 build: | buildroot-$(BUILDROOT_VERSION) build-$(PRODUCT)/.config $(if $(filter true,$(FAKE_BUILD)),,build-$(PRODUCT)/legal-info build-$(PRODUCT)/show-info.json)
 	@echo "[build: $(PRODUCT)]"
 ifneq ($(FAKE_BUILD),true)
+	# openccu-lite (task 332): a kernel patch path that applies nothing (the recovery's dead
+	# board/<board>/kernel-patches, kept as OpenCCU has it) is a warning in the build log, never a failure
+	sh scripts/lite-kernel-patch-check.sh $(shell pwd)/build-$(PRODUCT)/.config $(shell pwd)/$(BUILDROOT_EXTERNAL) || true
 	# openccu-lite (task 325): host-uboot-tools makes images/boot.scr from board/<board>/boot.cmd in
 	# its build step, which a warm tree never reruns - a changed boot.cmd needs the package rebuilt
 	rc=0; sh scripts/lite-bootscr-check.sh $(shell pwd)/build-$(PRODUCT) $(shell pwd)/$(BUILDROOT_EXTERNAL) || rc=$$?; \
