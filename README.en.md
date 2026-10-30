@@ -59,9 +59,22 @@ possible.
 - [RedMatic](https://github.com/rdmtc/RedMatic) (automation with Node-RED, MQTT, Home Assistant, HomeKit, Matter and
   more)
 - [ccu-addon-mosquitto](https://github.com/homematic-community/ccu-addon-mosquitto) (MQTT broker)
+- [hm2mqtt.js](https://github.com/hobbyquaker/hm2mqtt.js) (an interface between Homematic and MQTT)
 - [ccu-addon-battery](https://github.com/hobbyquaker/ccu-addon-battery) (detecting battery changes, battery statistics)
 - [ccu-addon-longpressdim](https://github.com/hobbyquaker/ccu-addon-longpressdim) (dimming with a long key press across
   interface boundaries)
+
+### openccu-lite only
+
+These addons use openccu-lite's interfaces and do not run on an (Open)CCU. They are not in the catalogue yet; install
+the package from their releases.
+
+- [lite-addon-forwarder](https://github.com/hobbyquaker/lite-addon-forwarder) (forwarding events and system data to
+  InfluxDB, webhooks and other targets)
+- [lite-addon-snmp](https://github.com/hobbyquaker/lite-addon-snmp) (an SNMP agent with data from the Homematic devices
+  and interfaces, traps)
+- [lite-addon-nut](https://github.com/hobbyquaker/lite-addon-nut) (a NUT client: shuts the system down in time when
+  the UPS reports a power failure)
 
 More addons are in the catalogue. How addons work on openccu-lite, and how an existing addon can be adapted, is
 described in [Addons](docs/addons.md).

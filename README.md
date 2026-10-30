@@ -59,9 +59,22 @@ schlankes Funk-Gateway.
   Bedienoberfläche mit Charts)
 - [RedMatic](https://github.com/rdmtc/RedMatic) (Automation mit Node-RED, MQTT, Home Assistant, HomeKit, Matter und mehr)
 - [ccu-addon-mosquitto](https://github.com/homematic-community/ccu-addon-mosquitto) (MQTT-Broker)
+- [hm2mqtt.js](https://github.com/hobbyquaker/hm2mqtt.js) (Schnittstelle zwischen Homematic und MQTT)
 - [ccu-addon-battery](https://github.com/hobbyquaker/ccu-addon-battery) (Batteriewechsel erkennen, Statistiken zu Batterien)
 - [ccu-addon-longpressdim](https://github.com/hobbyquaker/ccu-addon-longpressdim) (Dimmen mit langem Tastendruck über
   Schnittstellengrenzen hinweg)
+
+### Nur für openccu-lite
+
+Diese Addons nutzen die Schnittstellen von openccu-lite und laufen nicht auf einer (Open)CCU. Sie stehen noch nicht im
+Katalog; installiert wird das Paket aus dem jeweiligen Release.
+
+- [lite-addon-forwarder](https://github.com/hobbyquaker/lite-addon-forwarder) (Events und Systemdaten an InfluxDB,
+  Webhooks und weitere Ziele weiterleiten)
+- [lite-addon-snmp](https://github.com/hobbyquaker/lite-addon-snmp) (SNMP-Agent mit Daten der Homematic-Geräte und
+  -Schnittstellen, Traps)
+- [lite-addon-nut](https://github.com/hobbyquaker/lite-addon-nut) (NUT-Client: fährt das System bei Stromausfall
+  rechtzeitig herunter, wenn die USV es meldet)
 
 Weitere Addons stehen im Katalog. Wie Addons auf openccu-lite funktionieren und wie sich ein bestehendes Addon anpassen lässt, steht unter [Addons](docs/addons.md).
 

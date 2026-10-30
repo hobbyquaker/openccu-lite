@@ -35,7 +35,7 @@ The CA has to see that the name is yours. Two ways:
 - **DNS-01**: occulited puts a `_acme-challenge` TXT record into your zone through the
   provider's API, the CA reads it. Nothing has to reach the system — **this is the one for a system
   behind NAT**, and the only one for a wildcard. The providers built in: **Cloudflare,
-  Hetzner DNS, netcup, DuckDNS** and **exec** (a script of your own, for every other provider —
+  Hetzner DNS, netcup, DuckDNS, OVHcloud** and **exec** (a script of your own, for every other provider —
   lego's exec contract, so a script written for lego works as it is). Each has its fields on the
   page; the secrets are stored on the system and never shown again — the page says "set" and an
   empty field on save keeps the stored value. deSEC, INWX and RFC 2136 (nsupdate) were in the
@@ -69,6 +69,39 @@ with the error; the old certificate stays in service until the next attempt, twe
 slowly; an issue can take a quarter of an hour. **exec** runs your script as the `occulite`
 user: `program present <domain> <token> <keyAuth>` and `program cleanup …` (or, in mode `RAW`,
 `present <domain> <fqdn> <txt-value>`), the same contract as lego's exec provider.
+
+### OVHcloud
+
+OVH's API is signed with three keys: an **Application Key**, an **Application Secret** and a
+**Consumer Key**. All three come from one form, the *createToken* page of the endpoint your
+account belongs to:
+
+| Endpoint | Accounts | createToken page |
+| --- | --- | --- |
+| `ovh-eu` | OVHcloud Europe | <https://eu.api.ovh.com/createToken/> |
+| `ovh-ca` | OVHcloud Canada | <https://ca.api.ovh.com/createToken/> |
+| `ovh-us` | OVHcloud US | <https://api.us.ovhcloud.com/createToken/> |
+
+Log in, give the token a name and a validity (*Unlimited* unless you want to renew it by hand),
+and add these four rights:
+
+```
+GET    /domain/zone/*
+POST   /domain/zone/*
+PUT    /domain/zone/*
+DELETE /domain/zone/*
+```
+
+`*` may be narrowed to one zone (`/domain/zone/example.org/*`). The page answers with the three
+keys; on System → Certificate choose provider **OVHcloud**, the endpoint, and paste them. The
+Application Secret and the Consumer Key are stored and never shown again, like every provider's
+secrets. The system finds the zone by the SOA of the name (or, when DNS cannot say, among the
+account's zones), creates the TXT record, and asks OVH to apply the zone (a *refresh*, which OVH
+needs before a changed zone is served); afterwards it deletes the record by its id and applies
+the zone again. A wrong key or a token without these rights fails on **Test** with the API's
+own message (`This credential does not exist`, `Invalid signature`, …) and the note that the
+credentials were refused. OVH serves a changed zone after a minute or two: the system waits up
+to ten minutes for the record.
 
 ## Let's Encrypt with HTTP-01 (a system with a public address)
 
