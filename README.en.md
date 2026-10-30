@@ -54,27 +54,31 @@ possible.
 
 ### More addons
 
-- [ccu-addon-mui](https://github.com/firsttris/ccu-addon-mui) (managing devices and direct links, a nice user
-  interface with charts)
-- [RedMatic](https://github.com/rdmtc/RedMatic) (automation with Node-RED, MQTT, Home Assistant, HomeKit, Matter and
-  more)
-- [ccu-addon-mosquitto](https://github.com/homematic-community/ccu-addon-mosquitto) (MQTT broker)
-- [hm2mqtt.js](https://github.com/hobbyquaker/hm2mqtt.js) (an interface between Homematic and MQTT)
 - [ccu-addon-battery](https://github.com/hobbyquaker/ccu-addon-battery) (detecting battery changes, battery statistics)
 - [ccu-addon-longpressdim](https://github.com/hobbyquaker/ccu-addon-longpressdim) (dimming with a long key press across
   interface boundaries)
+- [ccu-addon-mosquitto](https://github.com/homematic-community/ccu-addon-mosquitto) (MQTT broker)
+- [ccu-addon-mui](https://github.com/firsttris/ccu-addon-mui) (managing devices and direct links, a nice user interface
+  with charts)
+- [hm2mqtt.js](https://github.com/hobbyquaker/hm2mqtt.js) (MQTT connection, Home Assistant auto discovery, follows the
+  mqtt-smarthome spec 2.0)
+- [RedMatic](https://github.com/rdmtc/RedMatic) (automation with Node-RED, MQTT, Home Assistant, HomeKit, Matter and
+  more)
 
 ### openccu-lite only
 
-These addons use openccu-lite's interfaces and do not run on an (Open)CCU. They are not in the catalogue yet; install
-the package from their releases.
+These addons use openccu-lite's interfaces and do not run on an (Open)CCU.
 
 - [lite-addon-forwarder](https://github.com/hobbyquaker/lite-addon-forwarder) (forwarding events and system data to
-  InfluxDB, webhooks and other targets)
+  InfluxDB, Prometheus, Elasticsearch/OpenSearch, SQL databases, syslog, Loki and webhooks)
+- [lite-addon-nut](https://github.com/hobbyquaker/lite-addon-nut) (a NUT client: shuts the system down in time when the
+  UPS reports a power failure)
 - [lite-addon-snmp](https://github.com/hobbyquaker/lite-addon-snmp) (an SNMP agent with data from the Homematic devices
   and interfaces, traps)
-- [lite-addon-nut](https://github.com/hobbyquaker/lite-addon-nut) (a NUT client: shuts the system down in time when
-  the UPS reports a power failure)
+- [lite-addon-tailscale](https://github.com/hobbyquaker/lite-addon-tailscale) (remote access to the system over a
+  Tailscale network, also with your own Headscale)
+- [lite-addon-wireguard](https://github.com/hobbyquaker/lite-addon-wireguard) (remote access to the system over a
+  WireGuard VPN)
 
 More addons are in the catalogue. How addons work on openccu-lite, and how an existing addon can be adapted, is
 described in [Addons](docs/addons.md).
