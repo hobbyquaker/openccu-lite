@@ -228,6 +228,35 @@ file is opened by the privilege helper, which passes the descriptor back over it
 (`SCM_RIGHTS`), so an archive a confined addon wrote `0600` as its own user is delivered without
 the unprivileged daemon ever being able to open that path itself.
 
+## The web server through a tunnel: an addon's web ingress
+
+A VPN or tunnel addon that ends the tunnel in its own process - lite-addon-wireguard runs WireGuard in userspace: no
+TUN device, no kernel interface, no capability - forwards its peers' web requests to lighttpd itself. For that the
+addon declares a **web ingress** in its manifest, `"runtime": {"web_ingress": {"ranges": ["10.77.0.0/24"]}}`
+(occulited's `docs/manifest-format.md`), and the system gives it a door of its own: the Unix socket
+`/run/lighttpd-addons/<id>/proxy.sock`, which speaks the HAProxy **PROXY protocol**. The addon sends one PROXY v2
+header with the peer's address in front of each request; lighttpd takes it as the connection's address, and occulited,
+the session gate, the lockout, an API token's address ranges and the journal see the peer (`10.77.0.2`, say) instead
+of the loopback - which this system trusts, and which a tunnel peer must never look like. **Only inside the declared
+ranges:** any other claimed address is a 403 at the socket and again at occulited, so the addon can pass itself off
+neither as the loopback nor as a LAN device. A tunnel address counts as a *local network*, as a LAN address does. The
+socket speaks plain HTTP (a tunnel encrypts; an addon that terminates TLS itself marks the request in the PROXY
+header and lighttpd treats it as HTTPS), and neither the HTTPS redirect nor HSTS apply to it; the gate in front of
+`/addons/`, the security headers and the body limits are the same as on the LAN sockets.
+
+The socket and its lighttpd block are **rendered by occulited from the stored manifest**
+(`/usr/local/etc/config/lighttpd/occulite-ingress-<id>.conf`) at every install, uninstall, start and reload of the web
+server, so they exist exactly while the addon is installed; the web server restarts shortly after an install or
+uninstall that adds or removes a socket. Who may use it: the socket's directory is
+`www-data:addon-<id>`, mode `0750` - the web server's, with the addon's own confinement group - set by occulited when
+it renders the block and before every start of the addon (and by the fork's `lite-lighttpd-addon-socket` as a safety
+net), so the door works whichever came first at boot. **Another addon cannot use it**: its connect fails with
+`EACCES`, and the lighttpd drop-in validation refuses `$SERVER` sockets and `extforward.*` directives, so no drop-in
+opens a door of its own - only the manifest's declaration does, and the validator refuses ranges that hold the
+loopback, link-local or multicast addresses or are wider than /8 (IPv4) or /32 (IPv6). The details and the
+measurements are in [security.md](security.md) (*An addon's web ingress*) and [threat-model.md](threat-model.md)
+(B1b, B5c, R10).
+
 ## Confinement
 
 Gives each addon its own user and a policy. **Confined is the default** (since

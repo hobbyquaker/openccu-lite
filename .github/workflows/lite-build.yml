@@ -75,6 +75,10 @@ jobs:
         # host-uboot-tools' mkimage step) is found before the build - the Makefile rebuilds the
         # package - and stops the lite post-build; mkimage's own output on this runner
         run: sh scripts/testcases/lite-bootscr-check-test.sh
+      - name: A kernel patch path that applies nothing is a build warning
+        # task 332: buildroot skips a BR2_LINUX_KERNEL_PATCH directory that does not exist without a
+        # word (the recovery's board/<board>/kernel-patches); the build names it, never fails on it
+        run: sh scripts/testcases/lite-kernel-patch-check-test.sh
       - name: The Pi 4/5 bootloader update is offered, not flashed
         # task 366: the boards' post-image.sh leaves the rpi-eeprom files out of the boot partition
         # with BR2_PACKAGE_RPI_EEPROM_OFFER (the lite products), the package installs them under
@@ -134,6 +138,7 @@ jobs:
           sh scripts/testcases/occu-addons-generator-test.sh
           sh scripts/testcases/lite-addon-delay-test.sh
           sh scripts/testcases/lite-addon-own-test.sh
+          sh scripts/testcases/lite-lighttpd-addon-socket-test.sh
           sh scripts/testcases/lite-addon-payload-test.sh
           sh scripts/testcases/lite-radio-gate-test.sh
           sh scripts/testcases/addon-rc-wrapper-test.sh

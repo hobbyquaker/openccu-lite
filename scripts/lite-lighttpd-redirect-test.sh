@@ -33,6 +33,17 @@
 # no credential at the gate - checked below. (The shell's Content-Security-Policy is occulited's
 # own header, internal/ui/csp.txt, not lighttpd's; the echo stand-in here does not send it.)
 #
+# The section before the last is the addons' web ingress (task 406): a block as occulited renders
+# it for an addon's runtime.web_ingress, written into the drop-in directory - lighttpd binds the
+# PROXY socket, lite-lighttpd-addon-socket makes its directory the web server's with the addon's
+# group once the group exists, a user in that group reaches the socket and a PROXY v1/v2 header
+# (IPv4, IPv6) becomes the address occulited's stand-in sees in X-Forwarded-For while a client-sent
+# X-Forwarded-For does not, an address outside the declared ranges is a 403, the SSL TLV makes the
+# request https, lighttpd's X-Occulite-Ingress reaches the backend and a client's does not, the gate
+# and the session-header removal run on it, neither the HTTPS redirect nor HSTS do, a PROXY LOCAL
+# header is a 403, a user outside the group is refused, a PROXY header on the LAN port is a 400, and
+# the socket goes with its fragment.
+#
 # Usage: scripts/lite-lighttpd-redirect-test.sh [occulited checkout]     (default: ../occulited)
 #        ALPINE_IMAGE=alpine:3.22 is the default image.
 set -u
@@ -77,6 +88,10 @@ mkdir -p /usr/libexec/occu
 for h in lite-starting-page lite-cert-perms; do
   cp "/src/overlay/lite/usr/libexec/occu/$h" /usr/libexec/occu/$h && chmod +x /usr/libexec/occu/$h
 done
+# the socket-directory helper (task 406), the web server's user Alpine's instead of www-data
+sed 's/^WWW=www-data$/WWW=lighttpd/' /src/overlay/lite/usr/libexec/occu/lite-lighttpd-addon-socket >/usr/libexec/occu/lite-lighttpd-addon-socket
+chmod +x /usr/libexec/occu/lite-lighttpd-addon-socket
+grep -q '^WWW=lighttpd$' /usr/libexec/occu/lite-lighttpd-addon-socket || { echo "lite-lighttpd-addon-socket does not set WWW=www-data on a line of its own"; exit 1; }
 PREP_UNIT=/src/overlay/lite/usr/lib/systemd/system/lighttpd-prepare.service
 echo "HM_MODE=NORMAL" >/var/hm_mode
 echo "LITE=test" >/VERSION
@@ -106,6 +121,9 @@ PIDFILE=/run/lighttpd/lighttpd.pid
 addgroup -S certs
 WWW=lighttpd
 mkdir -p /run/lighttpd && chown $WWW:$WWW /run/lighttpd
+# as usr/lib/tmpfiles.d/lite-lighttpd-addons.conf makes the base at boot (task 406); the addons'
+# directories are occulited's and the safety net's
+mkdir -p /run/lighttpd-addons && chmod 0755 /run/lighttpd-addons
 chmod 1777 /usr/local/tmp
 mkdir -p /usr/local/tmp/lighttpd && chown $WWW:$WWW /usr/local/tmp/lighttpd && chmod 0700 /usr/local/tmp/lighttpd # as lighttpd-prepare.service makes it
 : >/var/log/lighttpd-error.log && chown $WWW:$WWW /var/log/lighttpd-error.log
@@ -140,6 +158,12 @@ lighty.r.resp_header["X-Echo-Session"] = #seen > 0 and table.concat(seen, " | ")
 -- B-230: the forwarding headers as the backend received them
 local h = lighty.r.req_header
 lighty.r.resp_header["X-Echo-Forwarded"] = "for=" .. (h["X-Forwarded-For"] or "-") .. ";proto=" .. (h["X-Forwarded-Proto"] or "-") .. ";host=" .. (h["X-Forwarded-Host"] or "-") .. ";fwd=" .. (h["Forwarded"] or "-")
+-- openccu-lite task 406: the ingress id lighttpd's block sets ("-" for none)
+local ingress = "-"
+for k, v in pairs(h) do
+  if v ~= "" and (k:upper():gsub("[^%w]", "_")) == "X_OCCULITE_INGRESS" then ingress = v end
+end
+lighty.r.resp_header["X-Echo-Ingress"] = ingress
 -- occulited B-121: an answer that brings its own Cache-Control, as occulited's shell and API and
 -- AddonStatic do
 local p = lighty.r.req_attr["uri.path"] or ""
@@ -787,13 +811,156 @@ cachectl "DEVDB.tcl, which lighttpd serves itself: the default (B-121)" "$DEF" $
 }
 fi
 
+echo "---- the addons' web ingress sockets (task 406)"
+# occulited renders a block like this from an addon's manifest (runtime.web_ingress) into the drop-in
+# directory as occulite-ingress-<id>.conf (its internal/system/ingress.go; the text here mirrors it):
+# the PROXY socket, every connection trusted, no forwarding header read, 403 outside the declared
+# ranges, webui.conf. The fork's part: mod_extforward loaded, the global script removing a client-sent
+# X-Occulite-Ingress and setting the addon's id from the socket the request came in on, the safety net
+# making the directory, and lighttpd binding and serving the socket as measured here.
+WGSOCK=/run/lighttpd-addons/wg/proxy.sock
+cat >/etc/config/lighttpd/occulite-ingress-wg.conf <<'EOF'
+# written by occulited from wg: the web ingress of this addon (runtime.web_ingress in its manifest), rendered from the stored manifest at every sync; not a file to edit
+$SERVER["socket"] == "/run/lighttpd-addons/wg/proxy.sock" {
+  ssl.engine = "disable"
+  server.socket-perms = "0666"
+  extforward.hap-PROXY = "enable"
+  extforward.forwarder = ( "all" => "trust" )
+  extforward.headers = ()
+  $HTTP["remoteip"] != "10.77.0.0/24" {
+    $HTTP["remoteip"] != "fd77::/64" {
+      url.access-deny = ( "" )
+    }
+  }
+  include "/etc/lighttpd/conf.d/webui.conf"
+}
+EOF
+# a client on the socket: px <user> <mode> <path> [header...] prints the status line and the headers
+# of the answer; mode none|v1|v2|v2v6|v2local|v2tls (v2 with the SSL TLV: the client side was TLS),
+# the address claimed 10.77.0.2 / fd77::2, or the one in PX_SRC
+cat >/tmp/px.py <<'EOF'
+import os, socket, struct, sys
+path, mode, url = sys.argv[1], sys.argv[2], sys.argv[3]
+extra = "".join(h + "\r\n" for h in sys.argv[4:])
+s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+s.settimeout(3)
+try:
+    s.connect(path)
+except OSError as e:
+    print("connect: %s" % e.strerror)
+    sys.exit(0)
+req = ("GET %s HTTP/1.1\r\nHost: ccu\r\nAccept: text/html\r\n%sConnection: close\r\n\r\n" % (url, extra)).encode()
+sig = b"\r\n\r\n\x00\r\nQUIT\n"
+src4 = os.environ.get("PX_SRC") or "10.77.0.2"
+if mode == "v1":
+    s.sendall(("PROXY TCP4 %s 10.77.0.1 51234 80\r\n" % src4).encode() + req)
+elif mode in ("v2", "v2tls"):
+    a = socket.inet_aton(src4) + socket.inet_aton("10.77.0.1") + struct.pack("!HH", 51234, 443 if mode == "v2tls" else 80)
+    if mode == "v2tls":
+        sub = bytes([0x21]) + struct.pack("!H", 7) + b"TLSv1.3"
+        val = bytes([0x01]) + struct.pack("!I", 0) + sub
+        a += bytes([0x20]) + struct.pack("!H", len(val)) + val
+    s.sendall(sig + bytes([0x21, 0x11]) + struct.pack("!H", len(a)) + a + req)
+elif mode == "v2v6":
+    src6 = os.environ.get("PX_SRC") or "fd77::2"
+    a = socket.inet_pton(socket.AF_INET6, src6) + socket.inet_pton(socket.AF_INET6, "fd77::1") + struct.pack("!HH", 51234, 80)
+    s.sendall(sig + bytes([0x21, 0x21]) + struct.pack("!H", len(a)) + a + req)
+elif mode == "v2local":
+    s.sendall(sig + bytes([0x20, 0x00]) + struct.pack("!H", 0) + req)
+else:
+    s.sendall(req)
+data = b""
+try:
+    while True:
+        c = s.recv(65536)
+        if not c:
+            break
+        data += c
+except OSError as e:
+    if not data:
+        print("timeout")
+if not data:
+    print("closed")
+print(data.decode(errors="replace").split("\r\n\r\n")[0])
+EOF
+px() { user=$1; shift; su -s /bin/sh "$user" -c "PX_SRC='${PX_SRC:-}' python3 /tmp/px.py $WGSOCK $(printf "'%s' " "$@")" 2>&1 | tr -d '\r'; }
+# pxcheck <label> <user> <status> <X-Echo-Forwarded regex or -> <mode> <path> [header...]
+pxcheck() {
+  label=$1 user=$2 want_code=$3 want_fwd=$4
+  shift 4
+  out=$(px "$user" "$@")
+  code=$(echo "$out" | sed -n '1s/^HTTP\/[0-9.]* \([0-9]*\).*/\1/p')
+  fwd=$(echo "$out" | sed -n 's/^[Xx]-[Ee]cho-[Ff]orwarded: //p')
+  if [ "$code" = "$want_code" ] && { [ "$want_fwd" = - ] || echo "$fwd" | grep -Eq "$want_fwd"; }; then ok "$label: $code ${fwd:-}"; else bad "$label: got '$code' '$fwd', want $want_code $want_fwd"; echo "$out" | head -5; fi
+}
+adduser -S -D -H other-addon >/dev/null 2>&1
+touch /etc/config/httpsRedirectEnabled
+echo 604800 >/etc/config/hstsEnabled
+apply "the ingress socket, the addon's group not there yet"
+if [ -S "$WGSOCK" ]; then ok "lighttpd binds $WGSOCK from the rendered block"; else bad "no socket at $WGSOCK"; fi
+[ "$(stat -c '%a' "$WGSOCK" 2>/dev/null)" = 666 ] && ok "the socket is 0666 (the directory is the gate)" || bad "the socket's mode: $(stat -c '%a' "$WGSOCK" 2>/dev/null)"
+[ "$(stat -c '%U:%G %a' /run/lighttpd-addons/wg)" = "$WWW:$WWW 750" ] && ok "the safety net made the directory the web server's own, 0750" || bad "the directory without the group: $(stat -c '%U:%G %a' /run/lighttpd-addons/wg 2>&1)"
+[ "$(stat -c '%U:%G %a' /run/lighttpd-addons)" = "root:root 755" ] && ok "/run/lighttpd-addons stays root's" || bad "/run/lighttpd-addons: $(stat -c '%U:%G %a' /run/lighttpd-addons)"
+out=$(px other-addon v2 /api/echo)
+case "$out" in connect:*) ok "another user cannot connect: $out" ;; *) bad "another user connected: $out" ;; esac
+# the addon installed: occulited creates addon-wg, the preparation gives the directory the group
+addgroup -S addon-wg
+adduser -S -D -H -G addon-wg wgaddon >/dev/null 2>&1
+apply "the ingress socket, the addon installed"
+[ "$(stat -c '%U:%G %a' /run/lighttpd-addons/wg)" = "$WWW:addon-wg 750" ] && ok "with the group the directory is $WWW:addon-wg 0750" || bad "the directory with the group: $(stat -c '%U:%G %a' /run/lighttpd-addons/wg)"
+out=$(px other-addon v2 /api/echo)
+case "$out" in connect:*) ok "another user still cannot connect: $out" ;; *) bad "another user connected: $out" ;; esac
+pxcheck "PROXY v2: the claimed IPv4 address reaches occulited's stand-in, a client-sent X-Forwarded-For does not" wgaddon 200 '^for=10\.77\.0\.2;proto=http;' v2 /api/echo 'X-Forwarded-For: 9.9.9.9' 'Forwarded: for=9.9.9.9'
+pxcheck "PROXY v1: the claimed address" wgaddon 200 '^for=10\.77\.0\.2;proto=http;' v1 /api/echo
+pxcheck "PROXY v2, IPv6 in the second range" wgaddon 200 '^for=fd77::2;proto=http;' v2v6 /api/echo
+pxcheck "PROXY v2 with the SSL TLV: the request is https" wgaddon 200 '^for=10\.77\.0\.2;proto=https;' v2tls /api/echo
+PX_SRC=192.168.1.5 pxcheck "an address outside the ranges (the LAN): 403 before any backend" wgaddon 403 - v2 /api/echo
+PX_SRC=127.0.0.1 pxcheck "the loopback claimed: 403" wgaddon 403 - v2 /api/echo
+PX_SRC=10.78.0.2 pxcheck "the neighbouring network claimed: 403" wgaddon 403 - v2 /
+PX_SRC=fd78::2 pxcheck "an IPv6 address outside: 403" wgaddon 403 - v2v6 /api/echo
+pxcheck "PROXY v2 LOCAL (the socket path as the address): 403" wgaddon 403 - v2local /api/echo
+# the ingress header: lighttpd's own reaches the backend, a client-sent one does not (the global
+# script, and the gate where the pinned occulited has it)
+out=$(px wgaddon v2 /api/echo 'X-Occulite-Ingress: forged' 'X_Occulite_Ingress: forged2')
+echo "$out" | grep -qi '^x-echo-ingress: wg$' && ok "X-Occulite-Ingress: wg reaches the backend, a client-sent copy does not" || { bad "the ingress header through the socket:"; echo "$out" | grep -i ingress; }
+out=$(curl -sk -o /dev/null -D - --max-time 5 $R -H 'X-Occulite-Ingress: forged' $S/api/echo | tr -d '\r')
+echo "$out" | grep -qi '^x-echo-ingress: -$' && ok "the LAN socket: a client-sent X-Occulite-Ingress is removed, none is set" || { bad "a forged ingress header on the LAN socket:"; echo "$out" | grep -i ingress; }
+if grep -q 'X_OCCULITE_INGRESS' /etc/lighttpd/occulite-gate.lua; then
+  out=$(px wgaddon v2 /addons/x/ 'X-Occulite-Ingress: forged' "$HC")
+  echo "$out" | grep -qi '^x-echo-ingress: wg$' && ok "under /addons/ with a session the gate removes the client's copy and lighttpd's own stays" || { bad "the ingress header through the gate:"; echo "$out" | grep -i "ingress\|^HTTP"; }
+else
+  echo "skip  the gate's removal of X-Occulite-Ingress: this occulited's gate is older"
+fi
+out=$(px wgaddon v2 /addons/x/)
+echo "$out" | grep -q '^HTTP/1.1 302' && echo "$out" | grep -qi '^location: /login?return=/addons/x/' && ok "/addons/x/ without a session: the gate asks for a login" || { bad "/addons/x/ through the socket:"; echo "$out" | head -4; }
+out=$(px wgaddon v2 / )
+echo "$out" | grep -q '^HTTP/1.1 200' && ok "GET / through the socket with the HTTPS redirect on: 200, not redirected" || { bad "GET / through the socket:"; echo "$out" | head -3; }
+echo "$out" | grep -qi '^strict-transport-security:' && bad "the socket sends HSTS" || ok "the socket sends no HSTS"
+echo "$out" | grep -qi '^location:' && bad "the socket redirects" || ok "the socket redirects nowhere"
+echo "$out" | grep -qi '^x-frame-options: SAMEORIGIN' && ok "the security headers are on the socket too" || bad "no X-Frame-Options through the socket"
+out=$(px wgaddon v2 /api/echo 'X-Occulite-Session: forged' 'X_Occulite_Session: forged2')
+echo "$out" | grep -qi '^x-echo-session: -$' && ok "a client-sent X-Occulite-Session is removed on the socket too" || { bad "the session header through the socket:"; echo "$out" | grep -i echo-session; }
+out=$(px wgaddon none /api/echo)
+case "$out" in closed|timeout) ok "without a PROXY header the request is never answered: $out" ;; *) bad "without a PROXY header: $out" ;; esac
+out=$( (printf 'PROXY TCP4 10.77.0.2 10.77.0.1 51234 80\r\nGET /api/echo HTTP/1.0\r\nHost: ccu\r\n\r\n'; sleep 1) | timeout 5 nc "$IP" 80 | tr -d '\r' | head -1)
+case "$out" in "HTTP/1.0 400"*|"HTTP/1.1 400"*) ok "a PROXY header on the LAN port: $out" ;; *) bad "a PROXY header on the LAN port: '$out'" ;; esac
+fwd=$(curl -sk -o /dev/null -D - --max-time 5 $R -H 'X-Forwarded-For: 10.77.0.2' $S/api/echo | tr -d '\r' | sed -n 's/^[Xx]-[Ee]cho-[Ff]orwarded: //p')
+echo "$fwd" | grep -Eq "^for=$IP;proto=https;" && ok "the LAN socket: lighttpd's own element, $fwd" || bad "the LAN socket with a client-sent X-Forwarded-For: $fwd"
+# the addon uninstalled: occulited removes the fragment, the socket goes with the next restart
+rm -f /etc/config/lighttpd/occulite-ingress-wg.conf
+apply "the ingress fragment removed"
+# (the socket file itself may linger on the tmpfs until the next bind; nothing listens on it)
+out=$(px wgaddon v2 /api/echo)
+case "$out" in connect:*) ok "nothing listens on the socket after its fragment went: $out" ;; *) bad "the socket still answers after its fragment went: $out" ;; esac
+rm -f /etc/config/httpsRedirectEnabled /etc/config/hstsEnabled
+
 echo "---- what the unprivileged lighttpd touched"
 # the sandboxed unit lets lighttpd write its runtime directory and the upload directories, nothing
 # else: here the user, running with root's file system view, must not have created a file anywhere
 # else either, and its error log must show no write the system refused
-stray=$(find / -path /proc -prune -o -path /sys -prune -o -path /run/lighttpd -prune -o -path /usr/local/tmp -prune -o -path /dev/shm -prune -o \
+stray=$(find / -path /proc -prune -o -path /sys -prune -o -path /run/lighttpd -prune -o -path /run/lighttpd-addons -prune -o -path /usr/local/tmp -prune -o -path /dev/shm -prune -o \
   -user "$WWW" -newer /tmp/www-marker ! -path /var/log/lighttpd-error.log -print 2>/dev/null)
-if [ -z "$stray" ]; then ok "lighttpd created nothing outside /run/lighttpd, /usr/local/tmp and /dev/shm"; else bad "lighttpd created files elsewhere:"; echo "$stray"; fi
+if [ -z "$stray" ]; then ok "lighttpd created nothing outside /run/lighttpd, /run/lighttpd-addons, /usr/local/tmp and /dev/shm"; else bad "lighttpd created files elsewhere:"; echo "$stray"; fi
 if grep -Ei 'permission denied|read-only file system|operation not permitted' /var/log/lighttpd-error.log; then bad "the error log shows a refused operation (above)"; else ok "the error log shows no refused operation"; fi
 if [ -s /tmp/prepare.log ]; then echo "info  the preparation's output:"; cat /tmp/prepare.log; fi
 

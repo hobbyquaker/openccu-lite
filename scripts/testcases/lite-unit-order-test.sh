@@ -229,7 +229,7 @@ need lighttpd.service lighttpd-prepare.service
 need lighttpd-prepare.service occu-init-system.service
 if wants lighttpd.service | grep -qx lighttpd-prepare.service; then ok "lighttpd wants its preparation"; else bad "lighttpd.service must want lighttpd-prepare.service"; fi
 never lighttpd-prepare.service lighttpd.service occulited.service occu-init-rf-hardware.service
-for step in '/etc/init.d/S50lighttpd.script reload' '/usr/libexec/occu/lite-starting-page' '/usr/libexec/occu/lite-cert-perms' '/usr/bin/occulited -lighttpd-dropins'; do
+for step in '/etc/init.d/S50lighttpd.script reload' '/usr/libexec/occu/lite-starting-page' '/usr/libexec/occu/lite-cert-perms' '/usr/bin/occulited -lighttpd-dropins' '/usr/libexec/occu/lite-lighttpd-addon-socket'; do
   if grep -qx "ExecStart=-$step" "$U/lighttpd-prepare.service"; then ok "lighttpd-prepare runs $step"; else bad "lighttpd-prepare.service must run ExecStart=-$step"; fi
   if grep -q "^Exec.*$step" "$U/lighttpd.service"; then bad "lighttpd.service still runs $step itself (inside its sandbox)"; else ok "lighttpd.service does not run $step itself"; fi
 done
@@ -244,7 +244,7 @@ fi
 grep -qx 'ExecStartPost=-/usr/libexec/occu/lite-lighttpd-reload record' "$U/lighttpd.service" && ok "lighttpd records its configuration at the start" || bad "lighttpd.service must record its configuration (ExecStartPost=-/usr/libexec/occu/lite-lighttpd-reload record)"
 grep -qx 'Type=oneshot' "$U/lighttpd-prepare.service" && ok "lighttpd-prepare is a oneshot" || bad "lighttpd-prepare.service must be Type=oneshot"
 grep -qx 'ConditionPathExists=!/usr/local/HMLGW' "$U/lighttpd-prepare.service" && ok "lighttpd-prepare is skipped in LAN-gateway mode" || bad "lighttpd-prepare.service must carry ConditionPathExists=!/usr/local/HMLGW"
-for line in 'User=www-data' 'RuntimeDirectory=lighttpd' 'ProtectSystem=strict' 'TemporaryFileSystem=/usr/local:ro' 'NoExecPaths=/' 'SystemCallFilter=@system-service' 'SystemCallArchitectures=native' 'RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6' 'MemoryDenyWriteExecute=yes' 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' 'AmbientCapabilities=CAP_NET_BIND_SERVICE'; do
+for line in 'User=www-data' 'RuntimeDirectory=lighttpd' 'ReadWritePaths=-/run/lighttpd-addons' 'ProtectSystem=strict' 'TemporaryFileSystem=/usr/local:ro' 'NoExecPaths=/' 'SystemCallFilter=@system-service' 'SystemCallArchitectures=native' 'RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6' 'MemoryDenyWriteExecute=yes' 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' 'AmbientCapabilities=CAP_NET_BIND_SERVICE'; do
   grep -qx "$line" "$U/lighttpd.service" && ok "lighttpd.service: $line" || bad "lighttpd.service must carry $line"
 done
 grep -q '^SystemCallFilter=.*~@privileged' "$U/lighttpd.service" && bad "lighttpd.service filters @privileged: the setuid busybox's applets die at start" || ok "lighttpd.service leaves @setuid to busybox"

@@ -1,6 +1,6 @@
 -- openccu-lite: no request reaches a backend with a client-sent X-Occulite-Session, X-Occulite-Auth
--- or X-Occulite-Token, nor with a client-sent X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host
--- or Forwarded.
+-- or X-Occulite-Token, nor with a client-sent X-Forwarded-For, X-Forwarded-Proto, X-Forwarded-Host,
+-- Forwarded or X-Occulite-Ingress.
 --
 -- occulited's session gate (/etc/lighttpd/occulite-gate.lua, from package/occulited) hands an addon
 -- the credential it validated in the request header X-Occulite-Session - a session id, its alias,
@@ -23,6 +23,14 @@
 -- element of X-Forwarded-For in any case; this is the second half, for every backend behind
 -- lighttpd.
 --
+-- X-Occulite-Ingress names the addon whose web ingress socket the request came in on
+-- (/run/lighttpd-addons/<id>/proxy.sock, the block occulited renders as occulite-ingress-<id>.conf):
+-- occulited holds the address the addon claimed to that addon's declared ranges. A client-sent copy
+-- goes with the forwarding headers, and this script sets the header itself, from the socket the
+-- request arrived on (request.server-addr is the socket's path on a Unix socket) - not mod_setenv,
+-- whose request header this script would strip again (mod_setenv runs before mod_magnet in the
+-- module order). The gate does the same under /addons/.
+--
 -- The rule is the gate's, and the two are kept in step: every request header whose name a CGI
 -- reads as one of these variables - any case, any character that is not a letter or a digit in
 -- place of the dashes (mod_cgi turns those into "_") - is removed. lighttpd keeps a removed header
@@ -43,26 +51,36 @@ local STRIPPED = {
     X_FORWARDED_PROTO = true,
     X_FORWARDED_HOST = true,
     FORWARDED = true,
+    X_OCCULITE_INGRESS = true,
 }
 local function is_stripped(name)
     return STRIPPED[(name:upper():gsub("[^%w]", "_"))] == true
+end
+
+-- the addon whose ingress socket this request came in on, "" from the LAN sockets
+local function ingress_id()
+    local sa = r.req_attr["request.server-addr"] or ""
+    return sa:match("^/run/lighttpd%-addons/([%w_.%-]+)/proxy%.sock$")
 end
 
 local names = {}
 for k in pairs(r.req_header) do
     if is_stripped(k) then names[#names + 1] = k end
 end
-if #names == 0 then
-    return 0
-end
-for _, k in ipairs(names) do
-    r.req_header[k] = nil
-end
-for k, v in pairs(r.req_header) do
-    if is_stripped(k) and v ~= nil and v ~= "" then
-        r.resp_header["Content-Type"] = "application/json"
-        r.resp_body:set({ '{"error":"session-header","message":"a client-sent session or forwarding header could not be removed"}' })
-        return 500
+if #names > 0 then
+    for _, k in ipairs(names) do
+        r.req_header[k] = nil
     end
+    for k, v in pairs(r.req_header) do
+        if is_stripped(k) and v ~= nil and v ~= "" then
+            r.resp_header["Content-Type"] = "application/json"
+            r.resp_body:set({ '{"error":"session-header","message":"a client-sent session or forwarding header could not be removed"}' })
+            return 500
+        end
+    end
+end
+local id = ingress_id()
+if id then
+    r.req_header["X-Occulite-Ingress"] = id
 end
 return 0

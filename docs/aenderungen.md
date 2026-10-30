@@ -84,6 +84,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - SSH: ein-/ausschaltbar, Root-Schlüssel und -Passwort über die Oberfläche
 - Netzwerksuche der eQ-3-Tools (UDP 43439) und SSDP beantwortet occulited; die Netzwerkkonfiguration über den Netfinder ist nicht mehr möglich
 - API-Beschreibungen (OpenAPI, AsyncAPI) liefert das System selbst aus
+- Ein Web-Eingang für Tunnel-Addons (lite-addon-wireguard): Ein Addon, das ihn in seinem Manifest erklärt, bekommt einen Unix-Socket von lighttpd mit PROXY-Protokoll, den nur dieses Addon erreicht, so dass Anfragen aus dem Tunnel mit der Tunnel-Adresse des Geräts ankommen und nicht als Loopback; angenommen werden nur Adressen aus den Bereichen, die das Manifest nennt
 
 ## Netzwerk und Firewall
 

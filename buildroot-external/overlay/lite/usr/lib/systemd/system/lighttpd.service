@@ -116,6 +116,11 @@ TemporaryFileSystem=/usr/local:ro
 BindReadOnlyPaths=-/usr/local/etc/config -/usr/local/addons
 BindPaths=-/usr/local/tmp
 ReadWritePaths=-/usr/local/tmp
+# the addons' web ingress sockets (runtime.web_ingress in an addon's manifest): bound in
+# /run/lighttpd-addons/<id>/, directories occulited makes with the addon's group when it renders the
+# socket's block (and lite-lighttpd-addon-socket in lighttpd-prepare.service as a safety net) - the
+# one place under /run besides the runtime directory the web server writes
+ReadWritePaths=-/run/lighttpd-addons
 # inside that directory, the other daemons' and the addons' own configuration directories are
 # nothing the web server reads. Directories only: a file that is written anew and renamed into
 # place (the security key, hmipserver's settings) would slip out from under a per-file mount, and

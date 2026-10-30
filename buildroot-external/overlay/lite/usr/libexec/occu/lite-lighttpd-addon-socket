@@ -1,0 +1,53 @@
+#!/bin/sh
+# openccu-lite: the directories of lighttpd's web ingress sockets for addons - the safety net.
+#
+# An addon whose manifest declares runtime.web_ingress (a VPN or tunnel addon that forwards its
+# peers' web requests to the web server itself) gets a Unix socket of lighttpd's speaking the PROXY
+# protocol, /run/lighttpd-addons/<id>/proxy.sock. occulited renders the socket's lighttpd block from
+# the stored manifest into /etc/config/lighttpd/occulite-ingress-<id>.conf and makes the directory -
+# www-data's, so lighttpd binds the socket in it, with the addon's own group and mode 0750, so that
+# no other addon reaches it - before every start and reload of the web server (its -lighttpd-dropins
+# step in lighttpd-prepare.service) and before every start of the addon (-addon-own). This script
+# runs right after that step in lighttpd-prepare.service and does the same for every fragment it
+# finds, so that a preparation in which occulited could not run leaves lighttpd a directory to bind
+# in: a $SERVER["socket"] block whose directory is missing keeps the whole web server from starting.
+# The group is addon-<id> when it exists (occulited creates it at the install, addon-users recreates
+# it at boot from the policy file) and www-data's own otherwise - then nothing but lighttpd and root
+# reaches the socket.
+#
+# Usage: lite-lighttpd-addon-socket [<id>]   (without an id: every fragment's addon)
+# Only an id with a fragment is touched: a directory is made for exactly the sockets the lighttpd
+# configuration has, never for an arbitrary name. Never fails its caller.
+FRAGMENTS=/etc/config/lighttpd
+PREFIX=occulite-ingress-
+BASE=/run/lighttpd-addons
+GROUP_FILE=/etc/group
+WWW=www-data
+
+ids=""
+for f in "$FRAGMENTS"/"$PREFIX"*.conf; do
+  [ -f "$f" ] || continue
+  id=${f##*/"$PREFIX"}
+  id=${id%.conf}
+  case "$id" in
+    ''|*/*|*' '*|.*) continue ;;
+  esac
+  ids="$ids $id"
+done
+if [ -n "${1:-}" ]; then
+  case " $ids " in
+    *" $1 "*) ids=$1 ;;
+    *) exit 0 ;;
+  esac
+fi
+for id in $ids; do
+  d="$BASE/$id"
+  mkdir -p "$d" 2>/dev/null || { echo "lite-lighttpd-addon-socket: cannot make $d" >&2; continue; }
+  grp=$WWW
+  # busybox has no getent: read /etc/group (occu-etc-writable may have moved it to the userfs;
+  # the symlink resolves either way)
+  grep -q "^addon-$id:" "$GROUP_FILE" 2>/dev/null && grp="addon-$id"
+  chown "$WWW:$grp" "$d" 2>/dev/null || echo "lite-lighttpd-addon-socket: cannot give $d to $WWW:$grp" >&2
+  chmod 0750 "$d" 2>/dev/null
+done
+exit 0

@@ -15,10 +15,45 @@ Written 2026-09-06 for the busybox-init step; the move to systemd changed the la
 | `occulited` | `127.0.0.1:8183` only (2121 until 2026-09-22) — refuses any other `listen` | lighttpd (proxy), programs on the system |
 | `rfd`, `hs485d`, `hmipserver` | the loopback: `Listen IP = 127.0.0.1` in `rfd.conf`, `Legacy.BindAddress=127.0.0.1` in `crRFD.conf` — both verified on a running system; the fork ships them in its config templates | `occulited`, addons on the system |
 | sshd | the LAN, 22, only while the SSH switch is on; the firewall opens the port for local networks only | the administrator |
+| lighttpd, an addon's web ingress | the Unix socket `/run/lighttpd-addons/<id>/proxy.sock` (PROXY protocol, plain HTTP) in a directory `www-data:addon-<id> 0750`, one per addon whose manifest declares `runtime.web_ingress` (lite-addon-wireguard) | that addon alone (and root) |
 
 The CCU's XML-RPC proxies on 2001/2000/2010/9292 exist only when the user switches them on (task
 143, below); the ReGa ports 1999 and 8181 do not exist at all, and 8183 is occulited's own port on the loopback. Without the switch, an integration
 that ran *off* the system and talked to those must run *on* the system or use the metadata API.
+
+**An addon's web ingress** (task 406; lite-addon-wireguard is the first). A VPN or tunnel addon that ends the tunnel
+in its own process forwards its peers' web requests to the web server itself. Had it connected to `127.0.0.1:80`,
+every tunnel request would have come from the loopback, which this system trusts: the classic RPC login exempts it,
+the HTTPS redirect exempts it, API tokens may be limited to it, the login lockout is per address. So an addon whose
+manifest declares `runtime.web_ingress` with the address ranges its peers have gets a door of its own: lighttpd
+listens on a Unix socket, `/run/lighttpd-addons/<id>/proxy.sock`, that speaks the HAProxy PROXY protocol. The addon
+sends the peer's address in front of each request, `mod_extforward` makes it the connection's address before the
+request is read, and lighttpd's own `X-Forwarded-For` element - the one occulited takes, B-230 - names the peer. The
+lockout, a token's address ranges, the gate's ranges and the journal see `10.77.0.2`, not the loopback; a tunnel
+address counts as a local network, as a LAN address does. **Only inside the declared ranges:** the socket's block
+answers 403 for any other claimed address - the loopback, a LAN address, the socket path a PROXY `LOCAL` header
+leaves - and occulited refuses it again (`403 ingress-range`, journaled) when it sees the block's
+`X-Occulite-Ingress: <id>` with an address outside that addon's ranges, so one compromised addon cannot pass itself
+off as a LAN device or as the loopback. The block is **rendered by occulited from the stored manifest**
+(`/etc/config/lighttpd/occulite-ingress-<id>.conf`) at every install, uninstall, start and reload of lighttpd, so it
+exists exactly while the addon is installed (lighttpd is restarted, not reloaded, when a socket comes or goes: a
+graceful reload hands a dropped socket on pathless and never binds it again - measured); the manifest validator refuses ranges that hold the loopback,
+link-local or multicast addresses, or are wider than /8 (IPv4) or /32 (IPv6). Who may connect is the directory:
+`/run/lighttpd-addons/<id>/` is the web server's (it binds the socket there, 0666) with the addon's confinement
+group `addon-<id>` and mode 0750 - made by occulited (the helper's `ingressdir` operation) when it renders the
+block and before every start of the addon's unit, and by the fork's `lite-lighttpd-addon-socket` from
+`lighttpd-prepare.service` as a safety net, so the order the group and the web server come up in at boot does not
+matter and lighttpd always has the directory to bind in; while the addon's group is not there the directory is
+`www-data`'s own and nothing but lighttpd and root reaches it. Any other confined addon gets `EACCES`. On the socket:
+no TLS of lighttpd's (a tunnel encrypts; an addon that terminates TLS itself sets the PROXY v2 SSL TLV and lighttpd
+treats the request as `https`: Secure cookies, `X-Forwarded-Proto: https` - measured), no HTTPS redirect, no HSTS,
+`extforward.headers` emptied so a client-sent `X-Forwarded-For` is not taken even on this trusted connection, a
+client-sent `X-Occulite-Ingress` removed by the global script and the gate, and otherwise `webui.conf` as on the
+LAN sockets - the session gate, the security headers, the body limits. Measured on lighttpd 1.4.85 in a container
+and 1.4.84 on a lab system (the fork's container test, last section): PROXY v1 and v2 set the address, IPv4 and
+IPv6; a connection without the header is closed unanswered; a PROXY header on a LAN port is a 400; a user outside
+the group cannot connect. What an ingress addon still vouches for is the address inside its ranges: a compromised
+one can claim any address of its own peers (threat model R10).
 
 **Classic RPC, the way out** (System → Remote access, off by default). Two
 switches, plain (2001, 2010, 9292; 2000 where hs485d runs) and TLS (42001, 42010, 49292; 42000),

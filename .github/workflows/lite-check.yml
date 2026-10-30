@@ -57,6 +57,8 @@ jobs:
         run: sh scripts/testcases/lite-irqbalance-test.sh
       - name: The boot script is the product's boot.cmd
         run: sh scripts/testcases/lite-bootscr-check-test.sh
+      - name: A kernel patch path that applies nothing is a build warning
+        run: sh scripts/testcases/lite-kernel-patch-check-test.sh
       - name: The Pi 4/5 bootloader update is offered, not flashed
         run: sh scripts/testcases/lite-rpi-eeprom-offer-test.sh
       - name: /VERSION's lite lines and the three-part firmware version
@@ -85,6 +87,7 @@ jobs:
           sh scripts/testcases/occu-addons-generator-test.sh
           sh scripts/testcases/lite-addon-delay-test.sh
           sh scripts/testcases/lite-addon-own-test.sh
+          sh scripts/testcases/lite-lighttpd-addon-socket-test.sh
           sh scripts/testcases/lite-addon-payload-test.sh
           sh scripts/testcases/lite-radio-gate-test.sh
           sh scripts/testcases/addon-rc-wrapper-test.sh

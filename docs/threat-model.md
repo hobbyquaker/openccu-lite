@@ -281,13 +281,27 @@ there, held to its level and to the origin rule of lite-rpc, and to nothing else
 
 **Has gone wrong here:** listeners bound to every interface instead of the loopback.
 
+**B1b, an addon's web ingress** (task 406): an addon whose manifest declares `runtime.web_ingress` (lite-addon-wireguard
+ends a peer's tunnel inside its own process) forwards the peer's requests to lighttpd through
+`/run/lighttpd-addons/<id>/proxy.sock`, a Unix socket that speaks the PROXY protocol. The peer's address becomes the
+connection's address before the request is read, so everything B1 and B2 key on the client's address - the lockout, a
+token's ranges, the gate, the journal - sees the peer and not the loopback. **Checked by:** the socket's directory
+(`www-data:addon-<id> 0750`, made by occulited and the fork's safety net), which only the addon's confinement group
+reaches; the block's range check (403 for any address outside the ranges the manifest declared) and occulited's own
+(`403 ingress-range` on the block's `X-Occulite-Ingress`), so the addon can claim nothing but its peers' addresses -
+never the loopback, never a LAN address; the manifest validator, which refuses such ranges; the socket reads no
+forwarding header; the PROXY header is a 400 on the LAN ports; the same `webui.conf` as the LAN sockets, without TLS,
+the HTTPS redirect and HSTS. The tunnel itself is the addon's (B5): its peers are the keys the administrator made or
+imported.
+
 ### B2 · lighttpd ↔ occulited
 
 **Crosses:** the proxied request, and with it the credential the gate validated (`X-Occulite-Session`: a session
 id, its alias, or — since the addon ingress scope `addon:<id>`, GitHub issue #3 — an API token sent as
 `Authorization: Bearer`, with `X-Occulite-Auth` saying which and `X-Occulite-Token` naming a token), the client's
 address (`X-Forwarded-For`: lighttpd's element, the last one — a client-sent header is removed before lighttpd adds
-its own, B-230) and the protocol (`X-Forwarded-Proto`).
+its own, B-230; through an addon's web ingress, B1b, that element is the address the addon claimed in its PROXY
+header, and `X-Occulite-Ingress` names the addon) and the protocol (`X-Forwarded-Proto`).
 
 **Checked by:** occulited listening on `127.0.0.1:8183` only; the gate script, which validates the session — or
 the token against the token mirror (`/run/occulite/gate-tokens`, hashes only: the segments it opens, its expiry,
@@ -339,6 +353,12 @@ the CGI environment lighttpd used to provide. The gate (B2) requires a live sess
 
 **Has gone wrong here:** lighttpd ran as root and read a confined addon's drop-in through a link, and served its
 www with root's rights.
+
+**B5c, an addon's web ingress** (B1b): an addon that declares `runtime.web_ingress` may tell lighttpd who a request is
+from - inside the ranges it declared and nowhere else. The socket's directory is the gate (its confinement group
+alone), the socket trusts the PROXY header and nothing else, lighttpd and occulited hold the claimed address to the
+ranges, and what the addon claims inside them is its own doing: a compromised ingress addon could claim another of
+its peers' addresses for a request (R10). Every other confined addon reaches lighttpd only as the loopback, as before.
 
 **B5b, an addon's system side:** its own user and group, its own tree under `/usr/local/addons/<id>`, its unit
 file, the ports it declares, and the local token it may read.
@@ -444,7 +464,7 @@ and its tooling have to confirm, and is the list that becomes findings.
 
 | | Here that would be | In the way today | To check |
 | --- | --- | --- | --- |
-| **S**poofing | An addon page passing itself off as the shell (a login form in a frame); an addon using another addon's token | `X-Frame-Options: SAMEORIGIN` keeps a foreign site out, but an addon **is** same-origin; each confined addon has its own user and its own token | The known residual risk: a same-origin addon frame can read the parent page. Whether the shell may be framed by an addon at all, and what an addon page can reach through `window.parent` |
+| **S**poofing | An addon page passing itself off as the shell (a login form in a frame); an addon using another addon's token; an addon claiming a client address through its web ingress (B5c) | `X-Frame-Options: SAMEORIGIN` keeps a foreign site out, but an addon **is** same-origin; each confined addon has its own user and its own token; an ingress socket's directory opens to that addon's group alone, the claimed address is held to the manifest's ranges by lighttpd and by occulited, and the PROXY header is a 400 on the LAN ports | The known residual risk: a same-origin addon frame can read the parent page. Whether the shell may be framed by an addon at all, and what an addon page can reach through `window.parent`. That the socket's directory keeps its group and mode after every lighttpd and addon start (the container test checks the helper; the lab system the units) |
 | **T**ampering | An addon writing into another addon's tree, into occulited's state, or into a unit file that gives it root | The confined user owns only its own tree; unit files come from the helper, not from the addon (the fix); the ownership walk does not follow links | Every path an addon can write that another component later reads or executes — the catalogue's cache, the shared directories under `/usr/local`, anything the helper touches by prefix |
 | **R**epudiation | An addon acting through the local token, indistinguishable from the system | The token is the addon's own; occulited logs the token's name | Whether an addon's calls are traceable to the addon in the log, or only to "a token" |
 | **I**nformation disclosure | Reading the keys, the metadata or another addon's configuration from the file system or over the loopback | The confinement's file permissions; the local token reads names and rooms only; the keys are root's | What an addon user can read today, measured on the system, not assumed: a walk of `/usr/local` and `/etc/config` as an addon user belongs in the audit |
@@ -523,7 +543,8 @@ one of them reaches; it does not make them trustworthy.
 ### T4 · The LAN is not trusted, the loopback is
 
 Every LAN device is a potential attacker (A1). The loopback is treated as trusted, which is what makes B6 work at
-all — and it is why an addon's confinement stops at the devices.
+all — and it is why an addon's confinement stops at the devices. A request through an addon's web ingress (B1b) is
+not the loopback's: it carries the tunnel peer's address, and a peer is a LAN device (A1) that has a key.
 
 ### T5 · The sources are trusted to the extent they are checked
 
@@ -561,10 +582,21 @@ Known, accepted for now, and written down so that nobody has to rediscover them.
 | R7 | **Physical access ends everything** (A8) | Out of scope; full-disk encryption is not part of the product | Encrypted storage with a key that is not on the same card |
 | R8 | **Classic RPC has no real authentication** | It is the CCU's protocol, and compatibility is the point of it | Nothing, within compatibility: it stays a switch that is off by default, with the warnings on its page |
 | R9 | **`?sid=` puts a session id in a URL** | The CCU addon convention needs it | The narrow legacy alias, on by default only for undeclared addons |
+| R10 | **An ingress addon vouches for its peers' addresses** (B1b, B5c): whatever runs as `addon-<id>` can claim any address inside the ranges its manifest declared for a request - another of its own peers, say - though never the loopback or a LAN address (lighttpd and occulited hold it to the ranges) | The addon is the end of the tunnel, so nothing else knows the peer's address; the socket's directory keeps every other addon out, and the addon runs confined, with no capability and no root | The tunnel in the kernel with the address on an interface, where the kernel vouches for the source - a larger change than the door |
 
 ## Audit log
 
 The "to check" rows that were checked, and what became of them. One entry per slice of the audit.
+
+**2026-10-30 — B1b/B5c, the addons' web ingress** (openccu-lite task 406; lite-addon-wireguard is the first): per
+addon that declares `runtime.web_ingress`, a PROXY-protocol Unix socket of lighttpd's in a directory only the
+addon's confinement group reaches, its block rendered by occulited from the stored manifest, the claimed address
+held to the declared ranges by lighttpd (403) and by occulited (`403 ingress-range`). Measured in the fork's lighttpd
+container test (1.4.85) and on a lab system (1.4.84): the claimed address is what occulited receives, a client-sent
+`X-Forwarded-For` or `X-Occulite-Ingress` through the door is not, an address outside the ranges (the loopback, the
+LAN) is a 403 before any backend, the PROXY v2 SSL TLV makes the request https, the gate and the header removal run on
+it, HSTS and the HTTPS redirect do not, a user outside the group is refused, a PROXY header on a LAN port is a 400.
+R10 added.
 
 **2026-09-28 — B1/B5, the browser measures of D-78** (task 259; occulited `5aa18b6`): the session cookie scoped to
 `/api` with a gate cookie for `/addons/`, `X-Occulite-Request` on state-changing calls with the cookie alone, the
