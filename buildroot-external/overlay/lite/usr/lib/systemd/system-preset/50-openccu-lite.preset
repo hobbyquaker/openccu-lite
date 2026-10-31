@@ -32,6 +32,7 @@ enable occu-init-rf-hardware.service
 enable occu-init-rtc.service
 enable occu-init-system.service
 enable occu-interface-clock.timer
+enable occu-hb-rf-eth-session.timer
 enable occu-ldconfig.service
 enable occu-leds.service
 enable occu-lgw-firmware-update.service

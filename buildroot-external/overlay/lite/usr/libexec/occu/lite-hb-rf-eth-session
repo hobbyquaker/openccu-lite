@@ -1,0 +1,63 @@
+#!/bin/sh
+# openccu-lite: restarts what holds an HB-RF-ETH's radio module after the gateway started a new
+# session (occu-hb-rf-eth-session.service, every 30 s). The job of upstream's monit check
+# hb_rf_eth-Session, which needs monit; here the check also finds the holder itself: upstream
+# restarts multimacd and leaves a daemon on the module without it to its own stale-device checks.
+#
+# The driver sets session_lost when a reconnect started a new session while a raw UART connection
+# was open: the gateway restarted, it power-cycled the module, and the module's state is unknown.
+# It clears the flag when that connection closes, so restarting the holder ends it. multimacd's
+# restart takes rfd, hmipserver and hmlangw along (PartOf=).
+#
+# Not a restart loop: at most one restart per MIN_INTERVAL seconds, whatever the flag says.
+#
+# The environment overrides are for scripts/testcases/lite-hb-rf-eth-session-test.sh.
+set -u
+FLAG=${HB_RF_ETH_SESSION_FLAG:-/sys/class/hb-rf-eth/hb-rf-eth/session_lost}
+STAMP=${HB_RF_ETH_SESSION_STAMP:-/run/occulite/hb-rf-eth-session.last}
+UPTIME=${HB_RF_ETH_SESSION_UPTIME:-/proc/uptime}
+PROC=${HB_RF_ETH_SESSION_PROC:-/proc}
+SYSTEMCTL=${HB_RF_ETH_SESSION_SYSTEMCTL:-/usr/bin/systemctl}
+MIN_INTERVAL=${HB_RF_ETH_SESSION_MIN_INTERVAL:-150}
+
+[ "$(cat "$FLAG" 2>/dev/null)" = 1 ] || exit 0
+
+now=$(cut -d. -f1 "$UPTIME")
+last=$(cat "$STAMP" 2>/dev/null) || last=
+if [ -n "$last" ] && [ "$now" -ge "$last" ] && [ $((now - last)) -lt "$MIN_INTERVAL" ]; then
+  echo "session_lost still set, $((now - last)) s after the last restart: waiting"
+  exit 0
+fi
+
+# whether a unit's main process has a raw UART open
+holds_raw_uart() {
+  pid=$("$SYSTEMCTL" show -p MainPID --value "$1") || return 1
+  [ -n "$pid" ] && [ "$pid" != 0 ] || return 1
+  for fd in "$PROC/$pid"/fd/*; do
+    case "$(readlink "$fd" 2>/dev/null)" in
+      /dev/raw-uart*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+units=
+if holds_raw_uart multimacd.service; then
+  units=" multimacd.service"
+else
+  for unit in rfd.service hmipserver.service; do
+    if holds_raw_uart "$unit"; then
+      units="$units $unit"
+    fi
+  done
+fi
+if [ -z "$units" ]; then
+  # the flag outlives nothing that matters: whoever opens the module next starts afresh
+  echo "session_lost set, but no daemon holds a raw UART"
+  exit 0
+fi
+
+echo "$now" >"$STAMP"
+echo "HB-RF-ETH started a new session, the radio module's state is unknown: restarting$units"
+# shellcheck disable=SC2086 # the list of units
+exec "$SYSTEMCTL" restart $units

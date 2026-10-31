@@ -1,0 +1,17 @@
+# openccu-lite: looks for a lost HB-RF-ETH session every 30 s (see the service). A timer, not a path
+# unit: inotify does not see a sysfs attribute change, and the driver's sysfs_notify() wakes only a
+# poll(). The service is skipped by its condition where the driver is not loaded.
+# Timers are wanted by multi-user.target and carry no default dependencies (occu-interface-clock.timer).
+[Unit]
+DefaultDependencies=no
+Conflicts=shutdown.target
+Before=shutdown.target
+Description=HB-RF-ETH session check (every 30 s)
+
+[Timer]
+OnActiveSec=60
+OnUnitInactiveSec=30
+AccuracySec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -223,6 +223,7 @@ setup scripts, the fourth for every daemon the system needs (B-3,
 | `occu-interface-clock.timer` | crontab `1 3,9,15,21 * * * SetInterfaceClock` | timer (`DefaultDependencies=no`: the implicit `Before=timers.target` would cycle with `After=occu-persist.service`) | `RandomizedDelaySec=5min`; not persistent (a missed slot after a reboot is not worth catching up). The service runs only when rfd runs (`ConditionPathExists=/run/occulite/radio/rfd.enabled`, B-142, D-97: `SetInterfaceClock` talks to rfd's 32001 and failed on an HmIP-only system), see [The interface clock](#the-interface-clock) |
 | `occu-cron-backup.timer` | crontab `7 0 * * * cronBackup.sh` | timer, `Persistent=true`, 30 min random delay; since task 86 it starts `occu-backup-create@nightly.service` (`occulited -backup create nightly`, root), which wants `occu-backup-deliver@nightly.service` (`occulited -backup deliver nightly`, occulite): the backup made once and copied to every enabled target (USB directory, NFS, SMB, SFTP); `NoCronBackup` is the nightly switch the pipeline reads; `cronBackup.sh` stays in the image unused | a run caught up at boot waits for `multi-user.target` (task 116) and occulited (the shares' mount units) |
 | `occu-fstrim.timer` | crontab `0 4 * * 6 fstrim` | timer, persistent, 1 h random delay | `NoFSTRIM`; util-linux's own `fstrim.timer` is masked in the overlay, see below (B-8); a run caught up at boot waits for `multi-user.target` (task 116) |
+| `occu-hb-rf-eth-session.timer` | monit `hb_rf_eth-Session` (#4527) | timer every 30 s, `DefaultDependencies=no`, service skipped without the driver | restarts the daemon holding the HB-RF-ETH's module after a new gateway session; at most once per 150 s |
 | — | crontab `59 1 * * * checkBadBlocks.sh` | dropped (D-41) | a full-disk read every night writing `/tmp/badblocks.txt`, whose only reader was monit (D-23). `/bin/checkBadBlocks.sh` stays in the image; nothing schedules it |
 
 Not in the image (task 115, D-80): `S40bluetoothd`, `S49xinetd`, `S50ser2net`, `S59snmpd`,
@@ -291,6 +292,7 @@ rebase review. Every unit in the table above is task 20 / D-30; what the comment
 | `lighttpd.service` ("Certificate permissions"), `lite-cert-perms` | D-46 |
 | `occu-init-rf-hardware.service`, `lite-rf-stop` | D-41 / task 22, Q-5; D-40 (the container product) |
 | `occu-interface-clock.service` | D-41 / task 22, Q-6 |
+| `occu-hb-rf-eth-session.service`, `lite-hb-rf-eth-session` | task 413 |
 | `occu-backup-create@.service`, `occu-backup-deliver@.service` | D-41 / task 22, Q-10; task 8; task 86 (D-64, D-65, D-80: the targets, the pipeline; `occu-cron-backup.service` removed) |
 | `occu-leds.service` | D-41 / task 22, Q-11 |
 | `occu-usb-gadget.service` | D-41 / task 22, Q-2 |

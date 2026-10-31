@@ -1,0 +1,22 @@
+# openccu-lite: the job behind occu-hb-rf-eth-session.timer: restarts the daemon that holds an
+# HB-RF-ETH's radio module after the gateway started a new session (the script says why). Upstream
+# does this with a monit check (#4527); openccu-lite has no monit.
+#
+# Root, because it reads the daemons' /proc/<pid>/fd and asks systemd for the restart; nothing else
+# is writable than the stamp under /run/occulite, and it needs no network.
+[Unit]
+Description=HB-RF-ETH session check
+ConditionPathExists=/sys/class/hb-rf-eth/hb-rf-eth/session_lost
+After=occu-init-rf-hardware.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/occu/lite-hb-rf-eth-session
+RuntimeDirectory=occulite
+RuntimeDirectoryPreserve=yes
+ProtectSystem=strict
+ReadWritePaths=/run/occulite
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+NoNewPrivileges=yes
