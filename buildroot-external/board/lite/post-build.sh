@@ -120,6 +120,18 @@ elif ! grep -q '^server\.errorlog-use-syslog[[:space:]]*=[[:space:]]*"enable"' "
 	exit 1
 fi
 
+# task 410: lighttpd itself refuses a control character in a URL (400) before anything behind it reads the
+# URL: addon pages, ingress sockets and classic RPC, not only occulited, whose net/http refuses them anyway.
+# url-invalid-utf8-reject is set as well, but made no measured difference on lighttpd 1.4.85. url-path-2f-decode
+# stays disabled, the gate relies on it. The line is upstream's, so it is replaced here, and the build stops
+# when it is gone.
+if grep -q '^server\.http-parseopts[[:space:]]*=' "${LIGHTTPD_CONF}"; then
+	sed -i 's|^server\.http-parseopts[[:space:]]*=.*$|server.http-parseopts = ( "url-ctrls-reject" => "enable", "url-path-2f-decode" => "disable", "url-invalid-utf8-reject" => "enable" )|' "${LIGHTTPD_CONF}"
+else
+	echo "post-build (lite): no server.http-parseopts line to replace in ${LIGHTTPD_CONF}" >&2
+	exit 1
+fi
+
 # buildroot's lighttpd package creates both log files at every boot through tmpfiles.d (its
 # lighttpd_tmpfiles.conf has nothing else); with the logs in the journal they would only be empty
 # files that look like a log.

@@ -101,6 +101,9 @@ chmod +x /usr/local/bin/start-stop-daemon
 # as the lite post-build leaves the image: no conf.d/cgi.conf (the lite modules.conf loads no
 # mod_cgi), and the pid file in the unit's runtime directory
 rm -f /etc/lighttpd/conf.d/cgi.conf
+# task 410, as the post-build does
+sed -i 's|^server\.http-parseopts[[:space:]]*=.*$|server.http-parseopts = ( "url-ctrls-reject" => "enable", "url-path-2f-decode" => "disable", "url-invalid-utf8-reject" => "enable" )|' /etc/lighttpd/lighttpd.conf
+grep -q '^server\.http-parseopts.*"url-ctrls-reject" => "enable"' /etc/lighttpd/lighttpd.conf || bad "lighttpd.conf: no server.http-parseopts line for the post-build to replace"
 if grep -q '^server\.pid-file[[:space:]]*=' /etc/lighttpd/lighttpd.conf; then
   sed -i 's|^server\.pid-file[[:space:]]*=.*$|server.pid-file = "/run/lighttpd/lighttpd.pid"|' /etc/lighttpd/lighttpd.conf
   ok "lighttpd.conf: server.pid-file replaced as the post-build does"
@@ -250,6 +253,15 @@ grep -q '^NoNewPrivs:[[:space:]]*1' "/proc/$pid/status" && ok "lighttpd runs wit
 expect "https://ccu/ stays" 200 - $R $S/
 # shellcheck disable=SC2086
 expect "http://ccu/ stays" 200 - $R http://ccu/
+# task 410: lighttpd refuses a control character itself; a URL with an umlaut or an encoded slash still
+# reaches the gate. url-invalid-utf8-reject is set too, and is not checked here: on lighttpd 1.4.85 it
+# made no measured difference, raw or percent-encoded (task 410).
+# shellcheck disable=SC2086
+expect "a control character in the URL: 400" 400 - $R "$S/addons/x/a%01b"
+# shellcheck disable=SC2086
+expect "an umlaut in UTF-8 reaches the gate" 302 "/login?return=/addons/x/%C3%A4" $R -H "Accept: text/html" "$S/addons/x/%C3%A4"
+# shellcheck disable=SC2086
+expect "an encoded slash reaches the gate" 302 "/login?return=/addons/x/a/b" $R -H "Accept: text/html" "$S/addons/x/a%2Fb"
 # shellcheck disable=SC2086
 expect "https://ccu/addons/x/ without a session: the gate asks for a login" 302 "/login?return=/addons/x/" $R -H "Accept: text/html" $S/addons/x/
 
