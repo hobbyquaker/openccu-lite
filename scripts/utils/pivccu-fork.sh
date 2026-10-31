@@ -19,6 +19,9 @@
 # PIVCCU_FORK_GIT and PIVCCU_FORK_ARCHIVE override the fork's git and archive URLs (the tests).
 # shellcheck disable=SC2155
 
+# shellcheck source=/dev/null
+source "$(dirname "${BASH_SOURCE[0]}")/version-order.sh"
+
 PIVCCU_FORK_OWNER="hobbyquaker"
 PIVCCU_FORK_REPO="piVCCU"
 PIVCCU_FORK_BRANCH="lite"
@@ -26,11 +29,6 @@ PIVCCU_FORK_BRANCH="lite"
 function pivccu_fork_fail() {
   echo "${PIVCCU_PACKAGE:-piVCCU}: $*" >&2
   exit 1
-}
-
-# the newest of the tags read from stdin: a release (no '-') after its pre-releases
-function pivccu_fork_newest_tag() {
-  awk '{ k = $0; if (index(k, "-") == 0) k = k "-zzz"; print k "\t" $0 }' | sort -V -k1,1 | tail -n1 | cut -f2
 }
 
 function pivccu_fork_update() {
@@ -67,7 +65,7 @@ function pivccu_fork_update() {
 
   local id commit
   if [[ -z "${wanted}" ]]; then
-    id=$(git -C "${work}/git" tag --points-at "${head}" --list 'v[0-9]*' | pivccu_fork_newest_tag)
+    id=$(git -C "${work}/git" tag --points-at "${head}" --list 'v[0-9]*' | newest_version_tag)
     if [[ -z "${id}" ]]; then
       id=${head}
       echo "${package}: no v* tag on ${PIVCCU_FORK_BRANCH}'s head ${head}: pinning the commit (a build round tags it, builds.md)"

@@ -6,7 +6,8 @@
 #
 # 1. the real tree: both packages' _SITE is the fork's archive macro, their pins are a tag or a
 #    commit, and neither script names alexreinert;
-# 2. no argument: the newest v* tag on lite's head (a release after its pre-releases), else lite's
+# 2. no argument: the newest v* tag on lite's head (dev < alpha < beta < rc < release, not sort -V's
+#    alphabet: scripts/utils/version-order.sh, compared with the report's semver_key), else lite's
 #    head commit; already current: nothing changes;
 # 3. a tag or a commit as the argument; the hash is the archive's, the LICENSE line stays;
 # 4. refused, with the files unchanged: a branch name, a commit not on lite, a commit older than the
@@ -27,6 +28,36 @@ trap 'rm -rf "$T"' EXIT
 fails=0
 ok()   { echo "ok   $1"; }
 fail() { echo "FAIL $1"; fails=$((fails+1)); }
+
+# the order of the tags
+newest() { printf '%s\n' "$@" | bash -c 'source "$1/scripts/utils/version-order.sh"; newest_version_tag' _ "$HERE"; }
+while read -r want tags; do
+  # shellcheck disable=SC2086
+  [ "$(newest $tags)" = "$want" ] && ok "newest of $tags: $want" || fail "newest of $tags: $(newest $tags), want $want"
+done <<'ORDER'
+v1.1.0-beta.0 v1.1.0-dev.6 v1.1.0-beta.0 v1.0.0
+v1.1.0-alpha.0 v1.1.0-dev.10 v1.1.0-alpha.0
+v1.1.0-rc.0 v1.1.0-beta.9 v1.1.0-rc.0 v1.1.0-alpha.3
+v1.1.0 v1.1.0-rc.9 v1.1.0 v1.1.0-dev.6
+v1.2.0-dev.0 v1.1.0 v1.2.0-dev.0
+v1.1.0-dev.10 v1.1.0-dev.9 v1.1.0-dev.10
+v1.10.0-dev.0 v1.9.0-rc.1 v1.10.0-dev.0
+v1.1.0-dev.0 v1.1.0-nightly.9 v1.1.0-dev.0
+v1.0.0 nightly v1.0.0 other
+ORDER
+[ -z "$(newest nightly other)" ] && ok "no version among them: nothing" || fail "no version among them: $(newest nightly other)"
+python3 - "$HERE/scripts/lite-upstream-versions.py" "$HERE" >"$T/order" 2>&1 <<'EOF'
+import importlib.util, itertools, subprocess, sys
+s = importlib.util.spec_from_file_location("v", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+tags = ["v1.0.0", "v1.1.0-nightly.9", "v1.1.0-dev.6", "v1.1.0-dev.10", "v1.1.0-alpha.0", "v1.1.0-beta.0", "v1.1.0-rc.0", "v1.1.0", "v1.2.0-dev.0"]
+for a, b in itertools.permutations(tags, 2):
+    got = subprocess.run(["bash", "-c", 'source "$1/scripts/utils/version-order.sh"; newest_version_tag', "_", sys.argv[2]],
+                         input=f"{a}\n{b}\n", capture_output=True, text=True).stdout.strip()
+    if got != max(a, b, key=m.semver_key):
+        print("differs:", a, b, got)
+print("done")
+EOF
+[ "$(cat "$T/order")" = "done" ] && ok "the helper and the report's semver_key agree" || { fail "the helper and the report's semver_key"; cat "$T/order"; }
 
 # 1. the real tree
 for p in generic_raw_uart detect_radio_module; do
@@ -78,7 +109,7 @@ R="$T/repo"
 setup() { # [<LICENSE line's hash>]
   rm -rf "$R" && mkdir -p "$R/scripts/utils" || exit 2
   cp "$HERE/scripts/update-generic_raw_uart.sh" "$HERE/scripts/update-detect_radio_module.sh" "$R/scripts/"
-  cp "$HERE/scripts/utils/utils.sh" "$HERE/scripts/utils/pivccu-fork.sh" "$R/scripts/utils/"
+  cp "$HERE/scripts/utils/utils.sh" "$HERE/scripts/utils/pivccu-fork.sh" "$HERE/scripts/utils/version-order.sh" "$R/scripts/utils/"
   lic=${1:-$(sha256sum "$F/LICENSE" | awk '{ print $1 }')}
   for q in generic_raw_uart detect_radio_module; do
     mkdir -p "$R/buildroot-external/package/$q"
@@ -120,6 +151,8 @@ for p in generic_raw_uart detect_radio_module; do
   setup; g tag -a -m x v1.0.0 "$OURS2"; archive v1.0.0; run "$p"
   [ "$rc" = 0 ] && [ "$(pin "$p")" = v1.0.0 ] && ok "$p: v1.0.0 after v1.0.0-rc.0" || { fail "$p: v1.0.0 after rc.0"; echo "$out"; }
   # already current: nothing
+  setup; g tag -a -m x v1.1.0-dev.6 "$OURS2"; g tag -a -m x v1.1.0-beta.0 "$OURS2"; archive v1.1.0-beta.0; run "$p"
+  [ "$rc" = 0 ] && [ "$(pin "$p")" = v1.1.0-beta.0 ] && ok "$p: v1.1.0-beta.0 after v1.1.0-dev.6" || { fail "$p: beta.0 after dev.6"; echo "$out"; }
   setup; cleanup_tags; g tag -a -m x v1.0.0-beta.2 "$OURS2"
   sed -i "s/v1.0.0-beta.1/v1.0.0-beta.2/" "$R/buildroot-external/package/$p/$p.mk"; cp -r "$R/buildroot-external" "$T/cur"
   rm -rf "$T/orig"; mv "$T/cur" "$T/orig"; run "$p"
