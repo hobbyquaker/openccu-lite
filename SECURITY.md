@@ -6,8 +6,8 @@ addon confinement or the release files — are reported here, not to OpenCCU.
 
 ## Supported versions
 
-Security fixes go into the newest release and the `main` branch. openccu-lite publishes
-prereleases of 1.0.0 (`1.0.0-dev.<N>`) for now; there is no maintained older line.
+Security fixes go into the newest release and the `main` branch. The latest release is 1.0.0; the
+pre-releases of 1.1.0 (`1.1.0-dev.<N>`) follow `main`. There is no maintained older line.
 
 ## Reporting a vulnerability
 

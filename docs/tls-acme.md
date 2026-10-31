@@ -195,7 +195,7 @@ settings, the account and the last issued chain stay under the state directory
   issued chain and key, the last attempt; `/usr/local/etc/occulite/tls/` — the manual mode's
   key, pending request and installed chain (config.md). In every backup.
 - Live file: `/etc/config/server.pem`, chain then key, `root:certs 0640`, written by the
-  privilege helper (security.md); the markers `/etc/config/server.pem.managed` (`<mode>
+  privilege helper ([security.md](security.md#tls-and-certificates)); the markers `/etc/config/server.pem.managed` (`<mode>
   <issuer>`) and, for now, `/etc/config/server.pem.acme` beside it.
 - API: `GET/PUT /api/system/v1/certificate…` (system-api.md).
 - The log: `journalctl -u occulited | grep certificate:` — one line per attempt, and the page's

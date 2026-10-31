@@ -1,657 +1,377 @@
-# Security: what openccu-lite does today, and what it still owes
+# Security
 
-**The audit's records** (task 120): [threat-model.md](threat-model.md) — assets, actors, boundaries and the residual
-risks; [security-asvs.md](security-asvs.md) — the code against OWASP ASVS 5.0 Level 2, row by row;
-[security-en303645.md](security-en303645.md) — the product against ETSI EN 303 645.
+How openccu-lite protects the system, what it leaves to you, and what is known to be missing. The companions:
+[threat-model.md](threat-model.md) — the assets, the attackers, the trust boundaries and the accepted risks, with the
+mechanisms at each boundary in detail; [security-asvs.md](security-asvs.md) — the code against OWASP ASVS 5.0
+Level 2, row by row; [security-en303645.md](security-en303645.md) — the product against ETSI EN 303 645. Reporting a
+vulnerability: [SECURITY.md](../SECURITY.md). The API's routes, scopes and files are in occulited's
+[system-api.md](https://github.com/hobbyquaker/occulited/blob/master/docs/system-api.md) and
+[config.md](https://github.com/hobbyquaker/occulited/blob/master/docs/config.md).
 
-The honest baseline: separate users now, AppArmor later.
-Written 2026-09-06 for the busybox-init step; the move to systemd changed the last section.
+- [Overview](#overview)
+- [What listens where](#what-listens-where)
+- [Accounts and sign-in](#accounts-and-sign-in)
+- [API tokens and scopes](#api-tokens-and-scopes)
+- [The browser](#the-browser)
+- [Network and firewall](#network-and-firewall)
+- [TLS and certificates](#tls-and-certificates)
+- [Addons and confinement](#addons-and-confinement)
+- [The system service and its privilege helper](#the-system-service-and-its-privilege-helper)
+- [The interface daemons](#the-interface-daemons)
+- [Radio keys](#radio-keys)
+- [Updates and integrity](#updates-and-integrity)
+- [Backups](#backups)
+- [Build hardening](#build-hardening)
+- [Known gaps](#known-gaps)
+
+## Overview
+
+**What protects the system:**
+
+- **One door.** lighttpd is the only program the system runs that listens on the LAN (80, 443). occulited and the
+  interface daemons listen on the loopback. SSH and the CCU's classic RPC ports exist only while you switch them on.
+- **A firewall that drops by default.** A port no rule accepts is closed, whatever listens on it. Each feature that
+  needs a port adds its own rule and removes it again.
+- **A login on everything.** Accounts with argon2id password hashes, a lockout after repeated failures, optional
+  passkeys and an optional identity provider (OpenID Connect). The addon pages are behind the same login.
+- **Scoped API tokens.** A program gets a token with the scopes it needs, optionally an expiry and the addresses it
+  may come from. Every API route names its scope; a route without one is reached by nobody.
+- **Least privilege inside.** occulited runs as its own unprivileged user; what needs root goes through a small root
+  helper that runs a fixed list of operations. The interface daemons run under their own users with no capabilities,
+  and addons run under their own users by default.
+
+**The defaults on a fresh system:**
+
+| | default |
+| --- | --- |
+| First boot | asks for an administrator account; no account and no password ship with the image |
+| Web server | HTTP, and HTTPS with a self-signed certificate; the HTTPS redirect and HSTS are off |
+| Firewall | policy DROP (IPv4 and IPv6); the web server from the local networks only |
+| SSH | off |
+| Classic RPC (2001, 2010, 9292, 2000) | off |
+| The Control app's public mode | off |
+| Client pairing | on, for programs on the local networks; every request needs an administrator's approval |
+| Addons | installed confined (their own user) |
+| Daily update checks and the catalogue fetch | off until you choose them on the welcome page |
+| Sessions | 30 minutes idle, 12 hours at most |
+| Backups | not encrypted until you set up encryption |
+
+**What you do yourself:**
+
+- **Set an individual BidCos security key** if you use BidCos-RF devices (System → Keys); the default key is public.
+  The Status page warns while it is unset and a BidCos device is paired.
+- **Before the system is reachable from outside the LAN**, switch HTTPS on with a certificate the browser trusts
+  ([TLS and certificates](#tls-and-certificates)), then the redirect and HSTS. Never forward the classic RPC ports,
+  and never combine the Control app's public mode with a port forward.
+- **Encrypt your backups and keep the recovery key** apart from the system. An unencrypted backup holds every radio
+  key and credential of the system.
+- **Install updates.** The checks are off until you switch them on; the Updates page shows what is available.
+- **Decide which addons to trust.** An addon you run as root is root on the system, and a confined addon still reaches
+  every device over the loopback.
+- **Prefer SSH keys** to root's password, and keep SSH off when you do not need it.
+
+**What is known to be missing** (see [Known gaps](#known-gaps)): releases are checked against a published SHA-256 but
+not signed; HTTP is the default; the radio keys are stored in clear; addon pages share the shell's origin; the
+interface daemons' RPC ports on the loopback have no authentication.
 
 ## What listens where
 
 | | bound to | reached by |
 | --- | --- | --- |
-| lighttpd | the LAN, 80/443 | browsers, addon clients |
-| `occulited` | `127.0.0.1:8183` only (2121 until 2026-09-22) — refuses any other `listen` | lighttpd (proxy), programs on the system |
-| `rfd`, `hs485d`, `hmipserver` | the loopback: `Listen IP = 127.0.0.1` in `rfd.conf`, `Legacy.BindAddress=127.0.0.1` in `crRFD.conf` — both verified on a running system; the fork ships them in its config templates | `occulited`, addons on the system |
-| sshd | the LAN, 22, only while the SSH switch is on; the firewall opens the port for local networks only | the administrator |
-| lighttpd, an addon's web ingress | the Unix socket `/run/lighttpd-addons/<id>/proxy.sock` (PROXY protocol, plain HTTP) in a directory `www-data:addon-<id> 0750`, one per addon whose manifest declares `runtime.web_ingress` (lite-addon-wireguard) | that addon alone (and root) |
+| lighttpd | the LAN, 80/443 | browsers, programs with a token |
+| `occulited` | `127.0.0.1:8183` only; it refuses any other listen address | lighttpd (proxy), programs on the system |
+| `rfd`, `hs485d`, `hmipserver` | the loopback: `Listen IP = 127.0.0.1` in `rfd.conf`, `Legacy.BindAddress=127.0.0.1` in `crRFD.conf` (the fork's config templates) | occulited, addons on the system |
+| sshd | the LAN, 22, only while SSH is switched on; the firewall opens it for the local networks only | the administrator |
+| lighttpd, classic RPC | the LAN, 2001/2010/9292/2000 (plain) and 42001/42010/49292/42000 (TLS), only while switched on | CCU clients off the system |
+| lighttpd, an addon's web ingress | the Unix socket `/run/lighttpd-addons/<id>/proxy.sock` (PROXY protocol), one per addon whose manifest declares `runtime.web_ingress` | that addon alone |
 
-The CCU's XML-RPC proxies on 2001/2000/2010/9292 exist only when the user switches them on (task
-143, below); the ReGa ports 1999 and 8181 do not exist at all, and 8183 is occulited's own port on the loopback. Without the switch, an integration
-that ran *off* the system and talked to those must run *on* the system or use the metadata API.
+The ReGa ports 1999 and 8181 do not exist. An integration that ran off the system and spoke to the interface
+daemons' ports runs on the system instead, uses lite-rpc over the web port with a token, or needs classic RPC.
 
-**An addon's web ingress** (task 406; lite-addon-wireguard is the first). A VPN or tunnel addon that ends the tunnel
-in its own process forwards its peers' web requests to the web server itself. Had it connected to `127.0.0.1:80`,
-every tunnel request would have come from the loopback, which this system trusts: the classic RPC login exempts it,
-the HTTPS redirect exempts it, API tokens may be limited to it, the login lockout is per address. So an addon whose
-manifest declares `runtime.web_ingress` with the address ranges its peers have gets a door of its own: lighttpd
-listens on a Unix socket, `/run/lighttpd-addons/<id>/proxy.sock`, that speaks the HAProxy PROXY protocol. The addon
-sends the peer's address in front of each request, `mod_extforward` makes it the connection's address before the
-request is read, and lighttpd's own `X-Forwarded-For` element - the one occulited takes, B-230 - names the peer. The
-lockout, a token's address ranges, the gate's ranges and the journal see `10.77.0.2`, not the loopback; a tunnel
-address counts as a local network, as a LAN address does. **Only inside the declared ranges:** the socket's block
-answers 403 for any other claimed address - the loopback, a LAN address, the socket path a PROXY `LOCAL` header
-leaves - and occulited refuses it again (`403 ingress-range`, journaled) when it sees the block's
-`X-Occulite-Ingress: <id>` with an address outside that addon's ranges, so one compromised addon cannot pass itself
-off as a LAN device or as the loopback. The block is **rendered by occulited from the stored manifest**
-(`/etc/config/lighttpd/occulite-ingress-<id>.conf`) at every install, uninstall, start and reload of lighttpd, so it
-exists exactly while the addon is installed (lighttpd is restarted, not reloaded, when a socket comes or goes: a
-graceful reload hands a dropped socket on pathless and never binds it again - measured); the manifest validator refuses ranges that hold the loopback,
-link-local or multicast addresses, or are wider than /8 (IPv4) or /32 (IPv6). Who may connect is the directory:
-`/run/lighttpd-addons/<id>/` is the web server's (it binds the socket there, 0666) with the addon's confinement
-group `addon-<id>` and mode 0750 - made by occulited (the helper's `ingressdir` operation) when it renders the
-block and before every start of the addon's unit, and by the fork's `lite-lighttpd-addon-socket` from
-`lighttpd-prepare.service` as a safety net, so the order the group and the web server come up in at boot does not
-matter and lighttpd always has the directory to bind in; while the addon's group is not there the directory is
-`www-data`'s own and nothing but lighttpd and root reaches it. Any other confined addon gets `EACCES`. On the socket:
-no TLS of lighttpd's (a tunnel encrypts; an addon that terminates TLS itself sets the PROXY v2 SSL TLV and lighttpd
-treats the request as `https`: Secure cookies, `X-Forwarded-Proto: https` - measured), no HTTPS redirect, no HSTS,
-`extforward.headers` emptied so a client-sent `X-Forwarded-For` is not taken even on this trusted connection, a
-client-sent `X-Occulite-Ingress` removed by the global script and the gate, and otherwise `webui.conf` as on the
-LAN sockets - the session gate, the security headers, the body limits. Measured on lighttpd 1.4.85 in a container
-and 1.4.84 on a lab system (the fork's container test, last section): PROXY v1 and v2 set the address, IPv4 and
-IPv6; a connection without the header is closed unanswered; a PROXY header on a LAN port is a 400; a user outside
-the group cannot connect. What an ingress addon still vouches for is the address inside its ranges: a compromised
-one can claim any address of its own peers (threat model R10).
+**Classic RPC** (System → Remote access, off by default) makes lighttpd serve the CCU's ports again and proxy them to
+the interface daemons, which stay on the loopback (`lite-classic-rpc-conf` writes only the switched-on sockets).
+These are the CCU's risks and the page states them: without the login, whoever the firewall lets in controls every
+device; with the login on the plain ports, the password travels in clear. The login is a user name and password of
+its own (SHA-512-crypt in a root-0600 htpasswd file, checked by lighttpd's `mod_authn_file`), not the system's
+accounts or tokens; the loopback is exempt. As on a CCU there are no per-method rights and no lockout — lite-rpc is
+the authenticated alternative. Each open port gets its own firewall rule from `local networks`.
 
-**Classic RPC, the way out** (System → Remote access, off by default). Two
-switches, plain (2001, 2010, 9292; 2000 where hs485d runs) and TLS (42001, 42010, 49292; 42000),
-make lighttpd serve the CCU's ports again and proxy them to the interface processes, which stay on
-the loopback — `S50lighttpd` writes only the switched-on sockets (`lite-classic-rpc-conf`), never
-upstream's ReGa ones. The risks are the CCU's and the page says them: without a login, whoever the
-firewall lets in controls every device; with the login on the plain ports, the password travels
-in clear text. The login is a user name and password of its own — not the system's accounts (argon2id
-would block single-threaded lighttpd for up to 931 ms per check on a Pi 3), not API
-tokens — stored as SHA-512-crypt in a root-0600 htpasswd file and checked by lighttpd's
-`mod_authn_file` (about 2 ms uncached on the Charly), realm `theRealm`, the loopback exempt. As on
-a CCU there are no per-method rights, no trace and no lockout; lite-rpc is where those
-come. Each open port has an owned firewall rule from `local networks`. Measured 2026-09-18: the
-stock OpenCCU and lite answer the same 401 and realm; BIN-RPC through lighttpd's proxy gets no
-answer on either; a client off the system with the pair gets `listDevices`/`newDevices` callbacks
-from hmipserver and rfd; lighttpd's graceful reload keeps answering one request with the old
-configuration right after a change (milliseconds), and keeps a listening socket the new
-configuration dropped — so a switch change restarts lighttpd instead.
+**An addon's web ingress.** A VPN or tunnel addon that ends the tunnel in its own process (lite-addon-wireguard)
+would otherwise forward its peers' requests from the loopback, which the system trusts more than the LAN. Instead it
+gets a socket of its own: it sends the peer's address in a PROXY header, and lighttpd and occulited both hold that
+address to the ranges the manifest declared — never the loopback, never a LAN address (`403 ingress-range`). The
+socket's directory is reachable for that addon's group alone. The mechanism and its checks are in the threat model,
+[B1b](threat-model.md#b1--the-lan--lighttpd).
 
-**Verified from another machine on the LAN** (2026-09-07, against a test system): 22, 80 and 443
-answer; 2000, 2001, 2010, 2121 (occulited's port then; 8183 since 2026-09-22, as loopback-only), 8181, 9292, 32001, 32010
-and 39292 all refuse. Holds for
-everything openccu-lite runs — with classic RPC off; switched on, lighttpd answers on its ports.
+## Accounts and sign-in
 
-**The bare host name redirected to its full name** (System → Certificate, off by default).
-With the switch on, lighttpd answers `GET` and `HEAD` for `https://<host>/` — and for
-`http://<host>/` together with the HTTP → HTTPS redirect, in one hop — with `302` to
-`https://<host>.<domain>/`, path and query kept, so a browser keeps one name: one session cookie,
-one HSTS entry (the redirect carries the header too), one saved password. Left alone: any other
-method, so a script's `POST` is not turned into a redirect it might not repeat with its body;
-`/api`; `/.well-known/acme-challenge/`; the loopback; IP literals and every other name. `302`, not
-`301`, because a browser keeps a `301` after the switch is off. The name is used only while the
-live certificate covers it — occulited refuses to switch the redirect on otherwise, and
-`S50lighttpd` checks again at every reload — so the redirect never leads into a certificate
-warning: after a rename or a new domain it waits for a certificate for the new name. The match is
-lighttpd's `$HTTP["host"]`, case-insensitive, with or without a port; checked with curl against
-lighttpd in a container (`scripts/lite-lighttpd-redirect-test.sh` in the fork).
+- **Accounts** are in occulited's `users.json`. Each has a **level**: *read*, *operate*, *configure* or *administer*.
+  Read sees the metadata, the status and the log; operate also switches devices; configure also edits names, rooms
+  and functions and configures devices; administer is everything, the system and the accounts included. Only
+  administrators create accounts and tokens.
+- **Passwords**: at least 8 characters, hashed with argon2id (t=3, 32 MiB). After **8 failures** the name and the
+  client address are **locked for 15 minutes**. A wrong name and a wrong password take the same time and give the
+  same answer. Changing your password needs the current one; a reset ends the account's other sessions.
+- **Passkeys** (Account → *Passkeys*): a passkey on a phone, a laptop or a FIDO2 key with a PIN or biometrics is a
+  **login of its own** — it signs in without name and password. It is **not a second factor**: the password alone
+  still opens a session. A passkey is bound to the system's full name (`<host>.<domain>`) over a trusted certificate;
+  renaming the host or the domain orphans every passkey, and the Network page warns before one. A sign count that goes
+  backwards (a cloned key) is refused. Adding and removing a passkey asks for the password again. An administrator
+  removes another account's passkeys on System → Users. Locked out entirely, root on the console runs `occulited admin
+  reset-auth <user>`: the account's passkeys removed, a one-time password set, its sessions ended.
+- **The identity provider** (OpenID Connect, with state, nonce and PKCE): a provider login is the local account of the
+  same user name; nothing is created from a provider identity, and an unknown name is refused and logged. Password
+  login beside the provider is a switch; switched off, the provider is the only way in through the browser. **The way
+  back** is the console: `occulited auth password-login on` and `occulited passwd <user>`, as root.
+- **Sessions**: a 130-bit random id, **30 minutes idle and 12 hours from the login** by default (System → Users →
+  Authentication → Sessions; 5 minutes to 30 days idle, 1 hour to 90 days at most; in force at once). The session
+  cookie is `HttpOnly`, `SameSite=Lax`, `Secure` with the `__Secure-` prefix over HTTPS, and scoped to `/api`; a
+  separate gate cookie with `Path=/addons/` opens the addon pages and is no credential on the API. occulited keeps
+  sessions **only as the SHA-256 of their id** — in memory, in its session store and in the gate's mirror on tmpfs —
+  so no id is written anywhere. Sessions survive a restart and a reboot; the store is in no backup. A logout,
+  *sign out everywhere*, a password change, a changed level or a removed account end the sessions concerned, also when
+  the change is made on the console.
+- **Confirmation inside a session**: the device key sheet, adding an SSH key, setting root's password and adding or
+  removing a passkey ask for the password again (or a fresh login at the provider). The ticket is single use, 60
+  seconds, bound to the session and the path.
+- **Authentication off** (`auth.mode: off`, System → Users → Authentication): every caller is one anonymous
+  administrator. It is meant for a system alone on a trusted network; the shell shows it in the warning colour. It
+  takes effect at the next start of occulited, so a mistaken switch is undone by editing `occulited.json`.
 
-**The shell's response headers.** lighttpd adds upstream's set to every answer (`conf.d/setenv.conf`:
-`X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
-`Cache-Control: private, no-cache` (two minutes for pictures), an emptied `Server`; `X-XSS-Protection` is upstream's
-and inert in every current browser) and HSTS where it is switched on. **Cache-Control is a default, not an override**
-for what occulited and the addons answer (occulited B-121): an answer that sets its own keeps it - `no-store` on
-the API's secrets, `immutable` on the shell's and an addon's content-hashed assets - and only an answer without one
-gets setenv.conf's value. **The shell's own answers** — the page, its assets, the
-client-side routes — carry a **Content-Security-Policy** and a **Permissions-Policy** set by occulited itself
-(task 259, F-5; `internal/ui/csp.txt` in occulited): `default-src 'self'; script-src 'self'; style-src 'self'
-'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src 'self'; frame-ancestors 'self';
-form-action 'self'; base-uri 'self'; object-src 'none'` and `camera=(self), microphone=(), geolocation=()`.
-Scripts are never inline or evaluated; `'unsafe-inline'` is for **styles alone** (Svelte writes `style=""`
-attributes into its templates); the camera is the shell's own for the QR scanner of the device keys. The
-policy is set by occulited and not by lighttpd's fragment on purpose: the addon pages under `/addons/` keep
-the CCU's conventions (inline scripts) and get none, and a path an addon's drop-in claims outside `/addons/`
-(RedMatic's `/description.xml`) must not get the shell's policy either. occulited's UI suite opens every page
-under exactly this policy and fails on a violation (`ui/test/e2e/csp.spec.ts`).
+Not provided: a second factor of the system's own (the identity provider's applies), TOTP, and a check against
+breached passwords ([security-asvs.md](security-asvs.md) V6.2 says why).
 
-**The firewall is one list of INPUT rules** (libfirewall is out of the image).
-The policy is `DROP` in both families — the `RESTRICTIVE`, now stated as what iptables does — and
-a port no rule accepts is closed, whatever binds it. What a feature needs is an owned rule the system
-adds and removes with the feature (the web server, SSH, classic RPC, the HmIP access points, the
-network discovery, an addon's opened port), each with a comment saying why; every rule is editable.
-A change from the page loads with a 60 s confirm window the privilege helper keeps, so a rule that
-cuts the page off reverts by itself. At boot the rules load before the network. A system that arrives
-from OpenCCU converts its `firewall.conf` once, keeping what OpenCCU's patched libfirewall did:
-*full* services and user ports come from `local networks` (its local-only chain), MOST_OPEN becomes
-policy ACCEPT only where the default was never applied (the marker), and open XMLRPC switches
-classic RPC on unless `authEnabled` asked for a ReGa login.
+## API tokens and scopes
 
-**The cost is explicit rather than discovered**, the same standard the XML-RPC
-change: an update closes addon ports that answered before it. Measured on a test system while it was
-still `MOST_OPEN`: the Mosquitto addon — installed from the catalogue in one click, marked
-*verified*, the first-class pairing — listens on 1883, 1884 and 8883 with `allow_anonymous true`
-in its shipped configuration, and a subscriber on the LAN with no credentials received every device
-value the hm2mqtt bridge publishes, `hm/set/#` being a topic the same bridge acts on. Under the `DROP` policy that subscriber is refused, and the way to allow it deliberately is a rule —
-or the addon's own switch: a catalogue entry declares its ports (`runtime.ports`,
-described in `runtime.port_info`), the Addons page lists each one with a switch that is off by
-default, and a switched-on port becomes the addon's owned rule.
-The point of one switch per port is exactly this case: the TLS listener can be opened and the
-plaintext one left closed. An uninstall closes them again.
+- **Tokens** (`olt_…`, 128 bits) are shown once and stored as SHA-256. Each carries **scopes** — `meta:read`,
+  `meta:write`, `system:read`, `logs:read`, `system:write`, `addons:write`, `power`, `backup`, `led`, `radio:keys`,
+  `auth:admin`, the RPC tiers `rpc:read` … `rpc:admin`, or Full access (`*`) — and optionally an expiry and the
+  address ranges it may come from. The route table and what each scope opens are in
+  [system-api.md → Scopes](https://github.com/hobbyquaker/occulited/blob/master/docs/system-api.md#scopes). A token
+  is sent as `Authorization: Bearer`, as the password of HTTP basic authentication (for XML-RPC libraries), or as
+  `?sid=` (see [Known gaps](#known-gaps)).
+- **The local token** `/usr/local/etc/occulite/local-token` is world-readable on purpose: every program on the system
+  may read names and rooms with it. It holds **`meta:read` alone**.
+- **An addon's own token** comes from its manifest's `runtime.api_scopes`: minted at every start into
+  `/run/occulite/addon-tokens/<id>.api` (0600, the addon's user), never written to `users.json`, gone with the addon.
+  It never carries `*`, `auth:admin`, `power`, `backup`, `radio:keys` or a scope for another addon's pages; a
+  declaration naming one is logged and left out. So an addon cannot reboot or halt the system or download a backup
+  through the API.
+- **The install token** `/run/occulite/install-token` (root, 0600) opens one route, from the system itself, so that an
+  install started on the command line ends up in the addon's unit and policy. It grants root nothing it does not have.
+- **An addon's pages with a token**: a token with the scope `addon:<id>` opens that addon's pages at lighttpd's gate
+  (`Authorization: Bearer` on every request) and opens no API route; the addon receives the token's name. No token
+  becomes a session there.
+- **Client pairing**: a program on the local network asks for access by area (devices, names, system, backup) and level;
+  an administrator compares a six-digit code and approves the request on the Status page, and the program receives its
+  token. The code is bound to the certificate the program saw. Pairing **never grants** `*`, `auth:admin`,
+  `radio:keys` or `power`. **Backups** hold the radio keys, so a request for `backup` says so loudly on the card, is
+  approved only with the administrator's own confirmation (password, passkey or a fresh login at the identity
+  provider, enforced by the API, per request, 60 seconds), and its token works only from the address that asked (an
+  IPv4 address, or the IPv6 /64, in which a client's temporary addresses change). A request expires after five minutes, and requests are rate-limited per address;
+  the switch is in the API tokens panel.
 
-None of that was an openccu-lite regression: a CCU3 in `MOST_OPEN` with the same two addons behaves
-identically, and the addons are doing what an MQTT broker and a bridge are for. It is written down
-because the sentence above it — "nothing listens beyond the loopback except lighttpd" — is true of
-*this project's* processes and not of the system as a user will run it. The remaining half is making
-it visible: the Firewall page's view of ports that are listening and that no rule covers
-which under `RESTRICTIVE` is what turns "my addon stopped answering" into a page
-that names the port.
+## The browser
 
-## Who is who
+- **Response headers** from lighttpd on every answer: `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options:
+  nosniff`, `Referrer-Policy: no-referrer`, an empty `Server`, and `Cache-Control: private, no-cache` where an answer
+  sets none of its own (the API's secrets carry `no-store`). HSTS where you switch it on.
+- **The shell's Content-Security-Policy**, set by occulited on the shell's own pages (`internal/ui/csp.txt`): scripts
+  only from the system, never inline or evaluated; inline styles allowed; `frame-ancestors 'self'`; `object-src
+  'none'`; the camera for the shell itself (the QR scanner), no microphone or location. occulited's UI tests open every
+  page under this policy. The addon pages under `/addons/` keep the CCU's conventions (inline scripts) and get no CSP.
+- **Cross-site requests**: a state-changing API call whose only credential is the cookie must come from this origin
+  (`Sec-Fetch-Site`, else `Origin`/`Referer`) **and** carry the header `X-Occulite-Request`, which no form or link from
+  another site can send (`403 request-header` otherwise). The API sets no CORS headers.
+- **Addons share the shell's origin** (`/addons/<id>/`), because every CCU addon expects it. The cookie scoping, the
+  header and the CSP limit what a careless addon leaks; a malicious addon page can still act with the user's rights
+  (threat model R1).
 
-- **Accounts** in `users.json` (argon2id, 32 MiB, parameters in the hash), roles `admin` and
-  `user`. `user` reads everything and changes only its own password; every mutation is `admin`.
-  Failed logins lock the name and the remote address for a while. An account may have no password: it then signs in through the identity provider only, and `POST /login` fails for it
-  like a wrong password — the login page tells no names apart.
-- **Security keys and passkeys** (task 262, ASVS 5.0 V6.5): each user may register WebAuthn credentials for their
-  own account (Account → *Security keys and passkeys*; a FIDO2 key, or a passkey on the phone or the laptop). With
-  a key registered **the password alone opens no session**: the login asks for the password and then the key, and
-  a failed key step counts towards the lockout like a wrong password. A key made as a discoverable credential with
-  user verification (PIN or biometrics) also **signs in alone** — the passkey button on the login page, and the
-  browser's offer in the name field where it has one. Adding and removing a key asks for the password again (or
-  a fresh login at the identity provider). The key is bound to the **system's full name** (`<host>.<domain>`): it is
-  made and used on that name over a certificate the browser trusts, never on an address or the bare host name,
-  and a rename of host or domain orphans every key — the Network page warns before one. **The way back** without
-  the key: an administrator removes another account's keys on System → Users (that ends the account's sessions),
-  and on the console `occulited webauthn list <user>` and `occulited webauthn remove <user> <id>|--all` do the
-  same for a locked-out administrator, next to `occulited passwd`. `users.json` holds per key the public key, the
-  sign count (one that goes backwards refuses the login — a cloned key), the flags, the name and the times; at most
-  ten per account. No TOTP (task 289), and no check against breached passwords (security-asvs.md V6.2 says why).
-- **Sessions**: a 26-character id (base32, 130 bits; task 125), **12 hours from the login, 30 minutes idle**
-  (the defaults since task 262 — ASVS Level 2's numbers; configurable on System → Users → Authentication →
-  Sessions within 1 h–90 d and 5 min–30 d, `auth.session_idle`/`auth.session_max` in `occulited.json`, in force
-  at once for running sessions too; 24 h and 30 days before); cookie (`HttpOnly`, `Secure` behind TLS,
-  `SameSite=Lax`, `Max-Age` the lifetime), bearer
-  header, or `?sid=` — the CCU convention addon pages rely on.
-  - *Two cookies per scheme* (task 259, D-78): the session cookie `occulite_session` /
-    `__Secure-occulite_session` is scoped to **`Path=/api`** and reaches the API alone; the gate cookie
-    `occulite_gate` / `__Secure-occulite_gate` carries the same id at **`Path=/addons/`**, opens the addon
-    pages at lighttpd's gate and at occulited's guard of the addon CGIs, and is no credential on the API. So
-    no request to an addon's page, CGI or proxy carries the API's cookie — what an addon's server side gets
-    of the session is the gate's `X-Occulite-Session` header, as before (R1 in the threat model says what
-    that means). A browser from before the change is moved to the two cookies by the shell's first
-    `GET /api/auth/v1/state`; a logout deletes every cookie at every path it may sit at.
-  - *The header credential* (task 259): a state-changing API call whose only credential is a cookie must
-    carry `X-Occulite-Request` (any value) — a custom header no form post or link from another site can
-    send — or is refused with `403 request-header`. The shell sends it on every call; a Bearer, a token,
-    `?sid=`, a read and the open routes need none, nor does a program on a system with authentication
-    off (it sends no cookie). `curl` with the cookie: `-H 'X-Occulite-Request: 1'`. Together with the
-    `Origin`/`Sec-Fetch-Site` check of task 213 this is what stands between another site and the API. **Sessions survive a restart of
-  occulited and a reboot**, and **no session id is written anywhere**: occulited
-  keeps each session under the SHA-256 of its id — in memory, in the session store and in the
-  gate's mirror — and hashes the id a request carries to find it.
-  - *The session store* `/usr/local/etc/occulite/sessions/sessions.json` (config.md) holds per
-    session the hash, the user, role and login method (`password` or `oidc`), the login time, both
-    expiries, a last-seen time at most ten minutes old, the client address and user agent (the
-    session list shows them). `0600` in a `0700` directory of the `occulite` user. Its directory
-    carries `.nobackup`, so **no backup contains it** (the firmware's backup tars `/usr/local`
-    with `--exclude-tag=.nobackup`); a restored backup brings no session back.
-  - *Written* at a login, a logout, *sign out everywhere*, ending a session from the list, a
-    password change, a user deleted or given another role, an expiry (a request or the five-minute
-    sweep), a clean shutdown, and a last-seen time at most every ten minutes per session — never on
-    every request. Atomically (a temporary file renamed). A write that ends a session and fails
-    removes or empties the store rather than leave that session to come back at the next start.
-  - *Changes outside occulited*: a reboot no longer ends sessions, so nothing relies on it. A
-    password set with `occulited passwd <user>` on the console ends that account's sessions —
-    the command removes them from the store, and a running occulited drops them before the
-    account's next request (it looks at `users.json` on every session check). An account removed
-    from `users.json` by hand or by a restored file loses its sessions the same way, a changed
-    role is taken over, and a missing `users.json` ends every session.
-  - *At start* occulited drops what no longer fits — an expired session, a user that is gone, a
-    login method the running mode does not offer (a provider session without the provider, every
-    session with authentication off) — takes each role from `users.json`, rebuilds the gate's
-    mirror from the rest and then serves. A restored session keeps its original expiry. An
-    unreadable or corrupt store restores nothing (everyone logs in again) with a warning in the
-    journal; the start never fails on it.
-  - *What the hash does not protect*: the id has 59.5 bits, so whoever reads the store (root, or
-    the `occulite` user) could find an id by brute force, with a large GPU effort, within its 30
-    days; that reader can read `users.json` and the system's TLS key as well. API tokens (128 bits)
-    and the local token are unaffected. The recovery system does not read the store.
-- **API tokens** (`olt_…`): sha256 in `users.json`, **scopes** each (the list and
-  the route table in [system-api.md → Scopes](https://github.com/hobbyquaker/occulited/blob/master/docs/system-api.md#scopes)), shown once; an
-  expiry and allowed address ranges are optional. Every API route names its scope, the
-  middleware refuses with a `403` that names the missing one, and a route without a scope in the
-  table is reached by nobody — the default is deny. Full access (`*`) is a wildcard over every
-  scope, later ones included. Accounts keep `admin` and `user` (Full access; the three read scopes
-  plus one's own account). A `users.json` from before the scopes migrates its tokens by their role
-  (`admin` → `*`, `user` → the read scopes, `led` → `led`) — nothing is widened but `admin`,
-  which was everything already. Only administrators create tokens.
-  - **The local token** `<state>/local-token` is **world-readable, `0644`, on purpose**: it is
-    the system's token for the programs running on it, root or confined alike, and it holds
-    **`meta:read` alone** — names and rooms; the journal and the system pages are out of its
-    reach. The state directory is `0711` for the same reason: reachable, not listable. A token
-    from before the scopes keeps its secret and loses every other scope at the first start.
-  - **An addon's own token** comes from its catalogue entry's `runtime.api_scopes`: minted at
-    every start, after an install and after a policy change, `/run/occulite/addon-tokens/<id>.api`
-    (`0600`, the addon's user) beside its control token, in memory only, never in `users.json`,
-    gone with the addon. Never `*`, `auth:admin`, `power` or `backup`: a declaration naming one
-    is logged and the scope left out. An addon without a declaration has the local token alone.
-  - The daemon's own update check of an addon rides on a `system:read` token it mints for
-    itself at start, not on the local token.
-  - **The install token** `/run/occulite/install-token` (`0600`, root; minted at every start, in
-    memory only, never in `users.json`) opens exactly one route, `POST /api/system/v1/addons/install/local`,
-    and only from the system itself: `/bin/install_addon` hands an install started outside the
-    system's service (the command line, an addon's own updater) to the service's install with it, so
-    the addon ends up in its unit and under its policy (openccu-lite B-274). It grants root nothing
-    root does not have — root runs `/bin/install_addon` anyway — and a confined addon cannot read it.
-  - **The scope `led`** (the role, which no account can have): the status LED's state, its
-    own override and locate (`GET /api/system/v1/led/state`, `POST`/`DELETE /led/override[/{id}]`,
-    `POST`/`DELETE /led/locate`) and nothing else — every other route, addon pages included,
-    answers 403.
-- **The identity provider** (OIDC): a provider login is the account of exactly the
-  provider's user name (`username_claim`, compared as a string), with or without a password, with
-  the role it has here — nothing is created from a provider identity, an unknown name is
-  refused and logged with the remote address, and the provider is trusted with the name. Password
-  login beside the provider is a switch (`auth.oidc.password_login`, [config.md](https://github.com/hobbyquaker/occulited/blob/master/docs/config.md)): off,
-  the provider is the only way into the web interface, `POST /login` and `POST /password` answer
-  `403 password_login_disabled`, and it can only be turned off from a session that came through the
-  provider. **The break-glass is the console**: `occulited auth password-login on` and `occulited
-  passwd <user>`, as root over SSH or on the system — a provider that is down never locks the console
-  out, only the browser. The first-boot setup always takes a password.
-- **Addon pages** (`/addons/…`): lighttpd's `mod_magnet` gate checks for a live session before the
-  request reaches the CGI — one SHA-256 (`lighty.c.md`) and one `open()` against the session
-  mirror on tmpfs, `/run/occulite/sessions`, whose files are named by the hash of the session id, so the mirror holds no usable id either. Addons keep their own `tclrega` check; the
-  shim hashes the id it is asked about the same way and answers exactly that call and nothing else.
-  - *An API token at the gate* (GitHub issue #3): a program may open one addon's pages with a token
-    instead of an account — `Authorization: Bearer <token>` on every request, and the token must hold
-    the **scope `addon:<id>`** of that addon (or Full access); its other scopes count for nothing
-    there, and the scope opens no API route. The token page offers the scope per installed addon, and
-    a pairing request may ask for it (`addons: ["<id>"]`). The gate reads a second mirror,
-    `/run/occulite/gate-tokens/<sha256 of the secret>` (the token's name, the URL segments it opens,
-    its expiry and address ranges — never a secret), answers 401 for an unknown or expired token and
-    403 for the wrong addon or an address outside the ranges (a journal line names the token), and
-    hands the addon the token as `X-Occulite-Session` with `X-Occulite-Auth: token` and
-    `X-Occulite-Token: <name>`; a session-opened request carries `X-Occulite-Auth: session`.
-    Client-sent copies of the three headers are removed everywhere, as the session header's always
-    were. No token ever travels in a URL, and none is turned into a session.
+## Network and firewall
 
-**The `certs` group (2026-09-09).** `/etc/config/server.pem` — the system's TLS certificate
-*and* key, one PEM, what lighttpd serves and what S50lighttpd regenerates when it expires — is
-`root:certs 0640`; `lite-cert-perms` sets that after every lighttpd start and reload. Every
-confined addon runs with `SupplementaryGroups=certs`, so a broker (mosquitto's `8883`)
-or a web server behind its own user offers TLS with the system's certificate instead of dying on
-a permission error. The group is a trust boundary: whoever is in it can impersonate the
-system on TLS. Root addons read the file anyway; nothing else is in the group.
+- **The firewall** is one list of INPUT rules with policy DROP in both families. Features own their rules (the web
+  server, SSH, classic RPC, the HmIP access points, the network discovery, an addon's opened port) and add or remove
+  them with the feature; the web server, SSH and classic RPC are from `local networks` only. Every rule is editable. A
+  change from the page reverts after 60 seconds unless confirmed, so a rule that locks you out undoes itself. The
+  rules load before the network comes up and apply to Ethernet and Wi-Fi alike. A system that comes from OpenCCU
+  converts its `firewall.conf` once. The Firewall page lists every listening socket with the rule that covers it, or
+  the policy.
+- **Addon ports**: an addon declares its ports in its manifest; the Addons page lists each with a switch that is off
+  by default, and a switched-on port becomes the addon's own rule. An MQTT broker's TLS port can be opened and its
+  plain port left closed.
+- **SSH** is off by default (`sshd.service` exits while it is off). With it on, the firewall opens 22 for the local
+  networks; root's `authorized_keys` and password are set on the SSH page, and an option refuses password logins
+  (keys only).
+- **The Control app's public mode** (System → Remote access, off by default): a request without a session on the
+  app's paths becomes the public account, which may read and operate devices but reaches nothing of the
+  administration, the metadata's writes, the accounts or the tokens. Anyone who reaches the web port operates the
+  house. The Status page warns while it is on.
+- **Wi-Fi**: `/etc/config/wpa_supplicant.conf` (root, 0600) keeps a WPA2 network as its PBKDF2 hash, not the
+  passphrase; a WPA3 network keeps its SAE password in clear because SAE needs it, and the dialog says so. No key is
+  answered or logged. The boot partition's setup file `openccu-lite-wifi.txt` holds the password in clear until the
+  first boot takes it and deletes it. A change made over the Wi-Fi itself reverts after 90 seconds unless confirmed.
+- **Outbound calls**: every connection the system opens by itself — where to, when, which fields, how to switch it
+  off — is in [privacy.md](privacy.md). All of them use HTTPS with certificate checks (TLS 1.2 or newer), except NTP
+  and the opt-in syslog forward. No telemetry.
 
-**The `usbstorage` group (B-259).** USB sticks with FAT, exFAT or NTFS carry no owner or mode of
-their own, so the mount gives every file the same: root the owner, `usbstorage` the group, umask
-0007 (`usbmount.conf`). `occulite` is a member (the backups on a stick are listed and restored by
-occulited); a confined addon joins only when its manifest declares the group, and writes only when
-it declares `/media` among its paths as well. Unlike `certs` it is not granted to every confined
-addon: a stick may hold the system's backups, and a backup made without encryption carries the
-radio keys, so an addon that declares the group can read them - the addon's manifest says so, and
-the user decides whether to install it. ext4 and the other Unix filesystems keep the owners and
-modes on the stick.
+## TLS and certificates
 
-**The certificate itself.** The live file can come from an ACME CA now — Let's
-Encrypt, ZeroSSL, or a LAN CA such as step-ca — issued and renewed by occulited with lego as a
-library ([tls-acme.md](tls-acme.md)) — or one the user brings himself (mode
-*manual*: uploaded or pasted, PEM or DER, or signed by his CA for a key and request the system made;
-that key lives under `<state>/tls/` as the `occulite` user and no route ever returns it). Three
-things about it belong on this page. The helper got **two enumerated operations** for that one
-file, `writecert` and `readcert`, with an allowlist of exactly three paths (`CertPaths`:
-`/etc/config/server.pem` and the two markers the operation writes beside it — root 0644, one line
-each: **`/etc/config/server.pem.managed`** with the mode, `acme` or `manual`, and the leaf's issuer, and the `/etc/config/server.pem.acme` with the issuer alone, kept until the
-fork's `S50lighttpd` reads the new name; the issuer is derived from the PEM, never taken from the
-caller, and the mode is checked at the boundary — anything but `acme` or `manual` is refused — and
-which `S50lighttpd`'s `check_certificate` honours: a certificate occulited installed is
-occulited's, renewed by it in mode `acme` and left to the user in mode `manual`, and is never
-regenerated by the init script, which mattered on the first live run, where a step-ca's 24-hour
-certificate failed the script's one-day check on the very reload that installed it; the switch
-back removes the markers first so the script regenerates); `/etc/config/` is a prefix on the
-generic write list, but the certificate and its markers are outside it (B-238: no generic
-operation takes them; since B-293 the switch back removes them through an operation of its own as
-well), so the separate operation is the only way in, and its point is the check at the boundary: the data must be a certificate chain plus
-the one private key that belongs to its leaf, nothing else, or it is refused and logged. The read
-side returns the certificate blocks and the marker's line (`<mode> <issuer>`; an old `.acme` marker alone reads as mode `acme`), never the key — the `occulite` user is not in the `certs`
-group, and the daemon shows what the system serves without holding the key S50lighttpd made (the key
-of an ACME certificate it holds anyway, in its own state directory). After an install lighttpd is
-reloaded and **every confined addon of the certs group is restarted** (a broker reads the file
-only at a start; a short interruption every sixty days beats an addon serving an expired
-certificate; the restarted ids are in the attempt's record on the Certificate page). And there is
-**one open route outside `/api`**: `/.well-known/acme-challenge/<token>`, which lighttpd hands to
-occulited on port 80 (the fork's HTTPS redirect leaves the path alone); it answers only the tokens
-of an order in flight, `404` otherwise, and nothing about the system. HTTP-01 from Let's Encrypt
-means port 80 must reach the system from the internet — the web server's rule allows the local
-networks only, so that needs a rule for port 80 whose source lets the CA in, which is why the page
-recommends DNS-01 for a system behind NAT; a LAN CA's HTTP-01 works as the firewall stands.
+- **The certificate** `/etc/config/server.pem` (certificate and key) is self-signed at first. It can come from an ACME
+  CA — Let's Encrypt, ZeroSSL, or a LAN CA such as step-ca — issued and renewed by occulited, with HTTP-01 or DNS-01
+  (Cloudflare, Hetzner DNS, netcup, DuckDNS, OVHcloud, or a script of your own that runs as the `occulite` user), or
+  you bring your own (System → Certificate). [tls-acme.md](tls-acme.md) is the guide. HTTP-01 from a public CA needs
+  port 80 reachable from the internet, which the default firewall does not allow; DNS-01 is the way for a system
+  behind NAT. The DNS provider's credentials are kept in occulited's state directory and redacted from its logs.
+- **lighttpd's TLS**: TLS 1.2 at least, TLS 1.3 offered, AES-GCM and ChaCha20 suites only (`sslsettings.conf`).
+- **Who reads the key**: `server.pem` is `root:certs 0640`. Every confined addon is in the group `certs`, so a broker
+  can serve TLS with the system's certificate — which means the group can impersonate the system on TLS. occulited is
+  not in the group: it installs a certificate through two operations of the helper that accept a certificate chain
+  plus the one key that belongs to its leaf and nothing else, and it never reads the key back. The ACME account key
+  and the key of a certificate occulited ordered are in its own state directory (0600). After a new certificate the
+  confined addons of the `certs` group are restarted.
+- **HSTS** refuses to switch on with a self-signed certificate. **The host name redirect** (off by default) sends
+  `https://<host>/` to `https://<host>.<domain>/` with a `302`, only while the certificate covers the full name.
+- **One open route outside `/api`**: `/.well-known/acme-challenge/<token>` answers only the tokens of an order in
+  flight.
 
-## What the service does with root (through a helper)
+## Addons and confinement
 
-`occulited` runs as its own user `occulite`. What needs root — writing `/etc/config`,
-running the firmware's scripts (`install_addon`, `createBackup.sh`, `restoreBackup.sh`,
-`setfirewall.tcl`, `udhcpc`, the init and rc.d scripts, `crypttool`), `systemctl`, staging a
-firmware update, creating an addon user — goes over a unix socket to `occulited helper`, a root
-process that offers exactly those operations and refuses everything else (`internal/priv`:
-the programs by name or directory, the writable paths by prefix, renames only out of the daemon's
-staging directory, and a handful of enumerated operations on exact paths — the root password,
-the live certificate and its removal, the addon account, a disk's SMART read, the log listing of a directory under `/usr/local/addons/` or `/var/log/` (the paths, sizes and times of its log files, never their content, a symlink out of those trees refused); a refusal is logged). **What root
-runs or obeys is outside the prefixes** (B-293): an addon's rc.d entry and everything in the addon
-web trees, together with what their links lead to (the addon's script behind the rc.d wrapper, its
-web directory under `/usr/local/addons/<id>`), and the three policy files the boot reads -
-`addon-policy/<id>.conf` (the unit's drop-in), `.needs` and `.start`. The helper writes those three
-itself from a checked decision: the daemon sends the mode, the uid and the grants, the helper
-refuses a uid below 30000, a root-equivalent group or capability for a confined addon and any value
-that would add a line to the unit, and renders the text. Enabling, disabling and removing an addon's
-rc.d entry and web link are operations of their own; installing an addon is `install_addon`, as
-root, as always. **The addons' own directories are not a write prefix either** (B-294):
-`/usr/local/addons/` is off the list, so nothing a root addon's script starts - its `bin/`, its
-`node_modules` - can be replaced through the helper. The daemon's three cases there are operations
-of one shape each: the uninstall's removal of an addon's emptied directory (never one with anything
-in it, and only once its rc.d entry is gone), the NEO Server's own `Disabled` marker (an empty file,
-never through a link), and the NEO Server leftover's removal (once its rc.d and web entries went). A
-confined addon's directory is its own user's, handed over by the ownership walk - and only that (B-295): the
-walk requires the drop-in the helper rendered to confine the addon to exactly that uid, so a root addon's tree is
-never given to an unprivileged user. A root addon's config directory under `/usr/local/etc/config/addons/<id>` is
-outside the generic operations too - the CCU's `addons/mh` and an id with no drop-in included - since a root addon's
-script may source or run what is there; a confined addon's stays open to the daemon, which makes it. Big files (an addon archive, an update image) are written
-by the daemon into its own directory and moved into place by one rename, never copied through the
-socket. In the other direction the helper **passes a descriptor** rather than bytes: the file an
-addon's CGI names in an `X-Sendfile` answer is opened as root and the descriptor is handed back
-over the socket (`SCM_RIGHTS`), so occulited streams it without ever holding the privilege to open
-that path — see "What moved across the boundary" below. Every command is an argument slice —
-never a shell string — and every input that reaches one is validated first. **A program on the
-list is a program with a shape** (B-234): the helper admits, per program, only the command lines
-occulited builds — `systemctl` a table of verbs and unit names without a slash (never `link`,
-`edit`, `set-environment`, and `enable`/`disable`/`mask` only `--runtime`), `systemd-run` its two
-transient units (the addon install scope around `install_addon` or an rc.d script, the DHCPv6
-client), `kill` a pid the helper looks at itself (a DHCP client, or an addon's process outside the
-system's own units), `restoreBackup.sh` an archive under the backup or staging directory, `crypttool`
-its four fixed forms, the init and rc.d scripts one action word — and a name on the list without a
-shape fails the tests. **No write follows a link an addon or occulited planted** (B-235): the
-helper resolves every path itself and follows a symlink only when it is the image's — root's, in
-a directory only root writes, not on removable media — checks the resolved path against the same
-lists, refuses a link's target outside them, and then acts through directory descriptors with
-`O_NOFOLLOW` at every component, so a link swapped in after the check is an error, not a detour.
-With `--root` pointing anywhere but `/` no command runs at all.
+- **Confined by default.** A newly installed addon runs as `addon-<id>` with its own group, its own tree under
+  `/usr/local/addons/<id>` (directories 0751, files 0640; its `www` stays readable for the web server), and a systemd
+  unit the system generates from the addon's start script and its manifest. Root is the deliberate opt-out per addon;
+  addons installed before an update to a confining release keep root, once per system. An addon whose manifest has no
+  `runtime` block is marked *undeclared*, and the catalogue marks entries *untested* where nobody has checked them.
+- **Its start script runs as its user too**: `info`, `init` and `uninstall` of a confined addon run under its user, not
+  as root. The system removes as root what the script cannot (its emptied directories, its web link).
+- **What a manifest may declare** for a confined addon: groups, capabilities, writable paths, data directories, ports,
+  API scopes, a web ingress. The validator refuses root-equivalent capabilities (`CAP_SYS_ADMIN`, `CAP_DAC_OVERRIDE`,
+  `CAP_SETUID`, `CAP_NET_ADMIN` and the like) and groups (the helper's group `occulite` among them), values that would
+  add a line to the unit, and ingress ranges that hold the loopback or are wider than /8 (IPv4) or /32 (IPv6). The
+  `usbstorage` group (FAT/exFAT/NTFS sticks, which may hold backups) is given only to an addon that declares it.
+- **No unit of its own.** An addon cannot ship a systemd unit; the generator reads nothing from the addon's tree and
+  logs a shipped unit file as ignored. Its lighttpd fragment is a root-owned copy occulited validated (no
+  `include_shell`, no socket, a proxy target on this system only).
+- **Root addons** run without `CAP_SYS_ADMIN` unless their manifest asks for it, so they cannot remount the system
+  partition; the system offers writable extension directories instead.
+- **What a confined addon still reaches**: the loopback, and with it the interface daemons' RPC and every device; the
+  local token's names and rooms; its own token's scopes; the ports opened for it; the system's TLS key (`certs`). It
+  does not reach the radio keys, occulited's state, another addon's tree or root.
+- **No quota**: an addon can fill the userfs or the journal (threat model R5).
+- **`requires.lite`** in a manifest is checked for its form only; an install on an older release is not refused yet.
 
-The socket `/run/occulite/helper.sock` is root:occulite 0660; the systemd unit adds
-`NoNewPrivileges`, `ProtectSystem=strict` (the daemon can write only its state directory and
-the session mirror) and `PrivateTmp`; on the busybox products `S48occulited` starts the helper and
-drops to `occulite` when the image has that user, and runs as root on an older image. As root
-(development, an old image) the same operations happen in process — the boundary is the same
-code either way.
+The addon author's view of all this is in [addons.md](addons.md).
 
-What that still means: a session with role `admin` reaches every operation the helper offers,
-which is what administering a CCU needs. The difference to before is what a bug in the HTTP
-side can do: nothing the helper's lists do not name.
+## The system service and its privilege helper
 
-## What the night of 2026-09-06/07 found in all of this
+occulited runs as the user `occulite` in a sandboxed unit (`CapabilityBoundingSet=` empty, `NoNewPrivileges`,
+`ProtectSystem=strict` with only its state and session directories writable, `PrivateTmp`, `ProtectHome`, a system
+call filter, `UMask=0077`). What needs root — writing `/etc/config`, the firmware's scripts, `systemctl`, an addon's
+account and policy, staging an update — goes over the socket `/run/occulite/helper.sock` (root:occulite 0660) to
+`occulited helper`, which does **only what its allowlist names**:
 
-Four of the night's findings belong here, because they are the difference between what this page
-claimed and what the beta.1 image did:
+- programs by name, each with the **argument shapes** occulited builds (a `systemctl` verb table, two kinds of
+  transient unit, a pid the helper checks itself for `kill`, one action word for the init scripts);
+- file writes under a short list of prefixes — **never** into files root later runs or obeys (an addon's rc.d entry,
+  the addon web trees, the addon policy drop-ins, the addons' own directories), and never into the files of a named
+  operation;
+- named operations on exact paths for the sensitive cases: root's password (one hash into one line of `shadow`, which
+  occulited never reads), root's `authorized_keys`, ending an SSH session, the certificate, an addon's account and
+  policy files, the ownership of an addon's tree, a disk's SMART read (exactly `smartctl -j -H -A -i <disk>`), the
+  log files' names and sizes in an addon's directory (never their content), an X-Sendfile file handed back as a
+  descriptor.
 
-- **The firewall was never applied on the systemd products**. `/usr/bin/tclsh` was a symlink
-  to itself, so `/bin/setfirewall.tcl` — which `eQ3StartNetwork` runs at every boot without
-  checking its exit code — died with `ELOOP`. The test system came up with an empty `iptables` ruleset,
-  every policy `ACCEPT`, while the Firewall page showed the configuration it believed was applied.
-  Fixed in the fork's `post-build-systemd.sh`. **"What listens where" above is only true with the
-  firewall up**; on an image without this fix, everything the daemons bind is reachable from the
-  LAN.
-- **The LAN gateways' encryption keys were in the API answer**. Every line of an
-  `[Interface N]` section went into a `Raw` map that is serialised into `GET /radio` and
-  `GET /radio/lan-gateways` — including `Encryption Key`. It had not bitten only because the
-  unprivileged daemon could not read `rfd.conf` at all, which the same night fixed. The key
-  now lives in an unexported field that only the write path reads.
-- **A saved gateway list would have relaxed that file to 0644**, handing the keys to every
-  addon user and to lighttpd. It is written `0600`, as the firmware writes it.
-- **Three write paths were outside the boundary** — the backup upload, the cleanup of the
-  streamed backup, and the device-firmware deploy — so those features did not work at all rather
-  than working with too much privilege. They use the staging-plus-rename pattern now.
+The helper resolves every path itself, follows only the image's own symlinks, and acts through directory descriptors
+with `O_NOFOLLOW`; a refusal is logged. The operations, their checks and the bugs found at this boundary are in the
+threat model, [B3](threat-model.md#b3--occulited--the-privilege-helper) and
+[B4](threat-model.md#b4--the-helper--root).
 
-The one deliberate widening: the helper's read allowlist gained `netconfig`, `rfd.conf` and
-`hs485d.conf`. The gateway keys are in the last two, so they do pass through the
-unprivileged process — it needs them to preserve a key the caller did not resend — but they never
-reach a response. `/etc/config/shadow` stays off the list, and it stays off it now that
-`POST /ssh/password` works: the file is written by an operation of the helper's own, not read by
-the daemon (below).
+What it means: an administrator reaches every operation the helper offers — administering a CCU needs that, and the
+administrator is root on the system by design (threat model T1). A bug in the HTTP side reaches only what the
+allowlist names.
 
-- **root's SSH keys and sessions** cross the boundary through three operations of the helper's own, and
-  through nothing more general:
-  - **`authkeys-read`** answers root's `authorized_keys` (public keys only). The helper names
-    `/usr/local/etc/ssh/authorized_keys`, where `/root/.ssh` links to, because its `ProtectHome=yes` hides `/root`.
-  - **`authkeys-write`** replaces occulited's section of that file with the keys it is given. Each key is checked
-    again at the boundary (a modern type, no options prefix, one line). Every line outside the section stays as it
-    was, and the file is written via a new file and a rename, 0600 root.
-  - **`ssh-end`** sends SIGTERM to one pid, and only when that process is an `sshd-session` of a connection: not the
-    listener, not anything else.
-  - **Adding a key and setting root's password ask for the user's own password every time.** They use the same
-    confirmed ticket as the device key sheet, bound to the session and the path, and a provider login confirms at
-    the provider. A key the page refuses is refused before the password is asked. A pasted public key may wait in
-    the tab's `sessionStorage` during a provider round trip; a password never does.
+## The interface daemons
 
-## What moved across the boundary
+`rfd`, `hmipserver`, `multimacd`, `hs485d` and `hmlangw` are eQ-3's binaries and not ours to audit. Each runs as its
+own user with **no capabilities** (`CapabilityBoundingSet=` empty), `NoNewPrivileges`, `ProtectSystem=strict` with
+write access to its own files only, and restricted address families; they listen on the loopback. Their RPC ports
+have **no authentication**: anything on the system, every addon included, can switch devices through them. That is
+the CCU's design and the reason classic RPC is off by default; lite-rpc on the web port is the authenticated way in
+from outside.
 
-- **`X-Sendfile` was served outside it**. `writeCGIResponse` opened the file an addon's CGI
-  names with a plain `os.Open`, as `occulite`. Today's helper umask leaves a root CGI's archive
-  `0644`, so RedMatic's backup worked and nothing showed; a **confined** addon writing its
-  archive `0600` as `addon-<id>` would have got a 404. It is a descriptor now: a new enumerated
-  operation opens the file as root and passes the descriptor back over the socket (`SCM_RIGHTS`),
-  and occulited streams from that — the bytes never travel through the socket and the path never
-  becomes openable by the unprivileged side.
-  Its allowlist is a **new** list, `SendfileDirs` (`/usr/local/tmp/`), deliberately not `ReadPaths`,
-  which stays exact and stays a list of files the daemon may read *into itself*. Three rules keep a
-  directory addons write into from becoming a grant on whatever they put there: the open is
-  `O_NOFOLLOW`, so the last component cannot be a symlink into `/etc`; only a regular file is passed
-  back (`O_NONBLOCK` too, so a fifo left there cannot block the helper); and the descriptor is
-  checked *after* opening, through `/proc/self/fd`, which catches a symlinked *directory* in the
-  middle of the path that no test of the requested string could ever see. Each of those refusals is
-  a test in `internal/priv`.
-- **The root password could not be set at all**. `SetRootPassword` read
-  `/etc/config/shadow` (0640 root:root) to replace root's hash, and the daemon is unprivileged, so
-  `POST /ssh/password` failed — the one thing on the SSH page that never worked. The two answers
-  were putting shadow on `ReadPaths`, which carries every hash on the system through the unprivileged
-  process, or one more enumerated operation. The choice was the operation: occulited runs
-  `mkpasswd` (which needs no privilege, and takes the password on stdin), hands the helper **one
-  hash**, and the helper replaces the password field of the `root:` line as root. Nothing else in
-  the file changes — the ageing fields, the other accounts, the mode and the owner are written back
-  as they were — and the file crosses the boundary in neither direction. `ShadowPaths` is an exact
-  list of one path, and the hash is checked at the boundary as well as inside the operation: it has
-  to look like a crypt hash, and so can carry neither a `:`, which would add fields to the line,
-  nor a newline, which would add lines to the file.
-- **The addon account is written by the helper itself, not by busybox**. Before that confining an addon ran `addgroup` and `adduser` through the
-  helper's program list. Both write a temporary file beside `/etc/group` and rename it — and on
-  the image `/etc` is read-only; only the two files themselves are bind mounts of
-  `/run/openccu-lite/{passwd,group}` (`occu-etc-writable`), so the first Pi 4 boot answered
-  *addgroup: can't create '/etc/group+': Read-only file system* and the addon fell back to root.
-  The container and the OVA never showed it because their rootfs is writable. The answer is one
-  more enumerated operation, `addonuser`: the passwd file and the group file (`AccountFiles`, an
-  exact list of the two, in that order), an account name of the `addon-<id>` shape and a uid at or
-  above `AddonUIDBase` (30000). The helper appends `addon-<id>:x:<uid>:` to `/etc/group` and
-  `addon-<id>:x:<uid>:<uid>::/usr/local/addons/<id>:/bin/false` to `/etc/passwd` with `O_APPEND`
-  on the existing inode — never a temporary file plus rename, which would fail there and could not
-  land on a mount point anyway. Idempotent: the same name and number already present is fine; the
-  name with another number, or the number with another name, is an error and nothing is written.
-  The name is checked at the boundary and in the operation both (no `:`, no newline: the same
-  argument as the hash above), the home directory is derived from the name rather than taken from
-  the caller, and the shell is always `/bin/false`. `/etc/shadow` is left alone — `x` with no
-  shadow line is an account nobody can log in to (busybox `adduser -D` wrote a locked `!` line
-  there, and nothing needed it). `adduser` and `addgroup` are off the program list: one path on
-  every product, the in-place append, which the writable roots take just as well. The certs group and the runtime block's groups are not memberships in `/etc/group` — the unit's
-  `SupplementaryGroups=` names them — so the group file gets the one line.
-- **A disk's SMART data is read by the helper itself**. The Status page's storage
-  health panel shows SMART for USB, SATA and NVMe disks, and `smartctl` needs root to open the
-  device. On the program list it would take any option — `-s`, `-t` and `-X` change a drive's
-  state — so it is one more enumerated operation, `smartctl`, in the pattern of `flashcopro`: the
-  request carries the device and nothing else; the device must match
-  `^/dev/(sd[a-z]{1,2}|nvme[0-9]{1,2}n[0-9]{1,2})$` — a whole SCSI/SATA/USB disk or an NVMe
-  namespace; no partition, no SD card or eMMC (they have no SMART), no virtio disk (its health is
-  the host's), no NVMe controller node, no path with a component to follow — and must be a block
-  device (checked with `lstat` in the operation); and the helper runs exactly
-  `/usr/bin/smartctl -j -H -A -i <device>` with a 60-second limit. Where that program is not
-  installed (the VM and the container products) the operation answers
-  `not-available:`, the client's `ErrNotAvailable` — neither a refusal nor a failure — after the
-  shape check and before it looks at the device node. A request that also carries
-  arguments, a program, stdin, an environment, a directory, data or a second path is refused and
-  logged rather than ignored, and `smartctl` is not on the program list. Each refusal is a test in
-  `internal/priv`. The daemon asks at most once an hour per disk, never for a virtual one, and not at all on a system
-  whose host monitors the disks.
-  Everything else the panel reads needs no privilege: the sysfs attributes and the ext4 counters
-  are world-readable, and the kernel log comes from the journal through the unit's
-  `systemd-journal` group.
-- **An addon's files are given to its user by a walk that follows no link**. Root changes owners inside directories the confined addon's user controls,
-  and that user can plant links or swap a directory for one while the walk is inside. Until then
-  the repair was `chown -R` through the program list (busybox, which opens a directory by its
-  path again after its `lstat`) and the helper's recursive chown was `filepath.WalkDir`: a swap in
-  that window made root give away whatever the link led to. And `chown` on the program list took
-  any arguments. Now `internal/ownwalk` does the walk by descriptors only - `openat` with
-  `O_PATH|O_NOFOLLOW` relative to the directory's descriptor, `statx` and `fchownat` with
-  `AT_EMPTY_PATH` on the entry's own descriptor, a directory read through `.` below it - follows no
-  link, enters nothing on another device or mount, never gives away a device node, a file with
-  several links only with `fs.protected_hardlinks` on, and resolves each top directory from `/`
-  through directories only root can change. The helper's `owntree` operation admits one addon's
-  three standard directories and data directories below `/usr/local` outside the shared trees, and
-  only the uid the passwd file gives `addon-<id>`; `chown` is off the program list. The fork's
-  addon units run the same walk as root before every start (`occulited -addon-own <id>` with the
-  same boundary).
-- **An addon cannot bring its own systemd unit** (fork `occu-addons`). Let an
-  addon ship `/usr/local/addons/<id>/etc/systemd/<id>.service`, and the generator linked it as
-  `addon-<id>.service`. That directory belongs to the confined addon's user, so the running addon
-  could write the file itself. systemd read it at the next boot or `daemon-reload`, and a
-  `User=root` or a `+`/`!` prefix (`ExecStartPre=+/bin/sh -c …`) ran as root; the policy's `User=`
-  drop-in does not stop a `+` command. A validated root-owned copy made at install, or own units
-  for root addons only, were the alternatives; the option was dropped. The
-  generator now reads nothing from an addon's directory. It writes the generated unit from the rc.d
-  script, the stored policy and the catalogue's `runtime` block, and names an ignored unit file in
-  the journal (*"addon &lt;id&gt; ships its own unit file; ignored since openccu-lite 1.0.0-alpha.0,
-  the generated unit is used"*). No catalogue entry and none of our addons shipped such a file.
-- **Still open, the same kind of path** (found 2026-09-13): a
-  confined addon's rc.d script lives in its own directory and still runs as root outside its unit
-  (`info` for every addon listing through the helper, `init` at boot, `uninstall`); lighttpd
-  runs as root and includes an addon's drop-in that links into the addon's directory; the
-  userfs `ld.so.conf.d` include.
+## Radio keys
 
-## Encrypted backups
+- **The BidCos-RF security key** is in `/etc/config/keys` (rfd's, 0600). Set it on System → Keys; the default key is
+  public.
+- **The HmIP keys** — the network key and the device keys (`/etc/config/crRFD/sgtin.map`, 0640) — are stored in clear,
+  because hmipserver needs them that way; hmipserver's data directory is 0700 with 0600 files. Every route that
+  touches device keys needs the scope `radio:keys`, which only Full access includes and an addon's token never gets.
+  **The key sheet** is the one answer with every key in clear: a session confirms it every time, each export is
+  logged with who and from where, and the page keeps the keys in memory only. The QR scanner decodes in the browser;
+  only the decoded text reaches the API.
+- **Local key mode** keeps the HmIP network key on the system, so a radio module exchange or a pairing needs no call to
+  eQ-3's key server ([lokaler-schluesselmodus.md](lokaler-schluesselmodus.md)).
+- Whoever holds the SD card holds every key; full-disk encryption is not part of the product.
 
-A `.sbk` is signed with the BidCos security key, not encrypted: it holds the radio keys, `users.json`,
-the tokens, `acme/settings.json` and `tls/key.pem` in plain, and copies end up on sticks, unauthenticated
-NFS exports and download folders. With encryption set up, `GET /backup` hands out `.sbk.age` — the
-`.sbk` inside one age v1 stream (ChaCha20-Poly1305 in 64 KiB chunks, a header MAC, truncation detected)
-for two X25519 recipients (config.md has the files):
+## Updates and integrity
 
-- **What it protects against:** a lost stick, a readable share, a leaked download — the copy is
-  ciphertext and neither key is beside it. Damage and tampering are detected chunk by chunk; a partial
-  decryption is never handed to `restoreBackup.sh`.
-- **What it does not:** a compromised running system (root reads `/usr/local` in plain, and an
-  administrator can download unencrypted after confirming the password — journaled); the system's own
-  storage stolen (the identity is on it; that is disk encryption, not this); the recovery key lost
-  together with the system (those backups are gone for everyone; the kit, the tick and *Test my recovery
-  key* make it less likely); deletion; metadata (names, sizes, dates); "harvest now, decrypt later"
-  against X25519 (age's hybrid post-quantum recipients are a later switch for all recipients at once).
-- **A planted backup:** age proves integrity to the key holder, not authorship — whoever knows a
-  recipient can encrypt a file to it. Hence the API shows fingerprints only and never a recipient
-  string, the system keeps the hashes of the backups it handed out (`created_here` at the check), and a
-  user BidCos security key's signature still has to match at the restore. No signature scheme of its own.
-- **The recovery system** (`restore_backup.cgi`) stays plain `.sbk` only: decrypt on a PC with
-  `age -d` first (the kit says how). An encrypted upload there stops at its untar and leaves the file in
-  `/usr/local/tmp` until the next boot — upstream's, not reported.
+- **System updates**: the release check reads openccu-lite's release list (from GitHub, or from the catalogue's
+  pre-resolved copy) for the update channel you chose (stable, beta or dev). A download is checked against the
+  release's **published SHA-256** before it is staged; a sum that cannot be read fails the download, and a release
+  without a sum file is staged with a warning that it is not verified. The file's kind
+  is read from its content, the space it needs is checked at staging and again at install, and the recovery system
+  checks kind, board and space once more before it writes the system partitions. The Status page watches the system
+  come back, and a boot that does not complete falls back to the previous system.
+- **Not signed.** The sum comes from the same place as the file, so it proves the download is whole, not who made it
+  (threat model R3).
+- **Addons** from the catalogue are checked against a `.sha256` where the release publishes one; installing an addon
+  runs its package's install script as root, as on every CCU — installing is trusting the package.
+- **Device firmware** comes from eQ-3's server over HTTPS; there is no published sum to check it against.
+- An SBOM (CycloneDX) is published with every release and served at `/api/system/v1/sbom`.
 
-## The binaries' hardening
+## Backups
+
+- **An unencrypted backup** (`.sbk`) holds everything: the radio keys, `users.json` with the password and token hashes,
+  the identity provider's client secret, the ACME account key and DNS credentials, the TLS key, the backup targets'
+  credentials. Live sessions and the backup encryption identity are never in a backup.
+- **Encrypted backups** (`.sbk.age`, Backup page): the `.sbk` inside one age v1 stream (X25519, ChaCha20-Poly1305 in
+  chunks, truncation detected) for two recipients — the system's own identity and your **recovery key**. A copy on a
+  lost stick, a share or in a download folder is ciphertext without either key beside it, and damage or tampering is
+  detected before anything reaches `restoreBackup.sh`. It does not protect against a compromised running system, the
+  system's own storage being stolen, or losing the recovery key together with the system. Downloading unencrypted
+  while encryption is set up asks for the password and is logged; an API token with `backup`, also one from client
+  pairing, can ask for the unencrypted file with `?encrypted=false` and is not asked, so such a token is as sensitive
+  as the backup itself. age proves integrity, not authorship: a restore also
+  checks the BidCos key's signature.
+- **Targets**: a USB stick, an SMB or NFS share (mounted `nosuid,nodev,noexec`), or an SFTP server whose host key you
+  compare and pin.
+- The recovery system's restore takes plain `.sbk` only; decrypt with `age -d` on a PC first.
+
+## Build hardening
 
 Every C program the image builds is a position-independent executable with the strong stack protector,
-`_FORTIFY_SOURCE` and RELRO (buildroot's flags in `buildroot-external/Buildroot.config`). **Full RELRO** — every
-symbol bound at start, the whole GOT read-only before the program's first line — is set for the programs that parse
-what the network sends or run as root at boot: lighttpd and its modules (the one LAN-facing daemon), busybox (udhcpc
-runs as root) and chronyd (NTP replies), beside sshd and systemd, which link so on their own
-(`buildroot-external/lite-hardening.mk`). eQ-3's prebuilt interface daemons (rfd, hs485d, multimacd, hmlangw) are
-PIE with partial RELRO as delivered and cannot be rebuilt.
+`_FORTIFY_SOURCE` and RELRO; lighttpd, busybox and chronyd (beside sshd and systemd) link with **full RELRO**
+(`buildroot-external/lite-hardening.mk`). `scripts/lite-hardening-guard.sh` reads the image's ELF headers at the end of
+every build and stops it on a regression. occulited is a static Go binary without cgo and therefore not a PIE; Go's
+memory safety stands in for that. eQ-3's prebuilt daemons are PIE with partial RELRO as delivered. systemd is built
+with seccomp, so the units' `SystemCallFilter=`, `RestrictAddressFamilies=`, `RestrictNamespaces=` and
+`RestrictSUIDSGID=` are enforced.
 
-**occulited is a static executable and not a PIE.** Go without cgo (D-15: one static file per architecture, no libc)
-cannot produce a static PIE: `-buildmode=pie` gives a binary that needs glibc's loader, and the `-d` static PIE does
-not start. Go's own memory safety is what stands in for ASLR there; the privilege boundary is the helper's allowlist
-(above), not the address layout.
+## Known gaps
 
-`scripts/lite-hardening-guard.sh` reads the ELF headers of the image's binaries at the end of every build and stops
-it when one of them lost a flag: a non-PIE where a PIE is expected, a lower RELRO level, an executable stack, a
-missing stack protector or FORTIFY import, occulited turned dynamic. It also runs by hand against an unpacked root
-(`-v` prints the table).
+What is missing or accepted today; the threat model's [residual risks](threat-model.md#residual-risks) say why each is
+accepted and what would remove it.
 
-## Outbound calls
-
-Every connection the system opens by itself - where to, when, which fields, and how to switch it off - is in
-[privacy.md](privacy.md), and the requests occulited builds are pinned by tests (`internal/*/outbound_test.go`). In
-short: the system release check (GitHub), the device firmware check and download (eQ-3), the addon catalogue and the
-addons' update checks (GitHub, each addon's URL) - each on *Check now* and, with *Check daily*, once a day, **off on a
-fresh system** and asked once on the welcome page (D-90); time (NTP)
-always; eQ-3's HmIP key server at a radio module exchange and at pairing a device whose key is not on the system,
-unless in local key mode; ACME and OpenID Connect only when configured. No telemetry; no request carries a serial
-number, the host name or the list of devices, except the device types a firmware download names and the SGTINs the
-key server needs.
-
-## Not done
-
-- **Addon confinement** is in on the systemd products and **on by default** (`docs/config.md`
-  → `addons.default_mode`, `docs/addons.md` → Confinement): a newly installed addon runs as
-  `addon-<id>`, root is the deliberate opt-out, and an addon that declared no `runtime` block is
-  marked *undeclared* in the UI. Addons already installed when a system updates keep root, pinned once
-  per system. The busybox products run addons as root as they always did. Confinement depends on
-  `occu-etc-writable.service`, which has not yet been exercised on a real system.
-- **Wi-Fi**:
-  - **What is stored where:** `/etc/config/wpa_supplicant.conf` (root 0600, userfs, in the backup) holds the networks.
-    - A WPA2 network's key is hashed as `wpa_passphrase` does (PBKDF2 over the SSID); the passphrase itself is not
-      kept.
-    - A WPA3 or WPA2/WPA3 network also keeps its `sae_password` in clear, because SAE needs it; the connect dialog says
-      so.
-    - occulited reads the file through the helper's read list, so that a change keeps the other networks' keys; no
-      key is answered or logged.
-  - **The supplicant** (`occu-wpa@<if>.service`, root) runs with `CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW
-    CAP_CHOWN CAP_DAC_OVERRIDE`: `CAP_CHOWN` gives its control directory `/run/wpa_supplicant` to the group
-    `occulite`, so the web UI scans and connects through the socket, without the helper. `CAP_DAC_OVERRIDE` lets its
-    replies reach occulited's own socket in `/run/occulite/wpa` (owned by `occulite`); without it every request timed
-    out on a test Pi 4 (dev.17). It also runs with `ProtectSystem=strict`,
-    `RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_PACKET AF_INET AF_INET6`, `NoNewPrivileges` and the rest.
-  - **The boot partition's setup file** (`openccu-lite-wifi.txt`) carries the password in clear until the first boot
-    takes it. Then it is deleted (`/boot` remounted rw for the moment) and saved as a WPA2 network, hash only. A file
-    that cannot be used stays, and why is shown on the Network page.
-  - **A change made over the Wi-Fi itself** is reverted after 90 s unless confirmed, as the Ethernet settings are.
-  - **The firewall:** `lite-input` is not tied to an interface, so its rules apply to `wlan*` as to `eth*`.
-- **HmIP device keys**:
-  - **What is stored where:** `/etc/config/crRFD/sgtin.map` (`SGTIN=KEY`, `0640`, written by the helper, hmipserver's
-    after its start; on the userfs and in every backup) holds each device key in clear, since hmipserver needs it that
-    way. `hmip_user.conf` names it (`SGTIN.LocalKey.MappingFile`). occulited reads it through the helper's read list.
-  - **Who reaches them:** every route needs the scope `radio:keys`. Only Full access includes it (`system:write` does
-    not), so of the accounts only an administrator has it, and an addon's token never gets it.
-  - **Only the key sheet answers keys.** A session confirms the sheet every time, even a fresh valid one:
-    - with the password, where a wrong one counts towards the lockout like a failed login;
-    - or, for an account without one (or with password login off), with a fresh login at the identity provider:
-      `prompt=login`, `max_age=0`, the same account, `auth_time` after the start.
-    - The confirmed ticket is single use, 60 s, bound to that session and path, and never works as a download ticket.
-    - It comes back from the provider in the URL fragment, which reaches no server and no log; the page drops it from
-      the address at once.
-    - A token with the scope is not asked: holding it is the grant.
-  - Each export is logged with who, from where and how many keys. The sheet keeps the keys in the page's memory only,
-    never in the browser's storage, and drops them when it closes.
-  - **The scanner** decodes in the browser: a photo, or the live camera where the page is a secure context. Nothing
-    of the picture leaves the page; only the decoded text goes to the API.
-- **The seccomp-backed sandbox lines are enforced since `1.0.0-dev.15`**: systemd is built with
-  libseccomp (`systemctl --version` says `+SECCOMP`).
-  - Before that image, `RestrictSUIDSGID=`, `RestrictNamespaces=`, `LockPersonality=`, `RestrictRealtime=`,
-    `MemoryDenyWriteExecute=` and `SystemCallArchitectures=` were accepted and not enforced.
-    `RestrictAddressFamilies=` and `SystemCallFilter=` were refused as unknown and dropped from unit files.
-  - Measured on the Pi 4 with transient units: `RestrictAddressFamilies=AF_UNIX` and `SystemCallFilter=~@network-io`
-    block a TCP connect, `RestrictSUIDSGID=yes` refuses `chmod u+s`, and `RestrictNamespaces=yes` refuses
-    `unshare -m`.
-  - **What it covers:** the interface daemons' units, `occu-syslog-forward` and systemd's own units, and
-    the confined addons' `RestrictSUIDSGID=yes` from occulited's drop-in.
-  - rfd and hs485d keep `AF_NETLINK`: their LAN gateway library lists the interfaces with `getifaddrs()`.
-- **AppArmor** profiles per component: deferred (2026-09-06).
-- **TLS for lighttpd** is upstream's self-signed certificate by default; the ACME
-  option above replaces it. The metadata API over TLS is lighttpd's job either way.
-- **`hs485d`'s bind address**: the same `Listen IP` key as `rfd` by the binary's strings, but no wired
-  hardware at hand to prove it; verify on the first system with an HM-Wired adapter.
-
-## Authentication off
-
-`auth.mode: off` in `occulited.json` — set on System → Users, section Authentication  — removes the login entirely:
-every caller on the API, the addon pages and through lighttpd's gate is the one anonymous
-administrator session occulited keeps alive (`/api/auth/v1/state` answers it with `auth_off:
-true` and sets its cookie, so the gate's session file exists). It is meant for a system that is
-alone on a trusted network and nothing else; the shell shows the user icon in the warning
-colour and says so on the Account and Users pages. The mode is written to the file and takes
-effect at the next start of occulited, which the Authentication section offers, so a mistaken switch is
-undone by editing the file and restarting.
+- **Releases are not signed** — only checked against a published SHA-256 (R3).
+- **HTTP is the default**; HTTPS, the redirect and HSTS are switches.
+- **The radio keys are in clear** on the storage and in every unencrypted backup (R6). Physical access ends everything
+  (R7).
+- **Addon pages share the shell's origin** (R1); a malicious addon page acts with the user's rights.
+- **The interface daemons' loopback ports have no authentication** (R2): every addon reaches the devices.
+- **Classic RPC has no real authentication** when you switch it on (R8).
+- **`?sid=` puts a credential in a URL**: the API still takes a session id or a token as `?sid=`, and the CCU's legacy
+  alias in addon URLs is on for the addons that need it (R9).
+- **No second factor** of the system's own: passkeys are an alternative login.
+- **No quota** for an addon (R5), and **no AppArmor** profiles.
+- **lighttpd does not refuse invalid UTF-8 in a URL**; control characters it does.
+- **Switching an addon off is a setting, not a boundary against root.** Nothing on the system starts it until it is switched on, across reboots and updates, but root can still run its script by hand, outside any unit.
+- **No fuzz tests, no SAST and no automated dependency scan** in CI yet.

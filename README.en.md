@@ -115,10 +115,13 @@ release candidate versions as well) or **dev** (everything, development builds t
 ### What is planned
 
 - **Every new HMIPServer from eQ-3 brings a new release** of openccu-lite, so that new HmIP devices and eQ-3's fixes
-  arrive quickly.
+  arrive quickly. A new HMIPServer always raises the major version.
 - **The interface processes rfd, hs485d and multimacd** come from an
   [own fork of OpenCCU-Base](https://github.com/hobbyquaker/OpenCCU-Base). It is meant to stay as close to OpenCCU as
   possible; a [comparison](https://hobbyquaker.github.io/OpenCCU-Base/) shows which of OpenCCU's changes are already in.
+- **The radio module drivers from piVCCU** (such as `generic_raw_uart` and `hb_rf_eth`) come from an
+  [own fork](https://github.com/hobbyquaker/piVCCU). It is meant to stay as close as possible to
+  [Alexander Reinert's original](https://github.com/alexreinert/piVCCU).
 - **From Buildroot 2027.02 on, openccu-lite is based on Buildroot's LTS versions.** They get security updates for
   longer; in between the system stays on a maintained base, and their point releases can be taken over with little
   effort.
@@ -160,6 +163,20 @@ Bugs and wishes, for the firmware and for occulited alike: this repository's
 [issue tracker](https://github.com/hobbyquaker/openccu-lite/issues) ([SUPPORT.md](SUPPORT.md)); security problems as
 described in [SECURITY.md](SECURITY.md). OpenCCU's tracker and forum section are for OpenCCU, please do not report
 openccu-lite's problems there.
+
+## Credits
+
+openccu-lite stands on the work of others. Thanks to:
+
+- **[eQ-3](https://www.eq-3.de/)**, for publishing the source code of rfd, hs485d and multimacd.
+- **[Jens Maus](https://github.com/jens-maus)** for his work on [OpenCCU](https://github.com/OpenCCU/OpenCCU), without
+  which openccu-lite would not have been possible.
+- **[Alexander Reinert](https://github.com/alexreinert)** for his drivers from
+  [piVCCU](https://github.com/alexreinert/piVCCU).
+- **[Mathias Dzionsko](https://github.com/mdzio)** for the Go module
+  [go-hmccu](https://github.com/mdzio/go-hmccu).
+- **Michael Gernoth** for [hmcfgusb](https://git.zerfleddert.de/cgi-bin/gitweb.cgi/hmcfgusb), which updates the firmware
+  of the HM-CFG-USB.
 
 ## License
 

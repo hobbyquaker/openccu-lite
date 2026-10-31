@@ -116,10 +116,13 @@ Beta- und Release-Candidate-Versionen) oder **dev** (alles, auch Entwicklungsst�
 ### Was geplant ist
 
 - **Mit jedem neuen HMIPServer von eQ-3 erscheint ein neues Release** von openccu-lite, damit neue HmIP-Geräte und
-  Fehlerbehebungen von eQ-3 schnell ankommen.
+  Fehlerbehebungen von eQ-3 schnell ankommen. Ein neuer HMIPServer erhöht immer die Hauptversion (Major).
 - **Die Schnittstellenprozesse rfd, hs485d und multimacd** kommen aus einem
   [eigenen Fork von OpenCCU-Base](https://github.com/hobbyquaker/OpenCCU-Base). Er soll möglichst nah an OpenCCU bleiben;
   welche Änderungen von OpenCCU schon übernommen sind, zeigt ein [Abgleich](https://hobbyquaker.github.io/OpenCCU-Base/).
+- **Die Treiber für die Funkmodule aus piVCCU** (etwa `generic_raw_uart` und `hb_rf_eth`) kommen aus einem
+  [eigenen Fork](https://github.com/hobbyquaker/piVCCU). Er soll immer möglichst nah am Original von
+  [Alexander Reinert](https://github.com/alexreinert/piVCCU) bleiben.
 - **Ab Buildroot 2027.02 basiert openccu-lite auf den LTS-Versionen von Buildroot.** Sie werden länger mit
   Sicherheitsupdates versorgt; dazwischen bleibt das System auf einer gepflegten Basis, und deren Point-Releases
   lassen sich mit wenig Aufwand übernehmen.
@@ -161,6 +164,20 @@ Fehler und Wünsche, für die Firmware wie für occulited: der
 [Issue-Tracker](https://github.com/hobbyquaker/openccu-lite/issues) dieses Repositorys ([SUPPORT.md](SUPPORT.md));
 Sicherheitsprobleme wie in [SECURITY.md](SECURITY.md) beschrieben. Tracker und Forumsbereich von OpenCCU sind für
 OpenCCU da, Probleme mit openccu-lite bitte nicht dort melden.
+
+## Danksagung
+
+openccu-lite steht auf der Arbeit anderer. Danke an:
+
+- **[eQ-3](https://www.eq-3.de/)**, dafür, dass sie rfd, hs485d und multimacd im Quelltext veröffentlicht haben.
+- **[Jens Maus](https://github.com/jens-maus)** für seine Arbeit an [OpenCCU](https://github.com/OpenCCU/OpenCCU),
+  ohne die openccu-lite nicht möglich gewesen wäre.
+- **[Alexander Reinert](https://github.com/alexreinert)** für seine Treiber aus
+  [piVCCU](https://github.com/alexreinert/piVCCU).
+- **[Mathias Dzionsko](https://github.com/mdzio)** für das Go-Modul
+  [go-hmccu](https://github.com/mdzio/go-hmccu).
+- **Michael Gernoth** für [hmcfgusb](https://git.zerfleddert.de/cgi-bin/gitweb.cgi/hmcfgusb), mit dem sich die Firmware
+  des HM-CFG-USB aktualisieren lässt.
 
 ## Lizenz
 

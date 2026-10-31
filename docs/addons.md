@@ -254,8 +254,8 @@ net), so the door works whichever came first at boot. **Another addon cannot use
 `EACCES`, and the lighttpd drop-in validation refuses `$SERVER` sockets and `extforward.*` directives, so no drop-in
 opens a door of its own - only the manifest's declaration does, and the validator refuses ranges that hold the
 loopback, link-local or multicast addresses or are wider than /8 (IPv4) or /32 (IPv6). The details and the
-measurements are in [security.md](security.md) (*An addon's web ingress*) and [threat-model.md](threat-model.md)
-(B1b, B5c, R10).
+measurements are in [threat-model.md](threat-model.md#b1--the-lan--lighttpd) (B1b, B5c, R10); the summary is in
+[security.md](security.md#what-listens-where).
 
 ## Confinement
 
@@ -302,7 +302,7 @@ user and its group are written by the privilege helper's own operation, two line
 place to the bind-mounted files: busybox `adduser`/`addgroup`, which
 did it until then, write a temporary file beside `/etc/group` and rename it, and `/etc` itself is
 read-only — the first Pi 4 boot showed that, after the container and the OVA had hidden it behind
-their writable rootfs. What the account looks like is in [security.md](security.md). The unit and
+their writable rootfs. What the account looks like is in [threat-model.md](threat-model.md#b3--occulited--the-privilege-helper) (`addonuser`). The unit and
 the mount were observed working on that boot; the in-place write is verified in tests and waits
 for the next Pi run.
 
