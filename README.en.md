@@ -5,6 +5,7 @@
   </picture>
 </h1>
 
+[![stable release](https://img.shields.io/github/v/release/hobbyquaker/openccu-lite?label=stable)](https://github.com/hobbyquaker/openccu-lite/releases/latest)
 [![upstream versions](https://img.shields.io/endpoint?url=https://hobbyquaker.github.io/openccu-lite/badge.json)](https://hobbyquaker.github.io/openccu-lite/en.html)
 
 [:de: Deutsches README](README.md)
