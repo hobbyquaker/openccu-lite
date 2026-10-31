@@ -45,6 +45,26 @@ P="$E/addon-plain.service"
 grep -q "^ExecStart=/bin/sh -c '. /etc/profile; exec /usr/local/etc/config/rc.d/plain start'$" "$P" 2>/dev/null \
   && ok "an addon without a wrapper starts through its own script" || bad "ExecStart of the plain addon: $(grep ^ExecStart "$P" 2>/dev/null)"
 
+# B-131: a switched-off addon's unit is a link to /dev/null and nothing wants it; the "enabled" list is no switch-off
+T2="$T/off"; R2="$T2/root"; E2="$T2/early"
+mkdir -p "$R2/usr/local/etc/config/rc.d" "$R2/usr/local/etc/occulite" "$R2/usr/local/addons" "$E2"
+for a in off on; do printf '#!/bin/sh\n' > "$R2/usr/local/etc/config/rc.d/$a"; chmod 755 "$R2/usr/local/etc/config/rc.d/$a"; done
+cat > "$R2/usr/local/etc/occulite/unit-switch.json" <<'JSON'
+{
+  "masked": [
+    "addon-off.service"
+  ],
+  "enabled": [
+    "addon-on.service"
+  ]
+}
+JSON
+OCCU_ADDONS_KMSG="$T/kmsg2" OCCU_ADDONS_ROOT="$R2" sh "$GEN" "$T2/normal" "$E2" "$T2/late" > "$T2.out" 2>&1
+[ "$(readlink "$E2/addon-off.service")" = /dev/null ] && ok "a switched-off addon's unit is masked in generator.early" || bad "addon-off.service: $(ls -l "$E2/addon-off.service" 2>&1)"
+[ -e "$E2/addons.target.wants/addon-off.service" ] || [ -L "$E2/addons.target.wants/addon-off.service" ] && bad "addons.target wants the switched-off addon" || ok "nothing wants the switched-off addon"
+[ -f "$E2/addon-on.service" ] && [ ! -L "$E2/addon-on.service" ] && ok "an addon that is on keeps its unit" || bad "addon-on.service"
+grep -q . "$E2/addon-off.service.d/10-policy.conf" 2>/dev/null && bad "a drop-in for the switched-off addon" || ok "no drop-in for the switched-off addon"
+
 if [ -e "$E/addon-wrapped.script.service" ]; then bad "a .script got a unit of its own"; else ok "no unit for a .script"; fi
 [ -L "$E/addons.target.wants/addon-wrapped.service" ] && [ -L "$E/addons.target.wants/addon-plain.service" ] \
   && ok "both units are wanted by addons.target" || bad "addons.target.wants: $(ls "$E/addons.target.wants" 2>/dev/null)"

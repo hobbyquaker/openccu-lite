@@ -61,6 +61,12 @@
 # At a boot every client inits hmipserver in the second its port opens; staggered, they come one
 # after the other. Any other content of the file is no delay.
 #
+# An addon switched off on the Services page (occulited B-131) gets no unit: addon-<name>.service is a
+# link to /dev/null here in generator.early, which outranks everything, so no systemctl start and no
+# Wants= runs it, across boots and daemon-reloads, until the switch is on again. occulited's
+# unit-switch.json says which; its "masked" list is one name per line. A runtime mask alone did not
+# hold, because /run/systemd/system ranks below generator.early.
+#
 # An addon whose program a backup restore did not bring back (openccu-lite B-267: the addons keep
 # it in .nobackup directories, as on a CCU) is not started: ExecCondition=lite-addon-payload exits 1
 # for it, and the unit stays inactive, skipped - never failed. occulited's Addons page and Status
@@ -89,6 +95,12 @@ say() {
 }
 
 # prints "none" or the declared interface units; returns 1 for no usable declaration
+switched_off() {
+  f="${ROOT}/usr/local/etc/occulite/unit-switch.json"
+  [ -r "$f" ] || return 1
+  sed -n '/"masked"/,/\]/p' "$f" | grep -qF "\"$1\""
+}
+
 needs_of() {
   f="${ROOT}/usr/local/etc/config/addon-policy/$1.needs"
   [ -f "${f}" ] || return 1
@@ -136,6 +148,10 @@ for script in "${RCD}"/*; do
     .*|*.script|*[!A-Za-z0-9_.-]*) continue ;;
   esac
   unit="addon-${name}.service"
+  if switched_off "${unit}"; then
+    ln -sf /dev/null "${EARLY_DIR}/${unit}"
+    continue
+  fi
   # The unit always runs rc.d/<name>. With the addon-rc wrapper in front that is the wrapper: inside
   # its own unit it runs the addon's script (<name>.script) itself, as run-parts ran it before -
   # a plain sh script with $0 set to rc.d/<name>, which scripts derive their addon directory from.
