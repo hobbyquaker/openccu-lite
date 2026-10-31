@@ -19,7 +19,9 @@
 # reads its tag (never the head); one column for the Latest release, a second only for a newer pre-release
 # (an older one and drafts ignored); a current cell carries the check disc, an outdated one does not; the
 # badge follows the latest release; the OpenCCU-Base row is exact only for the release that pins the
-# report's lite commit.
+# report's lite commit. The piVCCU drivers: each column's pin against alexreinert/piVCCU's default branch, the
+# missing kernel/ commits one linked finding each, other missing commits a note; the fork's newest tags a note
+# when no column pins them; a tag that does not exist or an unreadable compare exits 3.
 #
 # Usage: sh scripts/testcases/lite-upstream-versions-test.sh    (from the fork's checkout)
 set -u
@@ -56,6 +58,7 @@ tree() {
     >"$tmp/root/buildroot-external/package/rpi-eeprom/rpi-eeprom.mk"
   java_mk "$tmp/root/buildroot-external/package/java-azul/java-azul.mk" 21.52.203-ca-jre21.0.12.1
   base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 '$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
+  pv_mk v1.0.0
   git -C "$tmp/root" init -q
 }
 G() { git -C "$tmp/root" -c user.name=t -c user.email=t@t -c commit.gpgsign=false -c tag.gpgsign=false "$@"; }
@@ -103,6 +106,21 @@ azul() { # <arch> <zulu-ca-jre-java>... - Azul's metadata API answer (a musl and
 }
 zulu_eol() { # <eolFrom of 21> [isEol]
   printf '{"result": {"releases": [{"name": "25", "eolFrom": "2033-09-30", "isEol": false}, {"name": "21", "eolFrom": "%s", "isEol": %s}]}}\n' "$1" "${2:-false}" >"$tmp/fx/zulu-eol.json"
+}
+pv_mk() { # <GENERIC_RAW_UART_VERSION> [<GENERIC_RAW_UART_SITE>]
+  mkdir -p "$tmp/root/buildroot-external/package/generic_raw_uart"
+  printf '# Generic raw uart\nGENERIC_RAW_UART_VERSION = %s\nGENERIC_RAW_UART_SITE = %s\n' "$1" "${2:-\$(call github,hobbyquaker,piVCCU,\$(GENERIC_RAW_UART_VERSION))}" \
+    >"$tmp/root/buildroot-external/package/generic_raw_uart/generic_raw_uart.mk"
+}
+pv_cmp() { # <ref> <our commits on top> <how many we lack> [<sha:subject of a commit we lack>]...
+  r=$1; o=$2; n=$3; shift 3
+  { printf '{"status": "x", "ahead_by": %s, "behind_by": %s, "commits": [' "$n" "$o"; sep=""
+    for c in "$@"; do
+      printf '%s{"sha": "%s", "html_url": "https://github.com/alexreinert/piVCCU/commit/%s", "commit": {"message": "%s\\n\\nbody", "author": {"date": "2026-10-20T10:00:00Z"}}}' "$sep" "${c%%:*}" "${c%%:*}" "${c#*:}"; sep=", "
+    done; printf ']}\n'; } >"$tmp/fx/pivccu-compare-$r.json"
+}
+pv_kernel() { # <sha>... the upstream commits touching kernel/
+  { printf '['; sep=""; for c in "$@"; do printf '%s{"sha": "%s"}' "$sep" "$c"; sep=", "; done; printf ']\n'; } >"$tmp/fx/pivccu-kernel.json"
 }
 base_report() { # <generated date> <subject>... of the commits above the line
   g=$1; shift
@@ -159,6 +177,9 @@ base() { # a current world
   printf '%s\trefs/tags/v1.0.0-rc.3\n%s\trefs/tags/v1.0.0-rc.3^{}\n%s\trefs/tags/v0.9.0\n' 5326f00465ef5156de967283d61f16f7e900deb5 $BASE_LITE $BASE_OLD \
     >"$tmp/fx/fork-base-tags.txt"
   gh_releases v1.0.0 v1.0.0
+  printf 'ref: refs/heads/master\tHEAD\nf0d14413\tHEAD\n' >"$tmp/fx/pivccu-head.txt"
+  tags pivccu-tags.txt v1.0.0 v1.0.0-rc.3
+  pv_cmp v1.0.0 4 0
   AUTOTAG=1
 }
 kernel_eol() { # <projected EOL of 6.18> - kernel.org's longterm table
@@ -188,12 +209,15 @@ for p in m.RPI:
     print("firmware", m.pin(root, m.cfg(p), r'^BR2_PACKAGE_RPI_FIRMWARE_VERSION="([0-9a-f]{40})"', "x"))
 print("java", "".join(m.zulu(m.pin(root, m.JAVA_MK, m.JAVA_VAR, "x")) or ("none",)))
 print("openccu-base", " ".join(m.base_source(m.read(root, m.BASE_MK)) or ("none",)))
+print("pivccu", re.search(r"^GENERIC_RAW_UART_VERSION\s*=\s*(\S+)", m.read(root, m.PIVCCU_MK), re.M).group(1),
+      re.search(r"^GENERIC_RAW_UART_SITE\s*=\s*\$\(call github,([\w.-]+,[\w.-]+),", m.read(root, m.PIVCCU_MK), re.M).group(1))
 mk = open(root + "/buildroot-external/package/rpi-eeprom/rpi-eeprom.mk").read()
 print("eeprom", re.search(r"^\s*RPI_EEPROM_FIRMWARE_PATH\s*=\s*firmware-2711/\S*pieeprom-(\d{4}-\d{2}-\d{2})\.bin", mk, re.M).group(1))
 EOF
 [ $? -eq 0 ] && [ "$(grep -c '^firmware [0-9a-f]' "$tmp/pins")" -eq 2 ] \
-  && grep -q '^rpi stable_[0-9]* stable_' "$tmp/pins" && grep -q '^eeprom 20' "$tmp/pins" && grep -q '^vm [0-9]' "$tmp/pins" \
+  && grep -Eq '^rpi (stable_[0-9]+|[0-9a-f]{40}) (stable_[0-9]+|[0-9a-f]{40})' "$tmp/pins" && grep -q '^eeprom 20' "$tmp/pins" && grep -q '^vm [0-9]' "$tmp/pins" \
   && grep -q '^java [0-9.]*[0-9][0-9.]*jre$' "$tmp/pins" && grep -q '^openccu-base hobbyquaker/OpenCCU-Base v1\.[0-9]' "$tmp/pins" \
+  && grep -q '^pivccu v1\.[0-9].* hobbyquaker,piVCCU$' "$tmp/pins" \
   && ok "the fork's pins: buildroot, kernels, firmware, rpi-eeprom, JVM, OpenCCU-Base" \
   || { bad "the fork's pins are not found"; sed 's/^/     /' "$tmp/pins"; }
 
@@ -207,9 +231,9 @@ grep -qF '"color": "brightgreen"' "$tmp/site/badge.json" && ok "badge green" || 
 grep -q '<html lang="de">' "$tmp/site/index.html" && grep -qF 'aktuell' "$tmp/site/index.html" \
   && grep -q '<html lang="en">' "$tmp/site/en.html" && grep -qF 'up to date' "$tmp/site/en.html" \
   && grep -qF 'href="en.html"' "$tmp/site/index.html" && grep -qF 'prefers-color-scheme:dark' "$tmp/site/index.html" \
-  && [ "$(grep -c '<tr><td>' "$tmp/site/en.html")" -eq 8 ] \
+  && [ "$(grep -c '<tr><td>' "$tmp/site/en.html")" -eq 9 ] \
   && grep -qF '<th>Support bis</th>' "$tmp/site/index.html" \
-  && ok "the report pages: German and English, eight components, the support column, dark mode" || bad "the report pages"
+  && ok "the report pages: German and English, nine components, the support column, dark mode" || bad "the report pages"
 ! grep -qiF 'Supportzeitraum' "$tmp/site/index.html" && ! grep -qiF 'support period' "$tmp/site/en.html" \
   && grep -qF '</td><td></td><td><span class="ok">aktuell</span>' "$tmp/site/index.html" \
   && grep -qF '</td><td></td><td><span class="ok">up to date</span>' "$tmp/site/en.html" \
@@ -238,6 +262,20 @@ base; tags buildroot-tags.txt 2026.11-rc2; expect "buildroot: release candidates
 
 base; rpi_tag stable_20261020 cccc000000000000000000000000000000000000 6.18.60
 expect "rpi kernel: a newer stable_ tag" 0 "$UPD" "raspberrypi/linux stable_20261020 (kernel 6.18.60) is out"
+# a commit pin ahead of the newest tag (raspberrypi tags rarely; task 414): the kernel and the firmware built with it are current
+commit_pin() { # <linux commit> <its kernel version>
+  for c in aarch64-rpi3 aarch64-rpi4; do set_cfg $c BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION https://github.com/raspberrypi/linux/archive/$1.tar.gz; done
+  printf 'VERSION = 6\nPATCHLEVEL = 18\nSUBLEVEL = %s\n' "$2" >"$tmp/fx/rpi-Makefile-$1"
+  fw $FW_OURS $1
+}
+K_C=dddd000000000000000000000000000000000000
+base; commit_pin $K_C 58
+expect "rpi kernel: a commit pin ahead of the tags, its firmware with it" 0 "up to date"
+grep -qF 'dddd00000000 (6.18.58)' "$tmp/out" "$tmp/sum" && ok "the commit pin shows short, with its version" || bad "the commit pin's display"
+base; commit_pin $K_C 58; rpi_tag stable_20261020 cccc000000000000000000000000000000000000 6.18.60
+expect "rpi kernel: a tag with a newer kernel than the commit pin" 0 "$UPD" "raspberrypi/linux stable_20261020 (kernel 6.18.60) is out"
+base; commit_pin $K_C 58; fw $FW_OURS $K_NEW
+expect "firmware: not built with our commit pin" 0 "$UPD" "belongs to stable_20260911"
 base; set_cfg aarch64-rpi3 BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION https://github.com/raspberrypi/linux/archive/stable_20260609.tar.gz
 expect "rpi kernel: rpi3 and rpi4 on different tags" 0 "$UPD" "rpi3 and rpi4 pin different kernels"
 grep -qF 'rpi3: firmware 111111111111 belongs to stable_20260911, the kernel is stable_20260609' "$tmp/out" \
@@ -394,6 +432,50 @@ base; base_report 2026-10-22; run >/dev/null; grep -qF 'report is from' "$tmp/ou
 base; rm "$tmp/fx/base-report.json"; expect "OpenCCU-Base report unreachable: exit 3" 3 "check failed" "base-report.json"
 base; echo '{"boundary": null}' >"$tmp/fx/base-report.json"; expect "OpenCCU-Base report without its commits: exit 3" 3 "check failed" "report.json"
 
+# the piVCCU drivers against alexreinert/piVCCU
+PVR='piVCCU drivers (our fork against alexreinert)'
+base; expect "piVCCU: nothing missing is current, our own commits on top are no finding" 0 "up to date" "all current"
+grep -qF "| $PVR | v1.0.0: 4 ahead, 0 behind | alexreinert/piVCCU master: 0 driver commit(s) missing |  | up to date |" "$tmp/sum" \
+  && grep -qF '<td>v1.0.0: 4 voraus, 0 zurück ' "$tmp/site/index.html" \
+  && grep -qF '<a href="https://github.com/hobbyquaker/piVCCU/compare/v1.0.0...alexreinert:master">alexreinert/piVCCU master: 0 Treiber-Commit(s) fehlen</a>' "$tmp/site/index.html" \
+  && grep -qF 'piVCCU-Treiber (unser Fork gegen alexreinert)' "$tmp/site/index.html" \
+  && ! grep -qF 'pivccu-kernel' "$tmp/out" \
+  && ok "piVCCU: the row in the summary and on the page, no driver list asked for when nothing is missing" || { bad "piVCCU: the row"; grep -F piVCCU "$tmp/sum"; }
+base; pv_cmp v1.0.0 4 3 'aa01:kernel: a fix' 'aa02:docs: a text' 'aa03:kernel: another fix'; pv_kernel aa01 aa03 aa99
+expect "piVCCU: missing kernel/ commits are findings, each linked" 0 "$UPD" "not taken yet: 2026-10-20 kernel: a fix https://github.com/alexreinert/piVCCU/commit/aa01"
+[ "$(grep -c "::warning::update available - $PVR" "$tmp/out")" -eq 2 ] && grep -qF 'kernel: another fix' "$tmp/out" && ! grep -qF 'docs: a text' "$tmp/out" \
+  && grep -qF '1 more upstream commit(s) we lack do not touch kernel/' "$tmp/out" \
+  && grep -qF "| $PVR | v1.0.0: 4 ahead, 3 behind | alexreinert/piVCCU master: 2 driver commit(s) missing |  | update available |" "$tmp/sum" \
+  && grep -qF '<li><a href="https://github.com/alexreinert/piVCCU/commit/aa01">noch nicht übernommen: 2026-10-20 kernel: a fix</a></li>' "$tmp/site/index.html" \
+  && grep -qF '1 weitere fehlende Upstream-Commit(s) ändern nichts in kernel/' "$tmp/site/index.html" \
+  && ok "piVCCU: only the kernel/ commits, the other one a note, both languages" || { bad "piVCCU: only the kernel/ commits"; cat "$tmp/out"; }
+base; pv_cmp v1.0.0 4 1 'aa02:docs: a text'; pv_kernel aa01
+expect "piVCCU: a missing commit elsewhere is a note, the badge stays green" 0 "up to date" "1 more upstream commit(s) we lack do not touch kernel/"
+base; pv_cmp v1.0.0 4 300 'aa01:kernel: a fix'; pv_kernel aa01
+expect "piVCCU: more missing commits than the compare lists: said so" 0 "$UPD" "the list of driver commits may be incomplete"
+base; pv_cmp v1.0.0 4 2 'aa01:kernel: a fix' 'aa02:kernel: b'
+python3 -c 'import json,sys; print(json.dumps([{"sha": "aa01"} if i else {"sha": "aa02"} for i in range(100)]))' >"$tmp/fx/pivccu-kernel.json"
+expect "piVCCU: a full driver list that may not reach back far enough: said so" 0 "$UPD" "the list of driver commits may be incomplete"
+# the newest tags by version order: the fork ahead of the releases (a round in progress), no column pins them
+base; tags pivccu-tags.txt v1.2.0 v1.10.0-dev.1 v1.9.0-rc.2 nightly 2.0.0; pv_cmp v1.2.0 5 0; pv_cmp v1.10.0-dev.1 6 1 'aa01:kernel: a fix'; pv_kernel aa01
+expect "piVCCU: a newer release tag of the fork no column pins is a note" 0 "up to date" "the fork's newest release tag v1.2.0: 5 ahead, 0 behind, 0 driver commit(s) missing"
+grep -qF "the fork's newest tag v1.10.0-dev.1: 6 ahead, 1 behind, 1 driver commit(s) missing" "$tmp/out" \
+  && grep -qF 'neuester Tag des Forks v1.10.0-dev.1: 6 voraus, 1 zurück, 1 Treiber-Commit(s) fehlen' "$tmp/site/index.html" \
+  && ok "piVCCU: the newest tag including pre-releases by version order, no finding" || { bad "piVCCU: the newest tag"; cat "$tmp/out"; }
+# a release and a pre-release: each column compares its own pin, the badge follows the latest
+base; AUTOTAG=0; snap_tag v1.0.0; pv_mk v1.1.0-dev.0; snap_tag v1.1.0-dev.0; gh_releases v1.0.0 v1.1.0-dev.0:true:false v1.0.0
+tags pivccu-tags.txt v1.1.0-dev.0; pv_cmp v1.1.0-dev.0 6 1 'aa01:kernel: a fix'; pv_kernel aa01
+expect "piVCCU: a pre-release's missing commit does not turn the badge yellow" 0 "up to date" "note - pre-release 1.1.0-dev.0: $PVR: not taken yet: 2026-10-20 kernel: a fix"
+grep -qF "| $PVR | v1.0.0: 4 ahead, 0 behind | v1.1.0-dev.0: 6 ahead, 1 behind | alexreinert/piVCCU master: 0 driver commit(s) missing |" "$tmp/sum" \
+  && grep -qF '<td>v1.1.0-dev.0: 6 ahead, 1 behind <span class="due">update available</span><ul><li><a href="https://github.com/alexreinert/piVCCU/commit/aa01">' "$tmp/site/en.html" \
+  && ok "piVCCU: one cell per release, the pre-release's finding in its cell" || { bad "piVCCU: one cell per release"; grep -F piVCCU "$tmp/sum"; }
+base; rm "$tmp/fx/pivccu-compare-v1.0.0.json"; expect "piVCCU: the compare unreachable, or the tag does not exist: exit 3" 3 "check failed" "pivccu-compare-v1.0.0.json"
+base; echo '{"message": "Not Found"}' >"$tmp/fx/pivccu-compare-v1.0.0.json"; expect "piVCCU: a compare without its numbers: exit 3" 3 "check failed" "hobbyquaker/piVCCU v1.0.0 against alexreinert/piVCCU master"
+base; rm "$tmp/fx/pivccu-head.txt"; expect "piVCCU: upstream's HEAD unreachable: exit 3" 3 "check failed" "pivccu-head.txt"
+base; pv_cmp v1.0.0 4 1 'aa01:kernel: a fix'; rm -f "$tmp/fx/pivccu-kernel.json"; expect "piVCCU: the driver commits unreachable: exit 3" 3 "check failed" "pivccu-kernel.json"
+base; pv_mk v1.0.0 'https://example.org/x.tar.gz'; expect "piVCCU: our generic_raw_uart.mk not on GitHub: exit 2" 2 "check failed" "generic_raw_uart.mk"
+base; pv_mk v1.0.0 '$(call github,alexreinert,piVCCU,$(GENERIC_RAW_UART_VERSION))'; expect "piVCCU: built from another repository: exit 2" 2 "check failed" "not hobbyquaker/piVCCU"
+
 # the release columns: each from its tag, one for Latest, a second only for a newer pre-release
 base; expect "one release: one column" 0 "up to date" "all current"
 grep -qF '<th>Komponente</th><th>openccu-lite 1.0.0 (latest)</th><th>neueste upstream</th>' "$tmp/site/index.html" \
@@ -402,7 +484,7 @@ grep -qF '<th>Komponente</th><th>openccu-lite 1.0.0 (latest)</th><th>neueste ups
   && ! grep -qF '<th>unsere</th>' "$tmp/site/index.html" && ! grep -qF '<th>ours</th>' "$tmp/site/en.html" \
   && grep -qF '| component | openccu-lite 1.0.0 (latest) | newest upstream | supported until | status |' "$tmp/sum" \
   && ok "one release: the header names it, no pre-release column, no 'ours'" || { bad "one release: the header"; grep -F '<th>' "$tmp/site/en.html"; cat "$tmp/sum"; }
-[ "$(grep -c "$ICON" "$tmp/site/en.html")" -eq 8 ] && grep -qF 'aria-label="aktuell"' "$tmp/site/index.html" \
+[ "$(grep -c "$ICON" "$tmp/site/en.html")" -eq 9 ] && grep -qF 'aria-label="aktuell"' "$tmp/site/index.html" \
   && grep -qF '<title>up to date</title>' "$tmp/site/en.html" && grep -qF '.ck circle{fill:var(--ok)}' "$tmp/site/en.html" \
   && ok "current cells: the check disc with its accessible name, one per row" || bad "current cells: the check disc with its accessible name, one per row"
 
@@ -442,6 +524,23 @@ base; AUTOTAG=0; snap_tag v1.0.0; snap_tag v1.9.0-dev.3; snap_tag v1.9.0-rc.1; s
 gh_releases v1.0.0 v1.9.0-rc.1:true:false v1.10.0-dev.0:true:false v1.9.0-dev.3:true:false v1.0.0
 expect "several pre-releases: the newest by version order" 0 "up to date"
 grep -qF '<th>openccu-lite 1.10.0-dev.0 (pre-release)</th>' "$tmp/site/en.html" && ok "1.10.0-dev.0 chosen" || bad "1.10.0-dev.0 chosen"
+# the phases of one version in their order, not the alphabet: dev < alpha < beta < rc < release
+python3 - "$PY" >"$tmp/order" 2>&1 <<'EOF'
+import importlib.util, sys
+s = importlib.util.spec_from_file_location("v", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+want = ["v1.0.0", "v1.1.0-nightly.9", "v1.1.0-dev.6", "v1.1.0-dev.10", "v1.1.0-alpha.0", "v1.1.0-beta.0", "v1.1.0-beta.2",
+        "v1.1.0-rc.0", "v1.1.0", "v1.2.0-dev.0"]
+got = sorted(reversed(want), key=m.semver_key)
+print("sorted" if got == want else got)
+EOF
+grep -qx sorted "$tmp/order" && ok "version order: dev < alpha < beta < rc < release" || { bad "version order"; cat "$tmp/order"; }
+base; AUTOTAG=0; snap_tag v1.0.0; snap_tag v1.1.0-dev.6; snap_tag v1.1.0-beta.0
+gh_releases v1.0.0 v1.1.0-beta.0:true:false v1.1.0-dev.6:true:false v1.0.0
+expect "a beta after a dev: the beta is the pre-release column" 0 "up to date"
+grep -qF '<th>openccu-lite 1.1.0-beta.0 (pre-release)</th>' "$tmp/site/en.html" && ! grep -qF '1.1.0-dev.6 (pre-release)' "$tmp/site/en.html" \
+  && ok "1.1.0-beta.0 chosen over 1.1.0-dev.6" || bad "1.1.0-beta.0 chosen over 1.1.0-dev.6"
+base; tags pivccu-tags.txt v1.1.0-dev.6 v1.1.0-beta.0; pv_cmp v1.1.0-beta.0 6 0
+expect "piVCCU: a beta tag is newer than a dev tag" 0 "up to date" "the fork's newest tag v1.1.0-beta.0: 6 ahead, 0 behind"
 # a release whose tag the checkout lacks and cannot fetch: exit 2; no latest release: exit 3
 base; AUTOTAG=0; snap_tag v1.0.0; gh_releases v1.0.0 v1.1.0-dev.0:true:false
 expect "a release tag not in the checkout: exit 2" 2 "check failed" "release tag v1.1.0-dev.0 not in the checkout"

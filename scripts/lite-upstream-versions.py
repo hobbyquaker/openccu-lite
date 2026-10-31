@@ -67,9 +67,20 @@
 #                         whose OpenCCU-Base pin (its tag in fork-base-tags.txt) is that commit is exact;
 #                         an older one shows its pin, lite's commits above the line as a lower bound, a
 #                         note, and "not measured exactly" instead of the check mark.
+#   piVCCU drivers        GENERIC_RAW_UART_VERSION of package/generic_raw_uart, the tag of our fork
+#                         hobbyquaker/piVCCU (openccu-lite tags it with each release, so a release column's
+#                         pin is the fork's tag of that name), compared with the default branch of
+#                         PIVCCU_UP (alexreinert/piVCCU; OpenCCU/piVCCU is a separate line and not compared):
+#                         ahead and behind, from GitHub's compare API (all three are one fork network, so
+#                         it crosses them). Current: no upstream commit touching kernel/ is missing; each
+#                         missing one is a finding, linked, as with the OpenCCU-Base commits. Missing
+#                         upstream commits elsewhere and our own commits on top are not findings. The fork's
+#                         newest vX.Y.Z tag and its newest tag including pre-releases (its tags' version
+#                         order) are always reported: a column pinning one shows it in its cell, one that
+#                         no column pins (a round in progress) is a note with the same numbers.
 #   The report's "supported until" column: buildroot, the kernels and the JVM as above; the
-#   Raspberry Pi firmware, rpi-eeprom, HMIPServer and the OpenCCU-Base commits have no published support
-#   period: their cell stays empty.
+#   Raspberry Pi firmware, rpi-eeprom, HMIPServer, the OpenCCU-Base commits and the piVCCU drivers have no
+#   published support period: their cell stays empty.
 #
 # The columns: one per release of the fork (RELEASES_REPO's GitHub releases): the one marked Latest, and the
 # newest pre-release only when it is newer than that (by version order; an older pre-release and drafts are
@@ -95,7 +106,9 @@
 #     firmware-git_hash-<commit or tag>, eeprom-versions.txt, openccu-base-tags.txt (OpenCCU/OpenCCU-Base's
 #     tags, git ls-remote output), eq3-repo.json (homematicip/OpenCCU-Base), azul-aarch64.json, azul-x64.json,
 #     contents-<owner>_<repo>-<ref>.json (the opt/HMServer listing), jar-<blob sha> (the jar, read by
-#     range), zulu-eol.json, base-report.json
+#     range), zulu-eol.json, base-report.json, pivccu-tags.txt (our fork's tags, git ls-remote output),
+#     pivccu-head.txt (alexreinert/piVCCU, git ls-remote --symref HEAD), pivccu-compare-<ref>.json,
+#     pivccu-kernel.json (the upstream commits touching kernel/)
 #   --today YYYY-MM-DD the date the EOL warning counts from (the tests; default today, UTC)
 import argparse
 import datetime
@@ -139,6 +152,11 @@ AZUL_ARCHES = ["aarch64", "x64"]   # the architectures java-azul.mk downloads (l
 BASE_REPORT = "https://hobbyquaker.github.io/OpenCCU-Base/"
 EQ3_BASE = "homematicip/OpenCCU-Base"   # eQ-3's own OpenCCU-Base repository
 BASE_REPORT_STALE_DAYS = 2
+PIVCCU_FORK = "hobbyquaker/piVCCU"
+PIVCCU_UP = "alexreinert/piVCCU"
+PIVCCU_MK = "buildroot-external/package/generic_raw_uart/generic_raw_uart.mk"
+PIVCCU_DRIVERS = "kernel"
+PIVCCU_LIST = 100     # how many of upstream's commits touching kernel/ are listed (one request, newest first)
 
 
 class PinError(Exception):
@@ -325,15 +343,17 @@ def read(root, rel):
 
 RELEASES_REPO = "hobbyquaker/openccu-lite"
 SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$")
+PRE_RANK = {"dev": 1, "alpha": 2, "beta": 3, "rc": 4}   # our pre-release order; any other word ranks below them
 
 
 def semver_key(tag):
-    """semantic version order: 1.1.0-dev.0 > 1.0.0 > 1.0.0-rc.4; None for a tag that is no version"""
+    """version order: 1.1.0-dev.0 > 1.0.0 > 1.0.0-rc.4 > 1.0.0-beta.1 > 1.0.0-alpha.1 > 1.0.0-dev.9 (PRE_RANK, not
+    the alphabet: dev would pass beta and rc); None for a tag that is no version"""
     m = SEMVER_RE.match(tag)
     if not m:
         return None
     pre = m.group(4)
-    ids = tuple((0, int(x), "") if x.isdigit() else (1, 0, x) for x in pre.split(".")) if pre else ()
+    ids = tuple((0, int(x), "") if x.isdigit() else (1, PRE_RANK.get(x, 0), x) for x in pre.split(".")) if pre else ()
     return (int(m.group(1)), int(m.group(2)), int(m.group(3))), 0 if pre else 1, ids
 
 
@@ -465,7 +485,7 @@ def rpi_stable_tags(up):
 
 def rpi_pins(root):
     return {p: pin(root, cfg(p), r'^BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="[^"]*raspberrypi/linux/archive/'
-                   r'(stable_\d{8})\.tar\.gz"', "raspberrypi/linux stable_ tarball") for p in RPI}
+                   r'(stable_\d{8}|[0-9a-f]{40})\.tar\.gz"', "raspberrypi/linux stable_ or commit tarball") for p in RPI}
 
 
 def differ(r, pins, what_en, what_de):
@@ -489,7 +509,7 @@ def check_rpi_kernel(root, up):
     one = differ(r, pins, "kernels", "Kernel")
     if one:
         ov = rpi_kernel_version(one, up)
-        r.ours = f"{one} ({ov})"
+        r.ours = f"{one[:12] if not one.startswith('stable_') else one} ({ov})"
         series = ".".join(ov.split(".")[:2])
         head = up.symref(RPI_GIT, "rpi-head.txt")
         hm = re.match(r"^refs/heads/rpi-(\d+\.\d+)\.y$", head)
@@ -498,7 +518,9 @@ def check_rpi_kernel(root, up):
                    f"der Standard-Branch von raspberrypi ist jetzt rpi-{hm.group(1)}.y (unserer: {series})")
         series_eol(r, series, kernel_releases(up), kernel_eol_dates(up), up.today)
     for t in sorted(set(pins.values())):
-        if newest > t:
+        # a commit pin (raspberrypi tags rarely; upstream pins the commit) is behind a tag by its kernel version
+        behind = newest > t if t.startswith("stable_") else ver_key(nv) > ver_key(rpi_kernel_version(t, up))
+        if behind:
             r.due(f"raspberrypi/linux {newest} (kernel {nv}) is out (we pin {t})",
                   f"raspberrypi/linux {newest} (Kernel {nv}) ist erschienen (wir: {t})")
     return r
@@ -646,9 +668,11 @@ def check_rpi_firmware(root, up):
     one = differ(r, {p: v[:12] for p, v in pins.items()}, "firmware commits", "Firmware-Commits")
     kernel = rpi_pins(root)
     for commit in sorted(set(pins.values())):
-        built = by_commit.get(firmware_kernel(commit, up))
+        linux = firmware_kernel(commit, up)
+        # built with a stable_ tag, or with the commit our kernel pins
+        built = by_commit.get(linux) or (linux if linux in kernel.values() else None)
         if one:
-            r.ours = f"{commit[:12]} ({built or 'no stable_ tag'})"
+            r.ours = f"{commit[:12]} ({(built if built.startswith('stable_') else built[:12]) if built else 'no stable_ tag'})"
         if not built:
             r.due(f"firmware {commit[:12]} was not built with a raspberrypi/linux stable_ tag",
                   f"Firmware {commit[:12]} wurde mit keinem stable_-Tag von raspberrypi/linux gebaut")
@@ -657,7 +681,9 @@ def check_rpi_firmware(root, up):
             if pins[p] == commit and kernel[p] != built:
                 r.due(f"{short(p)}: firmware {commit[:12]} belongs to {built}, the kernel is {kernel[p]}",
                       f"{short(p)}: Firmware {commit[:12]} gehört zu {built}, der Kernel ist {kernel[p]}")
-        if newest_for and newest_for > built:
+        newer = (newest_for > built if built.startswith("stable_")
+                 else ver_key(rpi_kernel_version(newest_for, up)) > ver_key(rpi_kernel_version(built, up))) if newest_for else False
+        if newer:
             r.due(f"firmware {newest_fw} (built with {newest_for}) is out; ours was built with {built}",
                   f"Firmware {newest_fw} (gebaut mit {newest_for}) ist erschienen; unsere mit {built}")
     if not newest_fw:
@@ -975,8 +1001,92 @@ def check_base_commits(root, up):
     return r
 
 
+# ---- the piVCCU drivers: our fork's tags against alexreinert/piVCCU
+
+def pivccu_compare(up, ref, branch):
+    """(our commits on top, upstream's commits we lack, how many we lack) of the fork's ref against upstream's
+    branch. The compare is written from our side: its "ahead" is what upstream has and we lack."""
+    d = up.api(f"repos/{PIVCCU_FORK}/compare/{ref}...{PIVCCU_UP.split('/')[0]}:{branch}", f"pivccu-compare-{ref}.json")
+    try:
+        lack, on_top, commits = d["ahead_by"], d["behind_by"], d["commits"]
+        if not isinstance(lack, int) or not isinstance(on_top, int) or not isinstance(commits, list):
+            raise TypeError("not numbers and a list")
+        return on_top, [c for c in commits if isinstance(c, dict) and c.get("sha")], lack
+    except (KeyError, TypeError) as e:
+        raise UpstreamError(f"{PIVCCU_FORK} {ref} against {PIVCCU_UP} {branch}: {e!r}") from e
+
+
+def pivccu_missing(up, lacking, lack, branch):
+    """(the commits of `lacking` that touch kernel/, whether that list may be cut short)"""
+    if not lacking:
+        return [], lack > 0
+    lst = up.api(f"repos/{PIVCCU_UP}/commits?sha={branch}&path={PIVCCU_DRIVERS}&per_page={PIVCCU_LIST}",
+                 "pivccu-kernel.json")
+    if not isinstance(lst, list):
+        raise UpstreamError(f"{PIVCCU_UP}: the commits on {PIVCCU_DRIVERS}/ are not a list")
+    drivers = {c["sha"] for c in lst if isinstance(c, dict) and c.get("sha")}
+    have = {c["sha"] for c in lacking}
+    return [c for c in lacking if c["sha"] in drivers], len(lacking) < lack or (len(lst) >= PIVCCU_LIST and drivers <= have)
+
+
+def pivccu_counts(ref, on_top, lack):
+    return f"{ref}: {on_top} ahead, {lack} behind", f"{ref}: {on_top} voraus, {lack} zurück"
+
+
+def check_pivccu(root, up):
+    r = Row("pivccu", "piVCCU drivers (our fork against alexreinert)", "piVCCU-Treiber (unser Fork gegen alexreinert)",
+            f"https://github.com/{PIVCCU_FORK}")
+    text = read(root, PIVCCU_MK)
+    ref = re.search(r"^GENERIC_RAW_UART_VERSION\s*=\s*([\w./-]+)\s*$", text, re.M)
+    site = re.search(r"^GENERIC_RAW_UART_SITE\s*=\s*\$\(call github,([\w.-]+),([\w.-]+),", text, re.M)
+    if not ref or not site:
+        raise PinError(f"{PIVCCU_MK}: no GENERIC_RAW_UART_VERSION or no GitHub GENERIC_RAW_UART_SITE")
+    if f"{site.group(1)}/{site.group(2)}" != PIVCCU_FORK:
+        raise PinError(f"{PIVCCU_MK}: built from {site.group(1)}/{site.group(2)}, not {PIVCCU_FORK}")
+    ref = ref.group(1)
+    head = re.match(r"^refs/heads/([\w./-]+)$", up.symref(f"https://github.com/{PIVCCU_UP}", "pivccu-head.txt"))
+    if not head:
+        raise UpstreamError(f"{PIVCCU_UP}: no default branch")
+    branch = head.group(1)
+    on_top, lacking, lack = pivccu_compare(up, ref, branch)
+    missing, cut = pivccu_missing(up, lacking, lack, branch)
+    r.ours = pivccu_counts(ref, on_top, lack)
+    r.newest = (f"{PIVCCU_UP} {branch}: {len(missing)} driver commit(s) missing",
+                f"{PIVCCU_UP} {branch}: {len(missing)} Treiber-Commit(s) fehlen")
+    r.newest_link = f"https://github.com/{PIVCCU_FORK}/compare/{ref}...{PIVCCU_UP.split('/')[0]}:{branch}"
+    for c in missing:
+        info = c.get("commit") or {}
+        when = str((info.get("author") or {}).get("date", ""))[:10]
+        subject = str(info.get("message", "")).split("\n")[0]
+        url = f"https://github.com/{PIVCCU_UP}/commit/{c['sha']}"
+        r.due(f"not taken yet: {when} {subject}", f"noch nicht übernommen: {when} {subject}", url)
+    others = lack - len(missing)
+    if others and not cut:
+        r.note(f"{others} more upstream commit(s) we lack do not touch {PIVCCU_DRIVERS}/",
+               f"{others} weitere fehlende Upstream-Commit(s) ändern nichts in {PIVCCU_DRIVERS}/")
+    if cut:
+        r.note(f"{PIVCCU_FORK} lacks {lack} upstream commits: too many to tell them all apart, the list of driver "
+               "commits may be incomplete",
+               f"{PIVCCU_FORK} fehlen {lack} Upstream-Commits: zu viele für eine vollständige Prüfung, die Liste der "
+               "Treiber-Commits kann unvollständig sein")
+
+    # the fork's newest tags, also when no release pins them yet
+    tags = [t for t in up.tags(f"https://github.com/{PIVCCU_FORK}", "refs/tags/v*", "pivccu-tags.txt")
+            if t.startswith("v") and semver_key(t)]
+    stable = [t for t in tags if semver_key(t)[1] == 1]
+    for t, en, de in ((max(stable, key=semver_key) if stable else None, "newest release tag", "neuester Release-Tag"),
+                      (max(tags, key=semver_key) if tags else None, "newest tag", "neuester Tag")):
+        if t and t != ref:
+            o, cs, n = pivccu_compare(up, t, branch)
+            m, _ = pivccu_missing(up, cs, n, branch)
+            cnt = pivccu_counts(t, o, n)
+            r.note(f"the fork's {en} {cnt[0]}, {len(m)} driver commit(s) missing",
+                   f"{de} des Forks {cnt[1]}, {len(m)} Treiber-Commit(s) fehlen")
+    return r
+
+
 CHECKS = [check_buildroot, check_rpi_kernel, check_vm_kernel, check_rpi_firmware, check_rpi_eeprom,
-          check_jvm, check_hmipserver, check_base_commits]
+          check_jvm, check_hmipserver, check_base_commits, check_pivccu]
 
 
 # ---- output
