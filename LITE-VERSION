@@ -9,8 +9,9 @@
 # 1.1.0-dev is the dev track of the next minor version after 1.0.0: its builds are 1.1.0-dev.<N>
 # from 0, published as pre-releases (D-122); stable systems stay on 1.0.0.
 # 1.1.0-beta is the beta track of the same version, from 1.1.0-dev.6: built as 1.1.0-beta.<N> from 0, pre-releases too (1.1.0-beta.0 was a lab build).
+# 1.1.0 is the release of 1.1.0-beta.1's content, built as LITE_VERSION=1.1.0 (no prerelease part).
 # BASE is the OpenCCU tag this branch is rebased on, and the first thing a bug report names.
 # /VERSION's VERSION= line carries its first three parts (3.89.11), the eQ-3/OpenCCU-Base release,
 # as a CCU3's /VERSION does (task 396; board/lite/version-file.sh).
-VERSION=1.1.0-beta
+VERSION=1.1.0
 BASE=3.89.11.20260919
