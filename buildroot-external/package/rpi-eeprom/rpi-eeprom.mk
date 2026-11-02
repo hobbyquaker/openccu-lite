@@ -4,7 +4,7 @@
 #
 ################################################################################
 
-RPI_EEPROM_VERSION = 7ed1cc2b210053b5d6537b2beb542663cab7e10b
+RPI_EEPROM_VERSION = 3052f2c851b7dd631cd59ed31efc9b6ecb42e5f0
 RPI_EEPROM_SITE = $(call github,raspberrypi,rpi-eeprom,$(RPI_EEPROM_VERSION))
 RPI_EEPROM_LICENSE = BSD-3-Clause, MIT, uIP, custom
 RPI_EEPROM_LICENSE_FILES = LICENSE
@@ -17,13 +17,13 @@ RPI_EEPROM_INSTALL_IMAGES = YES
 # it is newer than the flashed one, so a Pi that has flashed a newer latest keeps it.
 ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI4),y)
   # Raspberry Pi 4 (2711)
-  RPI_EEPROM_FIRMWARE_PATH = firmware-2711/default/pieeprom-2026-09-23.bin
+  RPI_EEPROM_FIRMWARE_PATH = firmware-2711/default/pieeprom-2026-10-30.bin
   RPI_EEPROM_RECOVERY_PATH = firmware-2711/default/recovery.bin
   RPI_EEPROM_VL805_GLOB = firmware-2711/default/vl805-*.bin
   RPI_EEPROM_CHIP = 2711
 else ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI5),y)
   # Raspberry Pi 5 (2712)
-  RPI_EEPROM_FIRMWARE_PATH = firmware-2712/default/pieeprom-2026-09-25.bin
+  RPI_EEPROM_FIRMWARE_PATH = firmware-2712/default/pieeprom-2026-10-30.bin
   RPI_EEPROM_RECOVERY_PATH = firmware-2712/default/recovery.bin
   RPI_EEPROM_CHIP = 2712
 endif
