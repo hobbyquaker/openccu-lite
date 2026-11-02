@@ -23,17 +23,11 @@ save_install_log() {
 }
 
 # what the recovery system saw of its hardware, appended to the kept install log: whether the
-# network came up (the LAN9514 reset's record, eth0), the USB tree and the end of the kernel
-# log - so that an update that ran without a network can be explained afterwards
+# network came up (eth0), the USB tree and the end of the kernel log - so that an update that
+# ran without a network can be explained afterwards
 recovery_diagnostics() {
   local d
   echo "--- recovery system diagnostics ---"
-  if [[ -f /tmp/lan9514-reset.log ]]; then
-    sed 's/^/lan9514-reset: /' /tmp/lan9514-reset.log
-  fi
-  if [[ -f /tmp/lan9514-reset ]]; then
-    echo "lan9514-reset record: $(tr '\n' ' ' </tmp/lan9514-reset)"
-  fi
   if [[ -e /sys/class/net/eth0 ]]; then
     echo "eth0: operstate $(cat /sys/class/net/eth0/operstate 2>/dev/null), carrier $(cat /sys/class/net/eth0/carrier 2>/dev/null)"
   else
