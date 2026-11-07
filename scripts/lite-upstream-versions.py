@@ -249,7 +249,15 @@ class Upstream:
             size = len(whole)
             a = max(size + start, 0) if start < 0 else start
             return whole[a:size if start < 0 else a + length], size
-        rng = f"bytes={start}" if start < 0 else f"bytes={start}-{start + length - 1}"
+        if start < 0:
+            # raw.githubusercontent.com answers a suffix range (bytes=-N) with 501 since 2026-11-05: learn
+            # the size from the first byte's Content-Range, then ask for the tail by its absolute offsets
+            _, size = self.ranged(url, 0, 1, fixture)
+            if key in self.cache:   # the server sent the whole file
+                return self.ranged(url, start, length, fixture)
+            a = max(size + start, 0)
+            return self.ranged(url, a, size - a, fixture)[0], size
+        rng = f"bytes={start}-{start + length - 1}"
         req = urllib.request.Request(url, headers={"User-Agent": "openccu-lite-upstream-versions", "Range": rng})
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:

@@ -564,6 +564,38 @@ base; echo '{"x": 1}' >"$tmp/fx/releases.json"; expect "a releases.json without 
 base; rm "$tmp/fx/rpi-Makefile-stable_20260911"; expect "a raspberrypi/linux Makefile unreachable: exit 3" 3 "check failed"
 base; echo 'not a hash' >"$tmp/fx/firmware-git_hash-1.20260915"; expect "a firmware git_hash not a commit: exit 3" 3 "check failed" "extra/git_hash is not a commit"
 base; echo '# empty' >"$tmp/fx/eeprom-versions.txt"; expect "no default eeprom release: exit 3" 3 "check failed" "no default release"
+# the live range reader against a server that answers a suffix range (bytes=-N) with 501, as
+# raw.githubusercontent.com does since 2026-11-05: the tail by its absolute offsets, the jar's member read
+python3 - "$PY" >"$tmp/ranged" 2>&1 <<'EOF'
+import http.server, importlib.util, io, re, sys, threading, zipfile
+s = importlib.util.spec_from_file_location("v", sys.argv[1]); m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+buf = io.BytesIO()
+with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+    z.writestr("pad.bin", bytes(range(256)) * 400)
+    z.writestr("META-INF/MANIFEST.MF", "Implementation-Version: 1.60.1\n")
+data, asked = buf.getvalue(), []
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        r = self.headers.get("Range", "")
+        asked.append(r)
+        g = re.fullmatch(r"bytes=(\d+)-(\d+)", r)
+        if not g:
+            self.send_response(501); self.end_headers(); return
+        a, b = int(g.group(1)), min(int(g.group(2)), len(data) - 1)
+        self.send_response(206)
+        self.send_header("Content-Range", f"bytes {a}-{b}/{len(data)}")
+        self.end_headers(); self.wfile.write(data[a:b + 1])
+    def log_message(self, *a): pass
+srv = http.server.HTTPServer(("127.0.0.1", 0), H)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+url = f"http://127.0.0.1:{srv.server_port}/HMIPServer.jar"
+tail, size = m.Upstream().ranged(url, -100, 0, "x")
+ok = tail == data[-100:] and size == len(data)
+got = m.zip_member(m.Upstream(), url, "y", "META-INF/MANIFEST.MF")
+ok = ok and got == b"Implementation-Version: 1.60.1\n" and not any(r.startswith("bytes=-") for r in asked)
+print("ranged" if ok else (tail[-8:], size, got, asked))
+EOF
+grep -qx ranged "$tmp/ranged" && ok "range reader: no suffix range, the tail and a member read by absolute offsets" || { bad "range reader"; cat "$tmp/ranged"; }
 base; sed -i 's/^BUILDROOT_VERSION=.*/X=1/' "$tmp/root/Makefile"; expect "no BUILDROOT_VERSION: exit 2" 2 "check failed" "pin not found"
 base; echo 'BR2_LINUX_KERNEL=y' >"$tmp/root/$C/aarch64-rpi3.config"; expect "a Pi product without its pins: exit 2" 2 "check failed" "aarch64-rpi3"
 
