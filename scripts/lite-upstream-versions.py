@@ -682,6 +682,15 @@ def check_rpi_firmware(root, up):
         if one:
             r.ours = f"{commit[:12]} ({(built if built.startswith('stable_') else built[:12]) if built else 'no stable_ tag'})"
         if not built:
+            # a commit past the newest release (upstream OpenCCU pins such pairs): nothing newer to take
+            cmp = up.api(f"repos/raspberrypi/firmware/compare/{fw[0]}...{commit}",
+                         f"firmware-compare-{fw[0]}-{commit[:12]}.json")
+            if isinstance(cmp, dict) and cmp.get("status") in ("ahead", "identical"):
+                r.note(f"firmware {commit[:12]} is {cmp.get('ahead_by', 0)} commit(s) past the newest release {fw[0]} "
+                       f"and was not built with a raspberrypi/linux stable_ tag - information only",
+                       f"Firmware {commit[:12]} ist {cmp.get('ahead_by', 0)} Commit(s) neuer als das neueste Release {fw[0]} "
+                       f"und wurde mit keinem stable_-Tag von raspberrypi/linux gebaut - nur zur Information")
+                continue
             r.due(f"firmware {commit[:12]} was not built with a raspberrypi/linux stable_ tag",
                   f"Firmware {commit[:12]} wurde mit keinem stable_-Tag von raspberrypi/linux gebaut")
             continue

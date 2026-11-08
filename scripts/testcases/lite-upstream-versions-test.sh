@@ -337,7 +337,11 @@ expect "U-Boot: not checked, rpi3 and rpi4 may differ" 0 "up to date" "all curre
 base; fw 1.20261021 cccc000000000000000000000000000000000000 tag; rpi_tag stable_20261020 cccc000000000000000000000000000000000000 6.18.60
 expect "firmware: a newer release built with a newer stable_ tag" 0 "$UPD" "firmware 1.20261021 (built with stable_20261020) is out; ours was built with stable_20260911"
 base; fw 1.20261021 dddd000000000000000000000000000000000000 tag; expect "firmware: a release built with no stable_ tag does not count" 0 "up to date"
-base; fw $FW_OURS dddd000000000000000000000000000000000000; expect "firmware: ours built with no stable_ tag" 0 "$UPD" "was not built with a raspberrypi/linux stable_ tag"
+fw_cmp() { echo "{\"status\": \"$1\", \"ahead_by\": $2, \"behind_by\": $3}" >"$tmp/fx/firmware-compare-1.20260915-111111111111.json"; }
+base; fw $FW_OURS dddd000000000000000000000000000000000000; fw_cmp diverged 3 5; expect "firmware: ours built with no stable_ tag, not past the newest release" 0 "$UPD" "was not built with a raspberrypi/linux stable_ tag"
+# a commit past the newest release (upstream OpenCCU pins such pairs, e.g. ab5c7f86 11 ahead of 1.20260915): no finding
+base; fw $FW_OURS dddd000000000000000000000000000000000000; fw_cmp ahead 11 0
+expect "firmware: ours past the newest release with no stable_ tag" 0 "up to date" "is 11 commit(s) past the newest release 1.20260915"
 base; set_cfg aarch64-rpi3 BR2_PACKAGE_RPI_FIRMWARE_VERSION 2222222222222222222222222222222222222222; fw 2222222222222222222222222222222222222222 $K_NEW
 expect "firmware: rpi3 and rpi4 differ" 0 "$UPD" "rpi3 and rpi4 pin different firmware commits"
 
