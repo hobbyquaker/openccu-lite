@@ -257,6 +257,33 @@ loopback, link-local or multicast addresses or are wider than /8 (IPv4) or /32 (
 measurements are in [threat-model.md](threat-model.md#b1--the-lan--lighttpd) (B1b, B5c, R10); the summary is in
 [security.md](security.md#what-listens-where).
 
+## Command-line tools on the PATH: `runtime.bin`
+
+An addon that brings command-line tools for the `ssh` prompt (lite-addon-tools: `tcpdump`, `strace`, `htop`, …)
+declares the directory they are in, `"runtime": {"bin": "bin"}` (occulited's `docs/manifest-format.md`; from the
+release after 1.2.0). The addon writes no profile snippet of its own; the system writes
+`/usr/local/etc/profile.d/addon-<id>.sh`, which the image's `/etc/profile` sources, while the addon is installed and
+switched on, and removes it when the addon is disabled, switched off on the Services page or uninstalled.
+
+**Why it is not simply put in front of `PATH`:** what is on root's `PATH` runs as root, and a confined addon's user
+owns the rest of its tree. A `bin/` of that user with an `ls`, a `systemctl` or a `busybox` in it, put first, would run
+as root at root's next login and in every unit that sources `/etc/profile` - a way from the addon's user to root
+without `runtime.root`. So three things hold:
+
+1. **The directory is root's.** At the install and every update the system gives `<tree>/<bin>` and everything below
+   it to `root:root` - directories `0755`, files `0755` or `0644`, no setuid, nothing group- or world-writable - and
+   leaves it out of the ownership step that hands the rest of the tree to `addon-<id>` before every start; every start
+   puts the modes right again and checks. The addon's processes run what is in it and change nothing; no component
+   of the path may be a link, and a link inside it must be relative and stay inside. An entry the addon's user made
+   after the install is not taken over, and the directory is then not put on the `PATH`.
+2. **It is appended**, `PATH="${PATH:+${PATH}:}/usr/local/addons/<id>/<bin>"`: a command of the system or of BusyBox
+   always wins, an addon adds names and shadows none.
+3. **Interactive shells only** (`case $- in *i*`): a unit or a script that sources `/etc/profile` gets nothing. At
+   every login the snippet checks again that the directory is root's and not writable by others - the directories
+   above it stay the addon user's, who could move it aside and make one of its own until the next start.
+
+The threat and what is left of it are in [threat-model.md](threat-model.md#b5--the-system--addons) (B5d, R12).
+
 ## Confinement
 
 Gives each addon its own user and a policy. **Confined is the default** (since

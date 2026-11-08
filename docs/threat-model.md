@@ -439,6 +439,14 @@ and the manifest's `runtime` block, the ports it declares, its own token, and th
 declare it; the helper for anything privileged; the firewall for its ports; the catalogue's marks (*untested*,
 *undeclared*) as information for the administrator.
 
+**B5d, an addon's commands on root's `PATH`** (`runtime.bin`): what the login shell finds on
+`PATH` runs as root, and a confined addon's user owns its tree. The declared directory is therefore root's (given to
+`root:root` with modes nobody else writes at the install and every update, left out of the hand-back to the addon's
+user, checked at every start, nothing its user made since taken over), **appended** to `PATH` so that it shadows no
+command of the system, and only in **interactive** shells, which check at every login that the directory is still
+root's and closed to others. Nothing generic of the helper reaches `/usr/local/etc/profile.d`; the snippet is a named
+operation whose text the helper renders itself.
+
 **Has gone wrong here:** X-Sendfile served outside the boundary; an addon's own unit file gave it root (a unit in the
 addon's tree was linked by the generator; a `+` command ran as root — the generator now reads nothing from the tree);
 every addon's tree was world-readable; the confined addon's rc.d script ran as root (B3); a manifest could declare
@@ -547,7 +555,7 @@ to confirm. The [audit log](#audit-log) says which rows were checked and what ca
 | **R**epudiation | An addon acting through the local token, indistinguishable from the system | The addon's own token carries its name; occulited logs the token's name | Whether an addon's calls are traceable to the addon in the log |
 | **I**nformation disclosure | Reading the keys, the metadata or another addon's configuration from the file system or over the loopback | The trees are closed to other users; the local token reads names and rooms only; the keys are root's and the daemons' | A walk of `/usr/local` and `/etc/config` as an addon user after a change to the confinement |
 | **D**enial of service | An addon filling the disk, the journal or the CPU | The storage hint and the journal's limits; nothing enforces a quota (R5) | Whether an addon can fill the userfs and stop the system from writing its own state |
-| **E**levation | An escape from the confinement to root | The generated unit, the validator, the helper's allowlist, the addon user | What an addon run as root means: it is root, by definition, and the Addons page is the only warning |
+| **E**levation | An escape from the confinement to root; a command of the addon's user on root's `PATH` (`runtime.bin`) | The generated unit, the validator, the helper's allowlist, the addon user; `runtime.bin` root-owned, appended, interactive shells only, checked at login (B5d) | What an addon run as root means: it is root, by definition, and the Addons page is the only warning. That the hand-back never reaches `runtime.bin` (R12) |
 
 ### B6 · occulited (and the addons) ↔ the eQ-3 interface processes
 
@@ -661,10 +669,20 @@ Known, accepted for now, and written down so that nobody has to rediscover them.
 | R9 | **`?sid=` puts a credential in a URL**: the API still accepts a session id or a token there, and the CCU's legacy alias goes into the URLs of addons that need it | The CCU addon convention needs the alias; the API's acceptance is to be narrowed to where a header cannot be sent | The API's `?sid=` narrowed; the alias only for addons that still need it |
 | R10 | **An ingress addon vouches for its peers' addresses** (B1b, B5c): whatever runs as `addon-<id>` can claim any address inside the ranges its manifest declared — another of its own peers, say — though never the loopback or a LAN address | The addon is the end of the tunnel, so nothing else knows the peer's address; the socket's directory keeps every other addon out, and the addon runs confined | The tunnel in the kernel with the address on an interface, where the kernel vouches for the source |
 | R11 | **No second factor of the system's own**: a passkey is an alternative login, and the password alone still opens a session | A decision for a household system; an identity provider brings its own second factor | A second factor (TOTP, or passkeys required) as an option |
+| R12 | **An addon's command names reach an interactive root shell** (B5d, `runtime.bin`): a name only the addon has - `htop`, say - runs the root-owned file the addon's package installed; and an addon process that held a file in its bin directory open for writing before the walk keeps that descriptor | The files are the package's, as trusted as the install, which runs `update_script` as root; nothing its user makes later is taken over, the directory is appended (no system command is shadowed) and interactive shells only; the walk before a start runs with the unit's processes ended | The tools in a directory outside the addon's tree, copied there by root at the install |
 
 ## Audit log
 
 The "to check" rows that were checked, and what became of them. One entry per slice of a review.
+
+**2026-11-08 — B5d, `runtime.bin`** (for lite-addon-tools): the first design prepended an
+addon-owned directory to `PATH` for every login shell - a confined addon's user could have put an `ls` there and been
+root at root's next login (found while building lite-addon-tools). Built instead: the directory root's (ownwalk's
+`RootBin`, no link followed, entries of another owner taken over only at the install and an update), left out of the
+hand-back, appended, interactive shells only with a check at every login. Measured on a lab system: as the addon's
+user, creating, replacing, renaming, removing and changing anything in the directory is refused; moving it aside and
+making one of its own works (its parent is the user's), and that directory is not put on the `PATH`, not taken over by
+the next start and the snippet removed by the next sync; a non-interactive login shell gets nothing. R12 added.
 
 **2026-10-30 — the documents against the code of 1.1.0-dev.6.** security.md, this document, the ASVS checklist and the
 EN 303 645 baseline re-read against the fork's `lite` and occulited's `master`. Changed since the last slices: the
