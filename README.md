@@ -14,28 +14,28 @@ openccu-lite ist eine Firmware für Homematic-Zentralen, ein Fork des [OpenCCU-P
 Sie richtet sich an alle, die ihre Automation anderswo betreiben, etwa in Home Assistant, ioBroker oder Node-RED, und
 von der Zentrale vor allem eines wollen: dass sie die Homematic-Geräte zuverlässig anbindet.
 
-Deshalb fehlt einiges, was eine CCU sonst mitbringt: **Es gibt in openccu-lite keine ReGaHSS, keine WebUI-Programme und 
-keine Homematic-Scripte.** Die alte CCU-WebUI wurde durch eine
-[neu entwickelte Oberfläche](docs/walkthrough/README.md) ersetzt, und der neue Systemdienst
-[occulited](https://github.com/hobbyquaker/occulited) übernimmt die Systemverwaltung. Systeminterna wie unter anderem das
-Init-System, das Logging oder die Funkmodulerkennung wurden von Grund auf neu gestaltet.
+Deshalb fehlt einiges, was eine CCU sonst mitbringt: **Es gibt in openccu-lite keine WebUI-Programme, keine
+Systemvariablen und keine Homematic-Scripte**, denn die ReGaHSS wurde entfernt. Die alte CCU-WebUI wurde durch eine
+[neu entwickelte Oberfläche](docs/walkthrough/README.md) ersetzt. Systeminterna wie das Init-System, das Logging oder
+die Funkmodulerkennung wurden von Grund auf neu gestaltet.
 
 ## Schwerpunkte
 
-- **Stabil.** Weniger Bestandteile heißt weniger, was ausfallen kann, und eine hohe Testabdeckung schützt vor
-  Regressionsfehlern.
+- **Stabil.** Weniger Bestandteile heißt weniger, was ausfallen kann und gepflegt werden muss. Eine hohe Abdeckung
+  durch automatisierte Tests, auch auf echter Hardware, schützt vor Regressionsfehlern.
 - **Sicher.** Addons und Systemdienste laufen unter eigenen Benutzern mit eingeschränkten Rechten, Ports sind
   standardmäßig geschlossen, Authentifizierung mit Passkeys, OAuth und Tokens, Zertifikate per ACME, verschlüsselte
   Sicherungen. Programme und Addons sprechen die Schnittstellenprozesse über lite-rpc an, mit API-Tokens, deren Scopes
-  festlegen, was sie dürfen: lesen, bedienen, konfigurieren oder verwalten.
+  festlegen, was sie dürfen: lesen, bedienen, konfigurieren oder verwalten. Details: [Sicherheit](docs/security.md).
 - **Privat.** Keine Telemetrie. Im [lokalen Schlüsselmodus](docs/lokaler-schluesselmodus.md) lässt sich eine Zentrale
   auch ohne Internetverbindung und ohne Abhängigkeit vom Schlüsselserver von eQ-3 betreiben, sonstige ausgehende
   Verbindungen (Update-Checks) gibt es nur mit Zustimmung des Benutzers. Details: [Datenschutz](docs/privacy.md).
 - **Freie Funkkonfiguration.** Welches Funkmodul welche Schnittstelle bedient, ist frei wählbar. Das ermöglicht
   besondere Konfigurationen, etwa getrennte Funkmodule für BidCos-RF und HmIP-RF oder einen reinen HmIP-Betrieb ohne
   BidCos. [Beispiele](docs/walkthrough/README.md#beispiele-für-funk-konfigurationen) zeigt der Rundgang.
-- **Minimal.** openccu-lite bringt nur mit, was eine Zentrale wirklich braucht. Alles andere kommt als Addon dazu, und
-  zwar nur das, was tatsächlich genutzt wird.
+- **Minimal.** openccu-lite bringt nur mit, was die Zentrale grundlegend braucht. Alles andere kommt als Addon dazu,
+  und zwar nur das, was man wirklich nutzen möchte. So bleibt das Image klein, Updates gehen schneller und der
+  Wartungsaufwand sinkt.
 
 ## Addons: nur das, was gebraucht wird
 
@@ -49,41 +49,42 @@ folgenden Programme **können** als Addon auf openccu-lite installiert werden un
 integriert, **müssen aber nicht**: Sie laufen genauso auf einem anderen Rechner. So bleibt die Zentrale ein möglichst
 schlankes Funk-Gateway.
 
-- [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) (Geräte und Direktverknüpfungen verwalten;
-  auch als Anwendung für Windows, macOS und Linux)
-- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) (Geräte und Direktverknüpfungen verwalten, Bedienoberfläche,
-  Charts, MQTT, Home Assistant, Matter und mehr; auch als Docker-Container oder Home-Assistant-Add-on)
+- [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) - Geräte und Direktverknüpfungen verwalten;
+  auch als Anwendung für Windows, macOS und Linux
+- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) - Geräte und Direktverknüpfungen verwalten, Bedienoberfläche,
+  Charts, MQTT, Home Assistant, Matter und mehr; auch als Docker-Container oder Home-Assistant-Add-on
 
 ### Weitere Addons
 
-- [ccu-addon-battery](https://github.com/hobbyquaker/ccu-addon-battery) (Batteriewechsel erkennen, Statistiken zu
-  Batterien)
-- [ccu-addon-longpressdim](https://github.com/hobbyquaker/ccu-addon-longpressdim) (Dimmen mit langem Tastendruck über
-  Schnittstellengrenzen hinweg)
-- [ccu-addon-mosquitto](https://github.com/homematic-community/ccu-addon-mosquitto) (MQTT-Broker)
-- [ccu-addon-mui](https://github.com/firsttris/ccu-addon-mui) (Geräte und Direktverknüpfungen verwalten, schöne
-  Bedienoberfläche mit Charts)
-- [hm2mqtt.js](https://github.com/hobbyquaker/hm2mqtt.js) (MQTT-Anbindung, Home Assistant Auto Discovery, folgt der
-  mqtt-smarthome-Spec 2.0)
-- [RedMatic](https://github.com/rdmtc/RedMatic) (Automation mit Node-RED, MQTT, Home Assistant, HomeKit, Matter und
-  mehr)
+- [RedMatic](https://github.com/rdmtc/RedMatic) - Node-RED: Automation, Anbindung anderer Systeme, MQTT, Home
+  Assistant, HomeKit, Matter und vieles mehr
+- [hm2mqtt.js](https://github.com/hobbyquaker/hm2mqtt.js) - MQTT-Anbindung, Home Assistant Auto Discovery, folgt der
+  Spec 2.0 von [mqtt-smarthome](https://github.com/mqtt-smarthome/mqtt-smarthome)
+- [ccu-addon-mui](https://github.com/firsttris/ccu-addon-mui) - Geräte und Direktverknüpfungen verwalten, moderne
+  Bedienoberfläche mit Charts
+- [ccu-addon-battery](https://github.com/hobbyquaker/ccu-addon-battery) - Batteriewechsel erkennen, Statistiken zu
+  Batterien
+- [ccu-addon-longpressdim](https://github.com/hobbyquaker/ccu-addon-longpressdim) - Dimmen mit langem Tastendruck über
+  Schnittstellengrenzen hinweg
+- [ccu-addon-mosquitto](https://github.com/homematic-community/ccu-addon-mosquitto) - MQTT-Broker
 
 ### Nur für openccu-lite
 
-Diese Addons nutzen die Schnittstellen von openccu-lite und laufen nicht auf einer (Open)CCU.
+Diese Addons lassen sich nicht auf einer CCU3 oder auf OpenCCU installieren.
 
-- [lite-addon-forwarder](https://github.com/hobbyquaker/lite-addon-forwarder) (Events und Systemdaten an InfluxDB,
-  Prometheus, Elasticsearch/OpenSearch, SQL-Datenbanken, Syslog, Loki und Webhooks weiterleiten)
-- [lite-addon-nut](https://github.com/hobbyquaker/lite-addon-nut) (NUT-Client: fährt das System bei Stromausfall
-  rechtzeitig herunter, wenn die USV es meldet)
-- [lite-addon-snmp](https://github.com/hobbyquaker/lite-addon-snmp) (SNMP-Agent mit Daten der Homematic-Geräte und
-  -Schnittstellen, Traps)
-- [lite-addon-tailscale](https://github.com/hobbyquaker/lite-addon-tailscale) (Fernzugriff auf das System über ein
-  Tailscale-Netz, auch mit eigenem Headscale)
-- [lite-addon-wireguard](https://github.com/hobbyquaker/lite-addon-wireguard) (Fernzugriff auf das System per
-  WireGuard-VPN)
+- [lite-addon-forwarder](https://github.com/hobbyquaker/lite-addon-forwarder) - Events und Systemdaten an InfluxDB,
+  Prometheus, Elasticsearch, SQL-Datenbanken, Syslog, Loki, Webhooks u. a. weiterleiten
+- [lite-addon-nut](https://github.com/hobbyquaker/lite-addon-nut) - NUT-Client: fährt das System bei Stromausfall
+  rechtzeitig herunter, wenn die USV es meldet
+- [lite-addon-snmp](https://github.com/hobbyquaker/lite-addon-snmp) - SNMP-Agent mit Daten der Homematic-Geräte und
+  -Schnittstellen, Traps
+- [lite-addon-tailscale](https://github.com/hobbyquaker/lite-addon-tailscale) - Fernzugriff auf das System über ein
+  Tailscale-Netz, auch mit eigenem Headscale
+- [lite-addon-wireguard](https://github.com/hobbyquaker/lite-addon-wireguard) - Fernzugriff auf das System per
+  WireGuard-VPN
 
-Weitere Addons stehen im Katalog. Wie Addons auf openccu-lite funktionieren und wie sich ein bestehendes Addon anpassen lässt, steht unter [Addons](docs/addons.md).
+Weitere Addons stehen im Katalog. Wie Addons auf openccu-lite funktionieren und wie sich ein bestehendes CCU-Addon
+anpassen lässt, steht unter [Addons](docs/addons.md).
 
 ## Installation
 
