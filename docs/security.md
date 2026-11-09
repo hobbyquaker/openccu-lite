@@ -88,6 +88,16 @@ interface daemons' RPC ports on the loopback have no authentication.
 The ReGa ports 1999 and 8181 do not exist. An integration that ran off the system and spoke to the interface
 daemons' ports runs on the system instead, uses lite-rpc over the web port with a token, or needs classic RPC.
 
+**What the web port answers without a login:** the login itself, the client pairing request, `/api/system/v1/health`
+(the release and occulited's commit), the SBOM, the ACME challenge and the metadata API's feature detection
+`/api/meta/v1/version`. That last one says what a program needs before it is paired: the API versions and
+capabilities, the HmIP key-server mode and the number of stored device keys (never a key or an SGTIN), and the
+**names** of the interfaces lite-rpc offers (`HmIP-RF`, `BidCos-RF`, …), so that a program looking for the system on
+the network - ioBroker's discovery, for one - proposes exactly the connections it has. Nothing more of the radio is
+open: no module type, serial, address, firmware or URL; the details stay behind `rpc:read`. The interface names were
+behind the credential up to 1.2.0: they say which kind of radio the system has, a coarse fact that every CCU shows to a
+scan of its classic RPC ports.
+
 **Classic RPC** (System → Remote access, off by default) makes lighttpd serve the CCU's ports again and proxy them to
 the interface daemons, which stay on the loopback (`lite-classic-rpc-conf` writes only the switched-on sockets).
 These are the CCU's risks and the page states them: without the login, whoever the firewall lets in controls every

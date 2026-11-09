@@ -116,7 +116,8 @@ gadget with its own vulnerability, or a laptop somebody carried in.
 
 **Reaches today:** the ports the firewall opens — the web server (80, 443) from the local networks, SSH and the
 classic RPC ports while they are switched on, the HmIP access points' ports and the discovery ports. On the web port,
-without a credential: the login, the open routes (health, version, the SBOM, the ACME challenge) and the client
+without a credential: the login, the open routes (health, version - which names the interfaces lite-rpc offers,
+nothing more of the radio -, the SBOM, the ACME challenge) and the client
 pairing request, which is rate-limited and needs an administrator's approval (for backups, which hold the radio
 keys, also the administrator's password, passkey or fresh login, and the token works only from the address that
 asked). Everything else is dropped by the
