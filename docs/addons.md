@@ -260,8 +260,8 @@ measurements are in [threat-model.md](threat-model.md#b1--the-lan--lighttpd) (B1
 ## Command-line tools on the PATH: `runtime.bin`
 
 An addon that brings command-line tools for the `ssh` prompt (lite-addon-tools: `tcpdump`, `strace`, `htop`, …)
-declares the directory they are in, `"runtime": {"bin": "bin"}` (occulited's `docs/manifest-format.md`; from the
-release after 1.2.0). The addon writes no profile snippet of its own; the system writes
+declares the directory they are in, `"runtime": {"bin": "bin"}` (occulited's `docs/manifest-format.md`; from
+1.2.1 on). The addon writes no profile snippet of its own; the system writes
 `/usr/local/etc/profile.d/addon-<id>.sh`, which the image's `/etc/profile` sources, while the addon is installed and
 switched on, and removes it when the addon is disabled, switched off on the Services page or uninstalled.
 
