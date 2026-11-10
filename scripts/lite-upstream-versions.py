@@ -61,8 +61,17 @@
 #                         release build).
 #   OpenCCU-Base commits  the filtered OpenCCU-Base report (BASE_REPORT, report.json, kept by the fork's
 #                         workflow every 6 hours): the commits on the paths openccu-lite uses above the
-#                         line of the fork's lite. Current: none; each one is a finding, linked. A report
-#                         older than BASE_REPORT_STALE_DAYS is a note. The count links to that report.
+#                         line of the fork's lite. OpenCCU-Base's main runs ahead of OpenCCU, so the report
+#                         says for each whether OpenCCU's latest release builds it (the OpenCCU-Base tag or
+#                         commit that release pins) or only OpenCCU's master (its pin), in two rows:
+#                         "in the OpenCCU release, not in ours" - current: none; each one is a finding,
+#                         linked: a released OpenCCU has it and we do not. A release pin the report could
+#                         not resolve is a failed check, never a green row.
+#                         "in OpenCCU master, not in ours" - what master builds beyond the release: notes,
+#                         linked, never a finding, like the commits on main that not even master builds
+#                         (counted in one note). So the badge is green as long as we have what the latest
+#                         OpenCCU release has. A report
+#                         older than BASE_REPORT_STALE_DAYS is a note. The counts link to that report.
 #                         The report measures the fork's lite head (report.json "lite"): a release column
 #                         whose OpenCCU-Base pin (its tag in fork-base-tags.txt) is that commit is exact;
 #                         an older one shows its pin, lite's commits above the line as a lower bound, a
@@ -299,14 +308,14 @@ class Row:
         self.newest_link = None         # the "newest" cell as a link
         self.until = NO_PERIOD
         self.findings = []   # [(en, de, link or None)]
-        self.notes = []      # [(en, de)]
+        self.notes = []      # [(en, de, link or None)]
         self.exact = True    # False: the release's value is not measured exactly (its cell gets no check mark)
 
     def due(self, en, de, link=None):
         self.findings.append((en, de, link))
 
-    def note(self, en, de):
-        self.notes.append((en, de))
+    def note(self, en, de, link=None):
+        self.notes.append((en, de, link))
 
 
 class TreeAt:
@@ -968,19 +977,32 @@ def check_hmipserver(root, up):
     return r
 
 
-# ---- OpenCCU-Base: relevant commits above our line
+# ---- OpenCCU-Base: the commits OpenCCU builds and our line lacks
 
-def check_base_commits(root, up):
-    r = Row("openccu-base-commits", "OpenCCU-Base commits above our line",
-            "OpenCCU-Base-Commits über unserer Linie", BASE_REPORT)
+def base_report(up):
+    """the fork's report.json: the commits above our line, each saying whether OpenCCU's latest release or its
+    master builds it, and those two builds"""
     try:
         d = json.loads(up.http(BASE_REPORT + "report.json", "base-report.json"))
-        above, line = d["above"], d["boundary"]
+        above, builds = d["above"], d["openccu"]
         if not isinstance(above, list) or not all(isinstance(c, dict) and c.get("subject") and c.get("url")
-                                                  for c in above):
-            raise ValueError("above is not a list of commits")
+                                                  and isinstance(c.get("in_release"), bool)
+                                                  and isinstance(c.get("in_master"), bool) for c in above):
+            raise ValueError("above is not a list of commits that say in_release and in_master")
+        for k in ("release", "master"):
+            if not isinstance(builds[k], dict) or not builds[k].get("name") or not builds[k].get("pin"):
+                raise ValueError(f"openccu.{k} names no build")
+        d["boundary"]   # where lite stands, or null
     except (ValueError, KeyError, TypeError) as e:
         raise UpstreamError(f"the OpenCCU-Base report's report.json: {e}") from e
+    return d
+
+
+def base_row(root, up, key, en, de):
+    """a row of the OpenCCU-Base report, its release cell and the build it compares with: (row, report, build)"""
+    r = Row(key, en, de, BASE_REPORT)
+    d = base_report(up)
+    line, build = d["boundary"], d["openccu"][key.rsplit("-", 1)[1]]
     # the report measures the fork's lite head; a release that pins that very commit gets its line, an older
     # one (its OpenCCU-Base tag elsewhere) gets lite's commits above the line as a lower bound, said so
     src = base_source(read(root, BASE_MK))
@@ -1005,9 +1027,27 @@ def check_base_commits(root, up):
                   f"lite bei: {line.get('subject', '?')} ({str(line.get('date', ''))[:10]})")
     else:
         r.ours = ("lite has no upstream commit of main", "lite hat keinen Upstream-Commit von main")
-    r.newest = (f"{len(above)} commit(s) above the line", f"{len(above)} Commit(s) über der Linie")
     r.newest_link = BASE_REPORT
-    for c in above:
+    return r, d, build
+
+
+def base_build(build):
+    """the build and its OpenCCU-Base pin, e.g. "OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11)" """
+    pin = str(build["pin"])
+    return f"{build['name']} (OpenCCU-Base {pin[:10] if re.match(r'^[0-9a-f]{40}$', pin) else pin})"
+
+
+def check_base_release(root, up):
+    """what OpenCCU's latest release builds and our line lacks: a finding each. This is the row that decides
+    whether we are behind OpenCCU; upstream's main and OpenCCU's master run ahead of every release."""
+    r, d, build = base_row(root, up, "openccu-base-release", "OpenCCU-Base: in the OpenCCU release, not in ours",
+                           "OpenCCU-Base: im OpenCCU-Release, nicht bei uns")
+    if not build.get("commit"):
+        raise UpstreamError(f"the OpenCCU-Base report could not resolve {base_build(build)}: not compared")
+    missing = [c for c in d["above"] if c["in_release"]]
+    r.newest = (f"{base_build(build)}: {len(missing)} commit(s) missing",
+                f"{base_build(build)}: {len(missing)} Commit(s) fehlen")
+    for c in missing:
         when = str(c.get("date", ""))[:10]
         r.due(f"not taken yet: {when} {c['subject']}", f"noch nicht übernommen: {when} {c['subject']}", c["url"])
     gen = re.match(r"^(\d{4}-\d{2}-\d{2})", str(d.get("generated", "")))
@@ -1015,6 +1055,30 @@ def check_base_commits(root, up):
         r.note("the report has no generation date", "der Bericht hat kein Erstellungsdatum")
     elif (up.today - datetime.date.fromisoformat(gen.group(1))).days > BASE_REPORT_STALE_DAYS:
         r.note(f"the OpenCCU-Base report is from {gen.group(1)}", f"der OpenCCU-Base-Bericht ist vom {gen.group(1)}")
+    return r
+
+
+def check_base_master(root, up):
+    """what OpenCCU's master builds beyond its latest release and our line lacks: notes, never a finding - no
+    released OpenCCU has it. The commits on OpenCCU-Base's main that not even master builds are counted."""
+    r, d, build = base_row(root, up, "openccu-base-master", "OpenCCU-Base: in OpenCCU master, not in ours",
+                           "OpenCCU-Base: in OpenCCU master, nicht bei uns")
+    if not build.get("commit"):
+        r.newest = (f"{base_build(build)}: not compared", f"{base_build(build)}: nicht verglichen")
+        r.note(f"{base_build(build)} is no commit of OpenCCU-Base's main or tags: not compared",
+               f"{base_build(build)} ist kein Commit von main oder den Tags von OpenCCU-Base: nicht verglichen")
+        return r
+    missing = [c for c in d["above"] if c["in_master"] and not c["in_release"]]
+    r.newest = (f"{base_build(build)}: {len(missing)} commit(s) missing",
+                f"{base_build(build)}: {len(missing)} Commit(s) fehlen")
+    for c in missing:
+        when = str(c.get("date", ""))[:10]
+        r.note(f"in OpenCCU master, in no release: {when} {c['subject']}",
+               f"in OpenCCU master, in keinem Release: {when} {c['subject']}", c["url"])
+    ahead = sum(1 for c in d["above"] if not c["in_master"] and not c["in_release"])
+    if ahead:
+        r.note(f"{ahead} more commit(s) on OpenCCU-Base main that OpenCCU master does not build yet",
+               f"{ahead} weitere(r) Commit(s) auf main von OpenCCU-Base, die OpenCCU master noch nicht baut", BASE_REPORT)
     return r
 
 
@@ -1103,7 +1167,7 @@ def check_pivccu(root, up):
 
 
 CHECKS = [check_buildroot, check_rpi_kernel, check_vm_kernel, check_rpi_firmware, check_rpi_eeprom,
-          check_jvm, check_hmipserver, check_base_commits, check_pivccu]
+          check_jvm, check_hmipserver, check_base_release, check_base_master, check_pivccu]
 
 
 # ---- output
@@ -1195,7 +1259,8 @@ def page(lang, cols, error, when, run_url):
             r = rs[0]
             st = f'<span class="due">{e(t["due"])}</span>' if r.findings else f'<span class="ok">{e(t["ok"])}</span>'
             items = [f'<li><a href="{e(f[2])}">{e(f[li])}</a></li>' if f[2] else f"<li>{e(f[li])}</li>"
-                     for f in r.findings] + [f'<li class="note">{e(n[li])}</li>' for n in r.notes]
+                     for f in r.findings] + [f'<li class="note"><a href="{e(n[2])}">{e(n[li])}</a></li>' if n[2]
+                                             else f'<li class="note">{e(n[li])}</li>' for n in r.notes]
             name = r.en if lang == "en" else r.de
             newest = (f'<a href="{e(r.newest_link)}">{e(loc(r.newest, li))}</a>' if r.newest_link
                       else e(loc(r.newest, li)))
@@ -1284,7 +1349,7 @@ def main(argv=None):
     due = [f"{r.en}: {f[0]}" + (f" {f[2]}" if f[2] else "") for r in cols[0][2] for f in r.findings]
     for r in cols[0][2]:
         for nt in r.notes:
-            print(f"note - {r.en}: {nt[0]}")
+            print(f"note - {r.en}: {nt[0]}" + (f" {nt[2]}" if nt[2] else ""))
     for d in due:
         print(f"::warning::update available - {d}")
     pre_due = []

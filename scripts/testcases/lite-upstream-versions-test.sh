@@ -11,7 +11,9 @@
 # (chosen by version order among other tags; a finding when ours is older), ours with the OpenCCU-Base
 # tag its jar comes from - the jar by its git blob sha and its version read by
 # range from small test jars, a snapshot named as such; the OpenCCU-Base commits above our line from
-# its report.json, each linked); findings exit 0 with ::warning:: lines and a yellow badge, errors exit
+# its report.json in two rows: those OpenCCU's latest release builds are findings, each linked, those only
+# OpenCCU's master builds and those only on OpenCCU-Base's main are notes and leave the badge green; a
+# release pin the report could not resolve exits 3, master's is a note); findings exit 0 with ::warning:: lines and a yellow badge, errors exit
 # 2 (pin) or 3 (upstream) with a grey badge - never green; the report pages (with the link to the
 # OpenCCU-Base report) and the job summary. U-Boot is not checked (it follows buildroot's version from the
 # LTS 2027.02 on, bumped deliberately until then) and the pages carry no "GRUB (VM) and Go" note: both
@@ -122,11 +124,21 @@ pv_cmp() { # <ref> <our commits on top> <how many we lack> [<sha:subject of a co
 pv_kernel() { # <sha>... the upstream commits touching kernel/
   { printf '['; sep=""; for c in "$@"; do printf '%s{"sha": "%s"}' "$sep" "$c"; sep=", "; done; printf ']\n'; } >"$tmp/fx/pivccu-kernel.json"
 }
-base_report() { # <generated date> <subject>... of the commits above the line
+# base_report <generated date> <subject>...: the commits above the line. A subject is in OpenCCU's latest
+# release (and its master); "master|<subject>" only in OpenCCU's master, "main|<subject>" in neither.
+# BASE_REL_COMMIT / BASE_MASTER_COMMIT: the commits the two pins resolve to (null: not resolved)
+BASE_REL_COMMIT='"3ed652a404d72cbe403e37c5b8b1f610451b02fb"'; BASE_MASTER_COMMIT='"79d0a44a2848e732a0f730a90e31f88209878e06"'
+base_report() {
   g=$1; shift
-  { printf '{"generated": "%s 10:52 UTC", "lite": "'$BASE_LITE'", "boundary": {"sha": "423cde2b", "subject": "libXmlRpc: regenerate (#190)", "date": "2026-10-13T23:34:42+02:00"}, "above": [' "$g"
+  { printf '{"generated": "%s 10:52 UTC", "lite": "'$BASE_LITE'", "boundary": {"sha": "423cde2b", "subject": "libXmlRpc: regenerate (#190)", "date": "2026-10-13T23:34:42+02:00"}, ' "$g"
+    printf '"openccu": {"release": {"openccu": "3.89.11.20260919", "name": "OpenCCU 3.89.11.20260919", "url": "https://github.com/OpenCCU/OpenCCU/releases/tag/3.89.11.20260919", "pin": "3.89.11", "commit": %s}, ' "$BASE_REL_COMMIT"
+    printf '"master": {"openccu": "2350302271", "name": "OpenCCU master", "url": "https://github.com/OpenCCU/OpenCCU/commit/2350302271", "pin": "79d0a44a2848e732a0f730a90e31f88209878e06", "commit": %s}}, "above": [' "$BASE_MASTER_COMMIT"
     sep=""; n=0
-    for subj in "$@"; do n=$((n+1)); printf '%s{"subject": "%s", "date": "2026-10-1%sT10:00:00Z", "url": "https://github.com/OpenCCU/OpenCCU-Base/commit/%040d"}' "$sep" "$subj" "$n" "$n"; sep=", "; done
+    for subj in "$@"; do
+      n=$((n+1)); rel=true; mas=true
+      case $subj in master\|*) rel=false; subj=${subj#master|} ;; main\|*) rel=false; mas=false; subj=${subj#main|} ;; esac
+      printf '%s{"subject": "%s", "date": "2026-10-1%sT10:00:00Z", "url": "https://github.com/OpenCCU/OpenCCU-Base/commit/%040d", "in_release": %s, "in_master": %s}' "$sep" "$subj" "$n" "$n" "$rel" "$mas"; sep=", "
+    done
     printf ']}\n'; } >"$tmp/fx/base-report.json"
 }
 set_cfg() { # <product> <variable> <value>
@@ -231,22 +243,25 @@ grep -qF '"color": "brightgreen"' "$tmp/site/badge.json" && ok "badge green" || 
 grep -q '<html lang="de">' "$tmp/site/index.html" && grep -qF 'aktuell' "$tmp/site/index.html" \
   && grep -q '<html lang="en">' "$tmp/site/en.html" && grep -qF 'up to date' "$tmp/site/en.html" \
   && grep -qF 'href="en.html"' "$tmp/site/index.html" && grep -qF 'prefers-color-scheme:dark' "$tmp/site/index.html" \
-  && [ "$(grep -c '<tr><td>' "$tmp/site/en.html")" -eq 9 ] \
+  && [ "$(grep -c '<tr><td>' "$tmp/site/en.html")" -eq 10 ] \
   && grep -qF '<th>Support bis</th>' "$tmp/site/index.html" \
-  && ok "the report pages: German and English, nine components, the support column, dark mode" || bad "the report pages"
+  && ok "the report pages: German and English, ten rows, the support column, dark mode" || bad "the report pages"
 ! grep -qiF 'Supportzeitraum' "$tmp/site/index.html" && ! grep -qiF 'support period' "$tmp/site/en.html" \
   && grep -qF '</td><td></td><td><span class="ok">aktuell</span>' "$tmp/site/index.html" \
   && grep -qF '</td><td></td><td><span class="ok">up to date</span>' "$tmp/site/en.html" \
   && ok "no published support period: the cell stays empty" || bad "no published support period: the cell stays empty"
-grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">0 Commit(s) über der Linie</a></td>' "$tmp/site/index.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">0 commit(s) above the line</a></td>' "$tmp/site/en.html" \
-  && ok "OpenCCU-Base: the count links the commit report" || bad "OpenCCU-Base: the count links the commit report"
+grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 0 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 0 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && ok "OpenCCU-Base: both counts name their OpenCCU build and link the commit report" || bad "OpenCCU-Base: both counts name their OpenCCU build and link the commit report"
 grep -qF '<a href="https://hobbyquaker.github.io/OpenCCU-Base/">der OpenCCU-Base-Commit-Bericht</a>' "$tmp/site/index.html" \
   && grep -qF '<a href="https://hobbyquaker.github.io/OpenCCU-Base/">the OpenCCU-Base commit report</a>' "$tmp/site/en.html" \
   && ok "both pages link the OpenCCU-Base commit report" || bad "both pages link the OpenCCU-Base commit report"
 grep -qF '| JVM (Azul Zulu) | 21.0.12.1 (Zulu 21.52.203, JRE) | 21.0.12.1 (Zulu 21.52.203, JRE) | 2031-09 | up to date |' "$tmp/sum" \
   && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base 3.89.11) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU/OpenCCU-Base 3.89.11: 1.60.1 (the same jar) |  | up to date |' "$tmp/sum" \
-  && grep -qF '| OpenCCU-Base commits above our line | lite at: libXmlRpc: regenerate (#190) (2026-10-13) | 0 commit(s) above the line |  | up to date |' "$tmp/sum" \
+  && grep -qF '| OpenCCU-Base: in the OpenCCU release, not in ours | lite at: libXmlRpc: regenerate (#190) (2026-10-13) | OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 0 commit(s) missing |  | up to date |' "$tmp/sum" \
+  && grep -qF '| OpenCCU-Base: in OpenCCU master, not in ours | lite at: libXmlRpc: regenerate (#190) (2026-10-13) | OpenCCU master (OpenCCU-Base 79d0a44a28): 0 commit(s) missing |  | up to date |' "$tmp/sum" \
   && grep -qF '<td>homematicip/OpenCCU-Base main: 1.60.1 (dasselbe Jar) · OpenCCU/OpenCCU-Base 3.89.11: 1.60.1 (dasselbe Jar)</td>' "$tmp/site/index.html" \
   && grep -qF "<td>1.60.1 (OpenCCU-Base 3.89.11) $ICON" "$tmp/site/index.html" && grep -qF "<td>1.60.1 (OpenCCU-Base 3.89.11) $ICON" "$tmp/site/en.html" \
   && ! grep -qF 'v1.0.0-rc.3' "$tmp/site/index.html" "$tmp/site/en.html" \
@@ -423,18 +438,44 @@ grep -qF '<td>1.60.1 (in keinem OpenCCU-Base-Tag) ' "$tmp/site/index.html" && gr
 base; base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 'https://example.org/x.tar.gz'
 expect "HMIPServer: our openccu-base.mk not on GitHub: exit 2" 2 "check failed" "openccu-base.mk"
 
-# OpenCCU-Base: the commits above our line
+# OpenCCU-Base: the commits above our line, by what OpenCCU builds
+BREL='OpenCCU-Base: in the OpenCCU release, not in ours'; BMAS='OpenCCU-Base: in OpenCCU master, not in ours'
 base; base_report 2026-10-24 'webui: default objects (#222)' 'rfd: a fix (#230)'
-expect "OpenCCU-Base: commits above the line, one finding each" 0 "$UPD" "not taken yet: 2026-10-12 rfd: a fix (#230) https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000002"
-[ "$(grep -c '::warning::update available - OpenCCU-Base commits above our line' "$tmp/out")" -eq 2 ] \
+expect "OpenCCU-Base: commits the OpenCCU release builds, one finding each" 0 "$UPD" "not taken yet: 2026-10-12 rfd: a fix (#230) https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000002"
+[ "$(grep -c "::warning::update available - $BREL" "$tmp/out")" -eq 2 ] \
   && grep -qF '<li><a href="https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000001">noch nicht übernommen: 2026-10-11 webui: default objects (#222)</a></li>' "$tmp/site/index.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">2 commit(s) above the line</a></td>' "$tmp/site/en.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">2 Commit(s) über der Linie</a></td>' "$tmp/site/index.html" \
-  && ok "OpenCCU-Base: two warnings, the subjects linked, the count linked" || bad "OpenCCU-Base: two warnings, the subjects linked, the count linked"
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 2 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 2 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && ! grep -qF "$BMAS: " "$tmp/out" \
+  && ok "OpenCCU-Base: two warnings, the subjects linked, the count linked; nothing counted twice for master" || bad "OpenCCU-Base: two warnings, the subjects linked, the count linked"
+# what only OpenCCU's master builds, or only OpenCCU-Base's main has, is no finding: the badge stays green
+base; base_report 2026-10-24 'master|licenses: a note (#342)' 'master|cmake: scripts (#337)' 'main|rfd: brand new (#350)'
+expect "OpenCCU-Base: commits only OpenCCU master builds are notes, the badge stays green" 0 "up to date" "note - $BMAS: in OpenCCU master, in no release: 2026-10-12 cmake: scripts (#337) https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000002"
+! grep -qF '::warning::' "$tmp/out" && grep -qF '**All current.**' "$tmp/sum" \
+  && grep -qF "note - $BMAS: 1 more commit(s) on OpenCCU-Base main that OpenCCU master does not build yet" "$tmp/out" \
+  && ! grep -qF 'rfd: brand new' "$tmp/out" \
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 2 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 2 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
+  && grep -qF '<li class="note"><a href="https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000001">in OpenCCU master, in keinem Release: 2026-10-11 licenses: a note (#342)</a></li>' "$tmp/site/index.html" \
+  && [ "$(grep -c "$ICON" "$tmp/site/en.html")" -eq 10 ] \
+  && ok "OpenCCU-Base: master's commits linked notes, main's only counted, every row with its check disc" || { bad "OpenCCU-Base: master's commits linked notes, main's only counted"; cat "$tmp/out"; }
+base; base_report 2026-10-24 'rfd: a fix (#230)' 'master|cmake: scripts (#337)'
+expect "OpenCCU-Base: a release commit is a finding next to master's notes" 0 "$UPD" "not taken yet: 2026-10-11 rfd: a fix (#230)"
+[ "$(grep -c '::warning::' "$tmp/out")" -eq 1 ] && grep -qF "note - $BMAS: in OpenCCU master, in no release: 2026-10-12 cmake: scripts (#337)" "$tmp/out" \
+  && ok "OpenCCU-Base: one warning, master's commit a note" || bad "OpenCCU-Base: one warning, master's commit a note"
+base; BASE_MASTER_COMMIT=null; base_report 2026-10-24; BASE_MASTER_COMMIT='"79d0a44a2848e732a0f730a90e31f88209878e06"'
+expect "OpenCCU-Base: master's pin not resolved is a note" 0 "up to date" "note - $BMAS: OpenCCU master (OpenCCU-Base 79d0a44a28) is no commit of OpenCCU-Base's main or tags: not compared"
+base; BASE_REL_COMMIT=null; base_report 2026-10-24; BASE_REL_COMMIT='"3ed652a404d72cbe403e37c5b8b1f610451b02fb"'
+expect "OpenCCU-Base: the release's pin not resolved: exit 3, never green" 3 "check failed" "could not resolve OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11)"
 base; base_report 2026-10-21; expect "OpenCCU-Base: a stale report is a note" 0 "up to date" "the OpenCCU-Base report is from 2026-10-21"
 base; base_report 2026-10-22; run >/dev/null; grep -qF 'report is from' "$tmp/out" && bad "OpenCCU-Base: two days old is not stale" || ok "OpenCCU-Base: two days old is not stale"
 base; rm "$tmp/fx/base-report.json"; expect "OpenCCU-Base report unreachable: exit 3" 3 "check failed" "base-report.json"
 base; echo '{"boundary": null}' >"$tmp/fx/base-report.json"; expect "OpenCCU-Base report without its commits: exit 3" 3 "check failed" "report.json"
+base; echo '{"boundary": null, "above": [{"subject": "x", "url": "u"}], "openccu": {"release": {"name": "r", "pin": "p"}, "master": {"name": "m", "pin": "p"}}}' >"$tmp/fx/base-report.json"
+expect "OpenCCU-Base report of the old shape (no in_release): exit 3" 3 "check failed" "in_release"
+base; echo '{"boundary": null, "above": []}' >"$tmp/fx/base-report.json"; expect "OpenCCU-Base report without OpenCCU's builds: exit 3" 3 "check failed" "report.json"
 
 # the piVCCU drivers against alexreinert/piVCCU
 PVR='piVCCU drivers (our fork against alexreinert)'
@@ -488,7 +529,7 @@ grep -qF '<th>Komponente</th><th>openccu-lite 1.0.0 (latest)</th><th>neueste ups
   && ! grep -qF '<th>unsere</th>' "$tmp/site/index.html" && ! grep -qF '<th>ours</th>' "$tmp/site/en.html" \
   && grep -qF '| component | openccu-lite 1.0.0 (latest) | newest upstream | supported until | status |' "$tmp/sum" \
   && ok "one release: the header names it, no pre-release column, no 'ours'" || { bad "one release: the header"; grep -F '<th>' "$tmp/site/en.html"; cat "$tmp/sum"; }
-[ "$(grep -c "$ICON" "$tmp/site/en.html")" -eq 9 ] && grep -qF 'aria-label="aktuell"' "$tmp/site/index.html" \
+[ "$(grep -c "$ICON" "$tmp/site/en.html")" -eq 10 ] && grep -qF 'aria-label="aktuell"' "$tmp/site/index.html" \
   && grep -qF '<title>up to date</title>' "$tmp/site/en.html" && grep -qF '.ck circle{fill:var(--ok)}' "$tmp/site/en.html" \
   && ok "current cells: the check disc with its accessible name, one per row" || bad "current cells: the check disc with its accessible name, one per row"
 
@@ -557,7 +598,7 @@ base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0
 snap_tag v1.1.0-dev.0; gh_releases v1.0.0 v1.1.0-dev.0:true:false v1.0.0
 expect "OpenCCU-Base: an older pin than lite's is a note" 0 "up to date" "this release pins v0.9.0 (8b96a44a74)"
 grep -qF '<td>OpenCCU-Base v0.9.0 (8b96a44a74), not lite&#x27;s line (d771beda34) <span class="note">not measured exactly</span></td><td>lite at: libXmlRpc: regenerate (#190) (2026-10-13) '"$ICON" "$tmp/site/en.html" \
-  && ok "OpenCCU-Base: the older release not measured exactly, no check disc; lite's release exact" || { bad "OpenCCU-Base: the older release not measured exactly"; grep 'OpenCCU-Base commits' "$tmp/site/en.html"; }
+  && ok "OpenCCU-Base: the older release not measured exactly, no check disc; lite's release exact" || { bad "OpenCCU-Base: the older release not measured exactly"; grep 'OpenCCU-Base: in' "$tmp/site/en.html"; }
 base; : >"$tmp/fx/fork-base-tags.txt"; expect "OpenCCU-Base: the release's pin tag unknown: exit 3" 3 "check failed" "no tag v1.0.0-rc.3"
 
 base; rm "$tmp/fx/releases.json"; expect "kernel.org unreachable: exit 3, grey" 3 "check failed" "::error::upstream unreachable"
