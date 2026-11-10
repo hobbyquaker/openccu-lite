@@ -51,8 +51,8 @@ schlankes Funk-Gateway.
 
 - [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) - Geräte und Direktverknüpfungen verwalten;
   auch als Anwendung für Windows, macOS und Linux
-- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) - Geräte und Direktverknüpfungen verwalten, Bedienoberfläche,
-  Charts, MQTT, Home Assistant, Matter und mehr; auch als Docker-Container oder Home-Assistant-Add-on
+- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) - Geräte und Direktverknüpfungen verwalten, Home Assistant,
+  MQTT, Matter, MCP server und vieles mehr
 
 ### Weitere Addons
 
@@ -101,7 +101,10 @@ Die Releases liegen unter [github.com/hobbyquaker/openccu-lite/releases](https:/
 In der OpenCCU-WebUI unter *Einstellungen → Systemsteuerung → Zentralen-Wartung → Software-Update durchführen* die
 `openccu-lite-<produkt>-<version>.zip` hochladen, von einer originalen CCU3-Firmware die `-ccu3.tgz`. Anlernungen,
 Schlüssel, Addons, Namen, Räume und Gewerke werden übernommen, WebUI-Programme und Systemvariablen entfallen ersatzlos.
-Für den Weg zurück unbedingt vorher ein Backup anlegen! Alles Weitere: [Wechsel von und zu OpenCCU](docs/switching.de.md).
+Für den Weg zurück unbedingt vorher ein Backup anlegen! Noch schneller zurück geht es mit einem Snapshot der VM oder
+einer Kopie der SD-Karte vor dem Update ([wie](docs/switching.de.md#zuerst-eine-kopie-des-ganzen-systems)). Dieses
+Update über das bestehende System ist der empfohlene Weg; eine Neuinstallation mit dem Import des alten Backups ist für
+neue Hardware. Alles Weitere: [Wechsel von und zu OpenCCU](docs/switching.de.md).
 
 ## Updates
 

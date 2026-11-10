@@ -77,7 +77,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 
 ## Fernzugriff
 
-- Klassisches RPC (2001, 2010, 9292, 2000 und die TLS-Ports) standardmäßig aus; einschaltbar, optional mit Benutzername und Passwort
+- Klassisches RPC (2001, 2010, 9292, 2000 und die TLS-Ports) standardmäßig aus, außer nach dem Wechsel von OpenCCU, wenn deren Firewall die XMLRPC-Ports freigab, oder nach dem Import einer OpenCCU-Sicherung mit dieser Option: dann ist es ohne Anmeldung eingeschaltet ([switching.de.md](switching.de.md#was-sich-beim-ersten-start-ändert)); einschaltbar, optional mit Benutzername und Passwort
 - lite-rpc: XML-RPC und JSON-RPC mit API-Tokens, Ereignisse über SSE oder WebSocket
 - API-Tokens mit Scopes, Ablaufdatum und erlaubten Adressen
 - RPC-Trace ins Protokoll

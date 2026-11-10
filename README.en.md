@@ -51,8 +51,8 @@ possible.
 
 - [Homematic Manager](https://github.com/hobbyquaker/homematic-manager) - managing devices and direct links; also as an
   application for Windows, macOS and Linux
-- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) - managing devices and direct links, a user interface,
-  charts, MQTT, Home Assistant, Matter and more; also as a Docker container or a Home Assistant add-on
+- [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom) - managing devices and direct links, Home Assistant, MQTT,
+  Matter, MCP server and much more
 
 ### More addons
 
@@ -100,7 +100,10 @@ The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://githu
 In the OpenCCU WebUI under *Settings → Control panel → CCU maintenance → Perform software update*, upload
 `openccu-lite-<product>-<version>.zip`; from an original CCU3 firmware, the `-ccu3.tgz`. Pairings, keys, addons, names,
 rooms and functions are taken over; WebUI programs and system variables are dropped without replacement. Take a backup
-first, it is the way back! Everything else: [Switching from and to OpenCCU](docs/switching.md).
+first, it is the way back! Quicker still is a snapshot of the VM or a copy of the SD card before the update
+([how](docs/switching.md#a-copy-of-the-whole-system-first)). This update over the existing system is the recommended
+way; a new installation with an import of the old backup is for new hardware. Everything else:
+[Switching from and to OpenCCU](docs/switching.md).
 
 ## Updates
 

@@ -43,12 +43,14 @@ Dinge, die sich später jederzeit auf ihrer eigenen Seite ändern lassen:
    lassen sich hier einschalten, jede mit ihrem Ziel benannt und beide zunächst aus: GitHub (neue Systemversion,
    Katalog der Zusatzsoftware und deren eigene Update-Prüfungen) und eQ-3 (neue Firmware für die angelernten
    Gerätetypen). Was das System genau wohin sendet, steht in [privacy.md](../privacy.md).
-3. **Geräte von einer CCU oder OpenCCU.** „Angelernte Geräte, Schlüssel und Namen aus einer Sicherung übernehmen“
-   führt zu System → Sicherung: Dort wird die Sicherung (`.sbk`) der alten Zentrale geprüft, dann kommen die angelernten
-   Geräte aller Funkschnittstellen mit ihren Schlüsseln und die Namen, Räume und Gewerke herüber. Das ist keine
-   Wiederherstellung, sondern nur die Übernahme der Geräte, und es geht nur, solange auf dem neuen System noch kein
-   Gerät angelernt ist; danach startet das System neu. Wenn Sie OpenCCU an Ort und Stelle gewechselt haben, sind die
-   Geräte schon da und die Namen werden beim ersten Start übernommen, siehe [switching.de.md](../switching.de.md).
+3. **Geräte von einer CCU oder OpenCCU.** „Sicherung einer CCU oder von OpenCCU importieren“ führt zu System →
+   Sicherung: Dort wird die Sicherung (`.sbk`) der alten Zentrale geprüft und importiert. Die angelernten Geräte aller
+   Funkschnittstellen kommen mit ihren Schlüsseln und den Namen, Räumen und Gewerken herüber, dazu, was man von Addons
+   und Einstellungen auswählt; danach startet das System neu. Das geht nur, solange auf dem neuen System noch kein
+   Gerät angelernt ist. Eine Sicherung von openccu-lite wird dagegen eingespielt („Sicherung von openccu-lite
+   einspielen“): das ganze System kommt zurück, wie es war. Wenn Sie OpenCCU an Ort und Stelle gewechselt haben, sind
+   die Geräte schon da und die Namen werden beim ersten Start übernommen, siehe [switching.de.md](../switching.de.md).
+   Das Bild oben zeigt diesen Schritt noch in einer früheren Fassung.
 4. **Ein Frontend.** openccu-lite bringt keine eigene Geräteverwaltung mit; der Homematic Manager (Anlernen,
    Parameter, Direktverknüpfungen, Namen) und die anderen Addons sind im Katalog einen Klick entfernt.
 
@@ -357,13 +359,16 @@ oder den Verlauf.
 - **Sicherungsziele:** jede Nacht automatisch auf ein USB-Verzeichnis, eine Netzwerkfreigabe oder einen SSH-Server
   (SFTP), mit Test, „Jetzt sichern“ und der Liste der Sicherungen dort. Von einem Server oder NAS aus holt
   [occulite-backup](https://github.com/hobbyquaker/occulite-backup) die Sicherung mit einem API-Token ab.
-- **Sicherung einspielen:** eine Sicherung prüfen und wiederherstellen, auch die einer CCU oder von OpenCCU. Aus einer
-  geprüften Sicherung einer CCU oder von OpenCCU lassen sich auch nur die angelernten Geräte mit ihren Schlüsseln
-  übernehmen, ohne den Rest wiederherzustellen; nur auf einem System ohne angelernte Geräte. Eine Aktion übernimmt
-  alles: zuerst die Namen, Räume und Gewerke der ReGa-Datenbank der Sicherung, dann die Geräte mit ihren Schlüsseln,
-  dann der Neustart. Vorher sagt die Seite, wenn die HmIP-Identität der Sicherung zu einem anderen Funkmodul gehört
-  (hmipserver übernimmt sie beim Start auf das Modul dieses Systems; die Seite Schnittstellen zeigt danach, wie es
-  ausging) und wenn die Sicherung einen eigenen BidCos-Sicherheitsschlüssel hat (er kommt so mit).
+- **Sicherung einspielen oder importieren:** eine Sicherung hochladen und prüfen; der Abschnitt „Diese Datei“ sagt,
+  was sie ist und was sie enthält. Eine Sicherung von openccu-lite wird eingespielt („Auf dieses System einspielen“)
+  und ersetzt alles unter `/usr/local`. Eine Sicherung einer CCU, von OpenCCU oder RaspberryMatic wird importiert („In
+  dieses System importieren“), nur auf einem System ohne angelernte Geräte: immer die Geräte aller Funkschnittstellen
+  mit ihren Schlüsseln und die Namen, Räume und Gewerke, auf Wunsch Addons, die Adresse des HB-RF-ETH, Hostname,
+  Syslog-Server und klassisches RPC. Vorher sagt die Seite, wenn die HmIP-Identität der Sicherung zu einem anderen
+  Funkmodul gehört (hmipserver übernimmt sie beim Start auf das Modul dieses Systems; die Seite Schnittstellen zeigt
+  danach, wie es ausging) und wenn die Sicherung einen eigenen BidCos-Sicherheitsschlüssel hat (er kommt so mit). Das
+  Bild oben zeigt diesen Abschnitt noch in seiner früheren Fassung mit zwei Knöpfen; die Einzelheiten stehen in
+  [switching.de.md](../switching.de.md#geräte-in-eine-neuinstallation-übernehmen).
 - **Werkseinstellungen:** alles löschen und neu mit der Einrichtungsseite beginnen.
 
 ### Updates

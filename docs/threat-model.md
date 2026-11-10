@@ -54,7 +54,7 @@ lost when it leaks or changes.
 | --- | --- |
 | **What** | Switching, dimming, opening, and reading what the sensors report — the reason the system exists. It is reached through the interface processes' XML-RPC, not only through a key |
 | **Where** | The interface processes on the loopback (2001, 2010, 9292), lighttpd's classic RPC ports when they are switched on, lite-rpc and occulited's API |
-| **Who reaches it today** | Anything on the loopback, which means every addon; a client on the LAN through lite-rpc with a token of an `rpc` tier, through the Control app's public mode when it is on, or through classic RPC, whose ports are closed by default and carry the CCU's own optional password |
+| **Who reaches it today** | Anything on the loopback, which means every addon; a client on the LAN through lite-rpc with a token of an `rpc` tier, through the Control app's public mode when it is on, or through classic RPC, whose ports are closed by default (except after the switch from an OpenCCU whose firewall opened the XMLRPC ports, or after an import of an OpenCCU backup with classic RPC ticked) and carry the CCU's own optional password |
 | **Lost when it leaks** | An attacker opens the door, switches the heating, reads when nobody is home — the privacy and safety of the household |
 
 ### 3. The system as a foothold in the LAN
@@ -125,11 +125,13 @@ policy.
 
 **In the way:** the firewall's policy; the login, with argon2id, a lockout per user and per address, and a first
 boot that forces an account; the interface processes listening on the loopback only; classic RPC being off until
-somebody switches it on.
+somebody switches it on, or the switch from an OpenCCU that served it carries it over.
 
-**Weakest point:** classic RPC is the CCU's own protocol and has no authentication worth the name — its own
-password is optional and travels in the clear on the plain ports. Switching it on is a deliberate act, and the
-page says so; an attacker on the LAN who finds it on has control of the devices without a login.
+**Weakest point:** classic RPC is the CCU's own protocol and has no authentication worth the name — its own password
+is optional and travels in the clear on the plain ports. Switching it on is a deliberate act, and the page says so;
+the switch from an OpenCCU whose firewall opened the XMLRPC ports, and an import of its backup with classic RPC
+ticked, carry it over without a login, and the Status page warns while it runs without one. An attacker on the LAN who
+finds it on has control of the devices without a login.
 
 **The Control app's public mode is the same boundary, chosen on purpose:** with it on, a request without a session
 on the app's paths (lite-rpc, the metadata's reads, the service messages) becomes the public account — one that reads
@@ -365,7 +367,8 @@ logged.
 | `rootpassword` | one crypt hash into the password field of the `root:` line of `shadow` (no `:`, no newline); the file never crosses the boundary |
 | `writecert`, `readcert`, `removecert` | `server.pem` and its two markers: a certificate chain plus the one key of its leaf, or refused; the read answers the certificate blocks and the marker, never the key |
 | `addonuser` | appends `addon-<id>` to `/etc/passwd` and `/etc/group` in place (uid from 30000, home derived from the name, shell `/bin/false`, no `shadow` line) |
-| `addon-policy-file`, `addon-enable`, `addon-remove`, `addon-home-remove`, `addon-fragment` | renders the unit drop-in and `.needs`/`.start` itself from a checked decision (the addon's own uid from 30000, no root-equivalent group or capability for a confined addon, no value that adds a line); enables, disables and removes an addon's rc.d entry and web link; removes an emptied addon directory; installs the validated copy of an addon's lighttpd fragment |
+| `addon-policy-file`, `addon-enable`, `addon-remove`, `addon-home-remove`, `addon-home-remove-all`, `addon-fragment` | renders the unit drop-in and `.needs`/`.start` itself from a checked decision (the addon's own uid from 30000, no root-equivalent group or capability for a confined addon, no value that adds a line); enables, disables and removes an addon's rc.d entry and web link; removes an emptied addon directory; removes an addon's directory with everything in it for the uninstall of a disabled addon whose own script failed or cannot run: exactly `/usr/local/addons/<id>` (never a config directory, never the NEO Server's), only once the rc.d entry of that name and its script are gone, the entry itself and no link followed — it lets through a directory no rc.d entry is named after, a deletion only, as an uninstall script's own `rm -rf`; installs the validated copy of an addon's lighttpd fragment |
+| `addon-import` | the addons of an uploaded OpenCCU or CCU3 backup: the backup as an open descriptor (never a path the daemon names) and 1 to 64 addon ids. Per id exactly four shapes come out: the addon's directory, its rc.d entry (a file, or a link into that directory; written without its executable bits), its web entry and its config directory, each written through `os.Root`, so a link in the archive leads no later member out; regular files, directories and links only, setuid, setgid and sticky bits dropped. An id of which anything is here already is refused whole, and so are the NEO Server's names and the web trees' directory. What it lets through: code from an uploaded archive that root runs once the daemon enables the addon — the power `install_addon` and `restoreBackup.sh` already give the daemon; unlike them it cannot overwrite a file |
 | `owntree` | gives one addon's standard and data directories to the uid the passwd file has for `addon-<id>`, only when the drop-in the helper rendered confines the addon to that uid; the walk (`internal/ownwalk`) works by descriptors, follows no link, crosses no mount, never gives away a device node |
 | `ingressdir` | `/run/lighttpd-addons/<id>/`, `www-data:addon-<id> 0750` |
 | `authkeys-read`, `authkeys-write`, `ssh-end`, `ssh-keyonly` | root's `authorized_keys` (public keys only; occulited's section replaced, each key checked again: a modern type, no options, one line); SIGTERM to one `sshd-session` of a connection; the two lines that refuse password logins |
@@ -401,10 +404,12 @@ would not send that" is a bug waiting to be found.
 `/etc/config/shadow` is never readable by occulited because the helper rewrites one field of one line;
 `authorized_keys` is written as a whole section rather than by a general file write; an addon's systemd drop-in is
 rendered by the helper from the decision the daemon sends, never written as the daemon's text; an addon's emptied
-directory is removed by an operation that removes nothing with content in it. Every path is resolved by the helper
-itself; a symlink is followed only when it is the image's (root's, in a directory only root writes, not on removable
-media), the resolved path is checked against the same lists, and the helper then acts through directory descriptors
-with `O_NOFOLLOW` at every component, so a link swapped in after the check is an error, not a detour.
+directory is removed by an operation that removes nothing with content in it, and a disabled one's whole directory by
+one that acts only once its rc.d entry is gone; an imported addon is extracted by one that never overwrites. Every
+path is resolved by the helper itself; a symlink is followed only when it is the image's (root's, in a directory only
+root writes, not on removable media), the resolved path is checked against the same lists, and the helper then acts
+through directory descriptors with `O_NOFOLLOW` at every component, so a link swapped in after the check is an error,
+not a detour.
 
 **Has gone wrong here:** X-Sendfile files opened by occulited itself, outside the boundary; the ownership repair as a
 `chown -R` that followed a link swapped in mid-walk; the addon account written with busybox `adduser`, which failed on
@@ -666,7 +671,7 @@ Known, accepted for now, and written down so that nobody has to rediscover them.
 | R5 | **No quota for an addon**: it can fill the userfs or the journal | The storage hint warns, but nothing enforces | Per-addon limits in the unit (systemd's `MemoryMax`, a quota on the tree) |
 | R6 | **The keys are in clear on the storage and in every unencrypted backup** | hmipserver needs them that way; a backup has to restore them | Nothing short of a change in hmipserver; encrypted backups cover the backup alone |
 | R7 | **Physical access ends everything** (A8) | Out of scope; full-disk encryption is not part of the product | Encrypted storage with a key that is not on the same card |
-| R8 | **Classic RPC has no real authentication** | It is the CCU's protocol, and compatibility is the point of it | Nothing, within compatibility: it stays a switch that is off by default, with the warnings on its page; lite-rpc is the authenticated alternative |
+| R8 | **Classic RPC has no real authentication** | It is the CCU's protocol, and compatibility is the point of it | Nothing, within compatibility: it stays a switch that is off by default (on after the switch from an OpenCCU whose firewall opened the XMLRPC ports, or after an import with classic RPC ticked), with the warnings on its page and on the Status page; lite-rpc is the authenticated alternative |
 | R9 | **`?sid=` puts a credential in a URL**: the API still accepts a session id or a token there, and the CCU's legacy alias goes into the URLs of addons that need it | The CCU addon convention needs the alias; the API's acceptance is to be narrowed to where a header cannot be sent | The API's `?sid=` narrowed; the alias only for addons that still need it |
 | R10 | **An ingress addon vouches for its peers' addresses** (B1b, B5c): whatever runs as `addon-<id>` can claim any address inside the ranges its manifest declared — another of its own peers, say — though never the loopback or a LAN address | The addon is the end of the tunnel, so nothing else knows the peer's address; the socket's directory keeps every other addon out, and the addon runs confined | The tunnel in the kernel with the address on an interface, where the kernel vouches for the source |
 | R11 | **No second factor of the system's own**: a passkey is an alternative login, and the password alone still opens a session | A decision for a household system; an identity provider brings its own second factor | A second factor (TOTP, or passkeys required) as an option |

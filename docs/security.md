@@ -48,7 +48,7 @@ vulnerability: [SECURITY.md](../SECURITY.md). The API's routes, scopes and files
 | Web server | HTTP, and HTTPS with a self-signed certificate; the HTTPS redirect and HSTS are off |
 | Firewall | policy DROP (IPv4 and IPv6); the web server from the local networks only |
 | SSH | off |
-| Classic RPC (2001, 2010, 9292, 2000) | off |
+| Classic RPC (2001, 2010, 9292, 2000) | off; switched on without a login after a switch from OpenCCU whose firewall opened the XMLRPC ports, or after an import of an OpenCCU backup with that option ticked ([switching.md](switching.md#what-changes-on-the-first-start)) |
 | The Control app's public mode | off |
 | Client pairing | on, for programs on the local networks; every request needs an administrator's approval |
 | Addons | installed confined (their own user) |
@@ -98,13 +98,17 @@ open: no module type, serial, address, firmware or URL; the details stay behind 
 behind the credential up to 1.2.0: they say which kind of radio the system has, a coarse fact that every CCU shows to a
 scan of its classic RPC ports.
 
-**Classic RPC** (System → Remote access, off by default) makes lighttpd serve the CCU's ports again and proxy them to
-the interface daemons, which stay on the loopback (`lite-classic-rpc-conf` writes only the switched-on sockets).
+**Classic RPC** (System → Remote access, off by default, except after a switch from OpenCCU whose firewall opened the
+XMLRPC ports, or an import of an OpenCCU backup with that option ticked: then it is on, plain and TLS, without a
+login, and the Status page warns; see [switching.md](switching.md#what-changes-on-the-first-start)) makes lighttpd
+serve the CCU's ports again and proxy them to the interface daemons, which stay on the loopback
+(`lite-classic-rpc-conf` writes only the switched-on sockets).
 These are the CCU's risks and the page states them: without the login, whoever the firewall lets in controls every
 device; with the login on the plain ports, the password travels in clear. The login is a user name and password of
 its own (SHA-512-crypt in a root-0600 htpasswd file, checked by lighttpd's `mod_authn_file`), not the system's
 accounts or tokens; the loopback is exempt. As on a CCU there are no per-method rights and no lockout — lite-rpc is
-the authenticated alternative. Each open port gets its own firewall rule from `local networks`.
+the authenticated alternative. Each open port gets its own firewall rule from `local networks`; a port converted
+or imported from OpenCCU keeps the sources OpenCCU allowed instead.
 
 **An addon's web ingress.** A VPN or tunnel addon that ends the tunnel in its own process (lite-addon-wireguard)
 would otherwise forward its peers' requests from the loopback, which the system trusts more than the LAN. Instead it
@@ -201,7 +205,8 @@ breached passwords ([security-asvs.md](security-asvs.md) V6.2 says why).
 
 - **The firewall** is one list of INPUT rules with policy DROP in both families. Features own their rules (the web
   server, SSH, classic RPC, the HmIP access points, the network discovery, an addon's opened port) and add or remove
-  them with the feature; the web server, SSH and classic RPC are from `local networks` only. Every rule is editable. A
+  them with the feature; the web server, SSH and classic RPC are from `local networks` only (classic RPC converted
+  or imported from OpenCCU keeps OpenCCU's sources). Every rule is editable. A
   change from the page reverts after 60 seconds unless confirmed, so a rule that locks you out undoes itself. The
   rules load before the network comes up and apply to Ethernet and Wi-Fi alike. A system that comes from OpenCCU
   converts its `firewall.conf` once. The Firewall page lists every listening socket with the rule that covers it, or
