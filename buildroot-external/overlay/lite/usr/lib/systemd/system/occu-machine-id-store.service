@@ -13,6 +13,11 @@
 # is restarted on the final ID, and the journal written so far under the transient ID moves into
 # the final ID's directory as archived files, so the box ends its first boot on its final
 # ID with that boot fully logged - the resize, the factory reset and the restore included.
+# occu-syslog-forward, whose journalctl -f started under the old ID and reads only that ID's
+# directory on the userfs, is restarted afterwards and continues at its cursor. The boot that
+# applies a restore does the same with the backup's stored ID: S05CheckBackupRestore replaced
+# the userfs after occu-machine-id.service had installed the old one, so journald runs on the
+# ID the system had before the restore until this unit switches it.
 [Unit]
 Description=Machine ID from the board serial
 After=occu-init-rf-hardware.service

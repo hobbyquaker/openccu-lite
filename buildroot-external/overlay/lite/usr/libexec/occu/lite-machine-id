@@ -22,7 +22,9 @@
 #              wipe as long as the radio module stays. Without a serial - no module attached -
 #              it generates a random one, once. /var is a tmpfs, so the serial cannot be read at
 #              "install" time on any boot; this is why the ID is written on one boot and picked
-#              up by the next, and why the first boot applies it in place (below).
+#              up by the next, and why the first boot applies it in place (below). A stored
+#              ID it finds is applied in place as well when it is not the running one: the boot
+#              that applies a restore replaced the userfs, and the backup's ID, after "install".
 #
 # PID 1 keeps the ID it read at startup in memory either way; only journald and everything that
 # reads /etc/machine-id see the final one before the next reboot.
@@ -127,6 +129,33 @@ adopt_journal() {
 	return 0
 }
 
+# switch_to ID: make ID the running machine ID for the rest of this boot. Nothing when it
+# already is. Otherwise the boot started on another ID - PID 1's transient one, or the one a
+# restore replaced - and journald is writing under it: journald is restarted so it writes under
+# ID, and what it wrote so far - flushed to ${JOURNAL_DIR}/<old>/ by occu-persist.service -
+# moves along (B-182), the journald restart first so the old files are closed.
+switch_to() {
+	old=$(cat "${ETC_ID}" 2>/dev/null)
+	[ "${old}" = "${1}" ] && return 0
+	install_id "${1}" || return 1
+	"${SYSTEMCTL}" try-restart systemd-journald.service
+	log "journald restarted on ${1}"
+	if [ -n "${old}" ]; then
+		adopt_journal "${old}" "${1}" || log "ERROR: the journal of this boot so far stays under ${old}"
+	fi
+	# A journalctl -f that started under the old ID is deaf from here on when the journal is
+	# on the userfs: below /var/log/journal it reads the directory of the machine ID it
+	# started with, whose files just moved away, and never opens the new ID's.
+	# occu-syslog-forward runs one, and it is up by now (it needs the network, not the radio
+	# hardware): it stayed active and sent nothing more until somebody restarted it - on the
+	# boot that derives the ID or applies a restore (B-340, B-341). Restarted, it continues at
+	# its cursor, after the adoption so it finds the moved files; --no-block, since this runs
+	# as a job itself. A journal in RAM would not need it (below /run/log/journal journalctl
+	# reads every ID's directory), and the restart costs it nothing.
+	"${SYSTEMCTL}" try-restart --no-block occu-syslog-forward.service
+	return 0
+}
+
 case "${1:-}" in
 	install)
 		if [ ! -s "${STORE}" ]; then
@@ -152,7 +181,13 @@ case "${1:-}" in
 		fi
 		id=$(read_id "${STORE}")
 		if valid "${id}"; then
-			install_id "${id}" || log "ERROR: could not install the stored machine ID ${id}"
+			# The normal boot: "install" made the stored ID the running one before journald
+			# started, so switch_to finds nothing to do. The boot that applies a restore is
+			# different: S05CheckBackupRestore replaced the userfs - /usr/local/etc/machine-id
+			# with it - after "install" ran, so journald runs on the ID the system had before
+			# (a new installation's, a factory reset's) and the backup's is installed only
+			# now; it needs the same switch as a derived one (B-341).
+			switch_to "${id}" || log "ERROR: could not install the stored machine ID ${id}"
 			exit 0
 		fi
 		serial=$(read_id "${SERIAL}")
@@ -167,19 +202,7 @@ case "${1:-}" in
 		mkdir -p "$(dirname "${STORE}")"
 		printf '%s\n' "${id}" >"${STORE}" || { log "ERROR: could not write ${STORE}"; exit 1; }
 		log "machine ID ${id} stored in ${STORE} (${src})"
-		old=$(cat "${ETC_ID}" 2>/dev/null)
-		if [ "${old}" != "${id}" ]; then
-			install_id "${id}" || { log "ERROR: could not install machine ID ${id}"; exit 1; }
-			# This boot started on PID 1's transient ID; journald is restarted so it writes
-			# under the final one, and what it wrote so far - flushed to
-			# ${JOURNAL_DIR}/<transient>/ by occu-persist.service - moves along (B-182), the
-			# journald restart first so the old files are closed.
-			"${SYSTEMCTL}" try-restart systemd-journald.service
-			log "journald restarted on ${id}"
-			if [ -n "${old}" ]; then
-				adopt_journal "${old}" "${id}" || log "ERROR: the journal of this boot so far stays under ${old}"
-			fi
-		fi
+		switch_to "${id}" || { log "ERROR: could not install machine ID ${id}"; exit 1; }
 		;;
 	*)
 		echo "Usage: $0 {install|store}" >&2

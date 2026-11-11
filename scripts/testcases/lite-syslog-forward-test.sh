@@ -39,5 +39,23 @@ grep -qx 'ForwardToSyslog=no' "$CONF" && ok "journald does not forward to syslog
 grep -qx 'DynamicUser=yes' "$UNIT" && grep -qx 'SupplementaryGroups=systemd-journal' "$UNIT" && ok "the unit runs as its own user in systemd-journal" || bad "the unit's user"
 grep -qx 'RuntimeDirectoryPreserve=yes' "$UNIT" && ok "the cursor lasts until the reboot" || bad "RuntimeDirectoryPreserve"
 
+# B-340: journalctl -f reads the journal directories of the moment it started, so the forwarder
+# starts after the journal's move at boot, and the two that move the journal under a running one
+# restart it once they are done - without waiting, both run as jobs themselves
+PERSIST="$HERE/buildroot-external/overlay/lite/usr/libexec/occu/lite-journal-persist"
+MID="$HERE/buildroot-external/overlay/lite/usr/libexec/occu/lite-machine-id"
+RESTART='try-restart --no-block occu-syslog-forward.service'
+sed -n 's/^After=//p' "$UNIT" | tr ' ' '\n' | grep -qx 'occu-persist.service' && ok "the unit starts after occu-persist" || bad "the unit must order after occu-persist.service"
+flush=$(grep -n '^systemctl kill -s SIGUSR1 systemd-journald.service' "$PERSIST" | cut -d: -f1)
+modes=$(grep -n '^chgrp -R systemd-journal /var/log/journal' "$PERSIST" | cut -d: -f1)
+again=$(grep -n "^  systemctl ${RESTART}" "$PERSIST" | cut -d: -f1)
+if [ -n "$flush" ] && [ -n "$modes" ] && [ -n "$again" ] && [ "$again" -gt "$flush" ] && [ "$again" -gt "$modes" ]; then
+  ok "lite-journal-persist restarts the forwarder after the flush and the modes"
+else
+  bad "lite-journal-persist must restart the forwarder after the flush (flush line '$flush', modes '$modes', restart '$again')"
+fi
+[ "$(grep -c "occu-syslog-forward.service" "$PERSIST")" = 1 ] && ok "lite-journal-persist restarts it where the journal moves only" || bad "lite-journal-persist names the forwarder more than once"
+grep -q "\"\${SYSTEMCTL}\" ${RESTART}" "$MID" && ok "lite-machine-id restarts the forwarder when the ID changes (lite-machine-id-test runs it)" || bad "lite-machine-id must restart the forwarder"
+
 [ "$fails" -eq 0 ] && echo "lite-syslog-forward-test: all passed" || echo "lite-syslog-forward-test: $fails failed"
 [ "$fails" -eq 0 ]

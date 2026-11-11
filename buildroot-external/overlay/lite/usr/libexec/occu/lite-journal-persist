@@ -356,6 +356,10 @@ fi
 sync_unit stop
 # SIGUSR1 rather than "journalctl --flush": that returns early once systemd-journal-flush.service
 # has set its flag, and it ran before this directory existed and flushed nothing.
+# Whether this moves the journal: it does at boot and at a switch into persistent at runtime, not
+# when occulited's Journal panel re-runs this for a changed limit.
+moved=0
+runtime_journal_left && moved=1
 systemctl kill -s SIGUSR1 systemd-journald.service
 if ! wait_flushed; then
   echo "journal: the journal in RAM was not moved to the userfs within 10 s; journald may still be writing to RAM"
@@ -365,5 +369,14 @@ fi
 chgrp -R systemd-journal /var/log/journal
 chmod 2755 /var/log/journal
 for d in /var/log/journal/*/; do [ -d "$d" ] && chmod 2755 "$d"; done
+# A journalctl -f that started on the journal in RAM is deaf from here on: its files are gone, and
+# it does not see the directory that was mounted after it started. occu-syslog-forward runs one;
+# at a switch at runtime it stayed active and sent nothing more. Restarted, it continues at its
+# cursor - after the modes above, so it can read the files. At boot it has not started yet (the
+# unit orders after this one) and this does nothing; --no-block, since that order would make
+# the restart wait for this very job.
+if [ "${moved}" = 1 ]; then
+  systemctl try-restart --no-block occu-syslog-forward.service 2>/dev/null
+fi
 echo "journal: persistent on the userfs (${source})"
 exit 0

@@ -12,9 +12,22 @@
 # dynamic user, a read-only system. The journal cursor it keeps in its RuntimeDirectory lasts
 # until the reboot (Preserve=yes), so a restart continues after the last entry sent instead of
 # sending the last minutes again.
+#
+# journalctl -f reads the journal directories it found when it started: /run/log/journal, and
+# below /var/log/journal the directory of the machine ID of that moment. Whatever moves the
+# journal on the userfs while it runs leaves the forwarder active and silent, so both that do
+# restart it once they are done: lite-journal-persist, when it mounts the userfs over
+# /var/log/journal and has journald flush onto it, and lite-machine-id, when the boot that derives
+# the machine ID restarts journald on it and moves the files (every boot that restores a backup on
+# a system without a radio module's serial). After=occu-persist.service says what the network's
+# own ordering already gave: at boot the journal is where it stays before this starts.
+# The forwarder also notices a move by itself - the machine ID or a mount over a journal root
+# changed - and starts journalctl again after the last entry sent, within about 10 s; the two
+# restarts stay, as the cure that needs no wait. Every start logs the first entry it sends, so a
+# forwarder that went quiet shows in the journal by the line it lacks.
 [Unit]
 Description=Forward the journal to a remote syslog host
-After=network-online.target local-fs.target systemd-journald.service
+After=network-online.target local-fs.target systemd-journald.service occu-persist.service
 Wants=network-online.target
 
 [Service]
