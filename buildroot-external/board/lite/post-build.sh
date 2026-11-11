@@ -159,10 +159,13 @@ fi
 # 360 s write) are used, well above the 30 s ping.
 #
 # server.max-request-size caps the request lighttpd buffers before the backend even sees it (it is
-# unset = unlimited upstream). It is a generous global backstop of 2.25 GiB - above the largest
-# upload (a 2 GiB backup plus multipart overhead) so no upload route breaks and no addon backend
-# under /addons/ is squeezed - while occulited enforces the tight per-endpoint caps (a 64 KiB JSON
-# cap, the staged uploads' own limits). The point here is only that "unlimited" is gone.
+# unset = unlimited upstream). It is a generous global backstop of 2.25 GiB - above the uploads
+# other than a backup (a 2 GiB system image plus multipart overhead) so no upload route breaks and
+# no addon backend under /addons/ is squeezed - while occulited enforces the tight per-endpoint
+# caps (a 64 KiB JSON cap, the staged uploads' own limits). A backup is larger than this on real
+# systems (3 to 5 GB): occulited's own lighttpd fragment (conf.d/occulited.conf) raises the ceiling
+# for the two routes that take one to 16 GiB and streams them with minimal buffering (occulited
+# B-141). The point here is only that "unlimited" is gone.
 #
 # These three lines are upstream's lighttpd.conf's own, so they are edited here rather than by a
 # copy of the whole file, and the build stops when one is gone, as for server.errorlog above.
