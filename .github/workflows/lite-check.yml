@@ -83,6 +83,7 @@ jobs:
           sh scripts/testcases/lite-hb-rf-eth-session-test.sh
           sh scripts/testcases/lite-network-reload-test.sh
           sh scripts/testcases/lite-default-hostname-test.sh
+          sh scripts/testcases/lite-backup-version-test.sh
           sh scripts/testcases/occu-addons-generator-test.sh
           sh scripts/testcases/lite-addon-delay-test.sh
           sh scripts/testcases/lite-addon-own-test.sh
@@ -97,6 +98,7 @@ jobs:
           sh scripts/testcases/lite-boot-path-test.sh
           sh scripts/testcases/lite-extension-dirs-test.sh
           sh scripts/testcases/lite-machine-id-test.sh
+          sh scripts/testcases/lite-first-boot-journal-test.sh
           sh scripts/testcases/lite-clock-save-test.sh
           sh scripts/testcases/lite-clock-valid-test.sh
           sh scripts/testcases/lite-chrony-test.sh
@@ -119,6 +121,10 @@ jobs:
         run: sh scripts/testcases/lite-qemu-settle-test.sh
       - name: The QEMU test cleans up however it ends
         run: sh scripts/testcases/lite-qemu-cleanup-test.sh
+      - name: The QEMU test keeps the evidence of a failed run
+        # B-321: hs_err files and cores onto the guest's userfs, copied out of the disk copy with
+        # debugfs (a made-up MBR disk here), the raw journal when QEMU died, the size cap
+        run: sh scripts/testcases/lite-qemu-evidence-test.sh
       - name: The GitHub release script removes its staging dir
         run: sh scripts/testcases/lite-release-stage-test.sh
       - name: The QEMU test's addon e2e waits for GitHub's rate limit
@@ -133,6 +139,8 @@ jobs:
         run: sh scripts/testcases/lite-userfs-grow-test.sh
       - name: The recovery removes an upload that fwprepare refused (fwinstall.sh in a container)
         run: sh scripts/testcases/lite-fwprepare-cleanup-test.sh
+      - name: The recovery answers 503 on the API and the addons (lighttpd in a container)
+        run: sh scripts/testcases/lite-recovery-lighttpd-test.sh
       - name: The update packages' EULA carries openccu-lite's preamble
         run: sh scripts/testcases/lite-eula-test.sh
       - name: The daily upstream version check decides as its rule says (offline, fixtures)

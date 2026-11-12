@@ -132,6 +132,7 @@ jobs:
           sh scripts/testcases/lite-hb-rf-eth-session-test.sh
           sh scripts/testcases/lite-network-reload-test.sh
           sh scripts/testcases/lite-default-hostname-test.sh
+          sh scripts/testcases/lite-backup-version-test.sh
           sh scripts/testcases/occu-addons-generator-test.sh
           sh scripts/testcases/lite-addon-delay-test.sh
           sh scripts/testcases/lite-addon-own-test.sh
@@ -146,6 +147,7 @@ jobs:
           sh scripts/testcases/lite-boot-path-test.sh
           sh scripts/testcases/lite-extension-dirs-test.sh
           sh scripts/testcases/lite-machine-id-test.sh
+          sh scripts/testcases/lite-first-boot-journal-test.sh
           sh scripts/testcases/lite-clock-save-test.sh
           sh scripts/testcases/lite-clock-valid-test.sh
           sh scripts/testcases/lite-chrony-test.sh
@@ -193,6 +195,10 @@ jobs:
         # task 308: a stub QEMU that fails, dies or outlives a TERM - the work dir goes every time,
         # QEMU's death is noticed at once, and the work dir stays off a tmpfs /tmp
         run: sh scripts/testcases/lite-qemu-cleanup-test.sh
+      - name: The QEMU test keeps the evidence of a failed run
+        # B-321: hs_err files and cores onto the guest's userfs, copied out of the disk copy with
+        # debugfs (a made-up MBR disk here), the raw journal when QEMU died, the size cap
+        run: sh scripts/testcases/lite-qemu-evidence-test.sh
       - name: The GitHub release script removes its staging dir
         # B-306: a STAGE of its own goes on every exit, a failure while staging too; one given stays
         run: sh scripts/testcases/lite-release-stage-test.sh
@@ -247,6 +253,11 @@ jobs:
             curl -sSfL "https://github.com/$repo/archive/$rev.tar.gz" | tar -xz --strip-components=1 -C /tmp/occulited-pin/occulited
           fi
           bash scripts/lite-lighttpd-redirect-test.sh /tmp/occulited-pin/occulited
+      - name: The recovery answers 503 on the API and the addons, browsers keep the redirect
+        # B-343: the recovery's lighttpd during an update - 503 with Retry-After on /api/, /addons/
+        # and the ACME challenge, the 301 to its page elsewhere - on a real lighttpd in an Alpine
+        # container; every prefix the pinned occulited's fragment proxies must be among them
+        run: sh scripts/testcases/lite-recovery-lighttpd-test.sh /tmp/occulited-pin/occulited
       - name: A POST without a body reaches the API and the addons
         # every lite product takes board/lite/patches, and lighttpd of the pinned version, built in an
         # Alpine container (docker, the network): 411 as released, and with the lite patch the bodiless

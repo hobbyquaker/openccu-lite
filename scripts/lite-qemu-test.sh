@@ -16,8 +16,26 @@
 # LITE_QEMU_WORKDIR, or to /var/tmp when /tmp is a tmpfs: on the runner /tmp is a tmpfs counted as
 # the container's memory, and disk copies there starved the 2 GB guest until the OOM killer took
 # QEMU (task 308, dev.35). Whatever ends the script - a pass, a failure, QEMU dying, Ctrl-C or a
-# kill - stops the QEMU it started and removes the work dir; a failed run keeps only its serial log,
-# next to it as <workdir>.serial.log.
+# kill - stops the QEMU it started and removes the work dir; a failed run keeps its serial log next
+# to it as <workdir>.serial.log, and a failed systemd run its evidence as <workdir>.evidence/ (B-321,
+# below).
+#
+# The evidence of a failed run (B-321, B-326): hmipserver's JVM aborted in its first minute under
+# TCG on three build rounds, and each time the reason stayed in the guest - the JVM's hs_err file
+# and the core went to the unit's private /tmp and /var/tmp, which systemd removes at the restart,
+# and the work dir went with the disk. So the guest is booted with a test-only drop-in for
+# hmipserver.service, a credential on its kernel command line: JAVA_TOOL_OPTIONS points the JVM's
+# hs_err file into /var/hmipserver (the unit's own, kept until the reboot), and a step before each
+# start pipes cores through dd into /usr/local/lite-qemu-core.<comm> (one per program, the newest,
+# cut at LITE_QEMU_CORE_MB, default 256). Before the reboot and on a failure the guest moves both into /usr/local/lite-qemu-evidence/
+# with its boot ID; on a failure it also exports every boot's journal, the journal of the addon
+# units, occulited and hmipserver, and a state summary there, and powers off cleanly. The script
+# then copies that directory out of the disk copy's userfs (debugfs, no mount) - or, when QEMU died
+# first, the raw journal and any core - gzips the cores, holds the whole to LITE_QEMU_EVIDENCE_MB
+# (default 512; the cores go first), and prints where it lies. Nothing of this on a pass, a
+# GitHub-quota-only failure (exit 3) or an interrupt. LITE_QEMU_CRASH_TEST=hmipserver sends the
+# JVM a SIGSEGV after boot 1's checks (hs_err, then abort and core, as in B-321): a run that must
+# fail and keep its evidence, to test this path.
 #
 # LITE_QEMU_FRESH=1 is the fresh-image probe of the build rounds (no outbound connection from a
 # fresh image, D-91): boot 1, then ten minutes of the guest's TCP connections to ports 443 and 80
@@ -103,9 +121,104 @@ qemu_check() {
   FAILED=1
   exit 1
 }
+# B-321: the evidence of a failed run (see the top). Only the systemd product has the guest shell
+# and the userfs layout this knows.
+EVID_CORE_MB=${LITE_QEMU_CORE_MB:-256}
+EVID_MAX_MB=${LITE_QEMU_EVIDENCE_MB:-512}
+EVID_DONE=0
+# a drop-in for hmipserver.service as a systemd credential on the kernel command line (base64; the
+# debug generator installs it, systemd >= 256): the JVM's hs_err file into /var/hmipserver, and the
+# core pipe set before each start - at the unit's start, because S01InitHost's sysctl -p sets the
+# image's /var/tmp pattern after systemd-sysctl, so a sysctl.extra credential does not hold. In a
+# unit file % is %%. busybox's dd counts every short read from the pipe as a block, so 4 KiB blocks
+# (the pages the kernel writes): with 1 MiB ones the cap was 16 MB instead of 256.
+EVID_DROPIN=$(printf '[Service]\nEnvironment=JAVA_TOOL_OPTIONS=-XX:ErrorFile=/var/hmipserver/hs_err_pid%%%%p.log\nExecStartPre=-+/bin/sh -c '"'"'echo "|/bin/dd of=/usr/local/lite-qemu-core.%%%%e bs=4096 count=%s" >/proc/sys/kernel/core_pattern'"'"'\n' "$((EVID_CORE_MB * 256))" | base64 | tr -d '\n')
+EVID_CMDLINE="systemd.set_credential_binary=systemd.unit-dropin.hmipserver.service~lite-qemu-evidence:$EVID_DROPIN"
+only_quota() { [ "$ENV_ONLY" = 1 ] && [ "$QUOTA_MET" = 1 ]; }
+# stash_snippet: the guest-side one-liner that moves hmipserver's hs_err files (from /var/hmipserver,
+# a tmpfs) and the cores onto the userfs, named with the boot's ID; makes the directory only when
+# there is something to keep
+stash_snippet() {
+  printf '%s' 'E=/usr/local/lite-qemu-evidence; b=$(cut -c1-8 /proc/sys/kernel/random/boot_id); for f in /var/hmipserver/hs_err_pid*.log; do [ -e "$f" ] && mkdir -p $E && cp "$f" "$E/boot-$b-${f##*/}"; done; for f in /usr/local/lite-qemu-core.*; do [ -e "$f" ] && mkdir -p $E && mv "$f" "$E/boot-$b-${f##*/}"; done; sync; [ -d $E ] && ls -l $E; true'
+}
+# evidence_snippet: every boot's journal, the addon units', occulited's and hmipserver's journal per
+# boot (B-326), and a state summary, each cut at 64 MiB before gzip
+evidence_snippet() {
+  printf '%s' 'E=/usr/local/lite-qemu-evidence; C=67108864; mkdir -p $E; for b in $(journalctl --list-boots --no-pager | grep -E "^ *-?[0-9]+ [0-9a-f]{32}" | sed -E "s/^ *(-?[0-9]+) .*/\1/"); do journalctl -b $b --no-pager -o short-precise | head -c $C | gzip >$E/journal-b$b.txt.gz; journalctl -b $b --no-pager -o short-precise -u "addon-*" -u occulited.service -u hmipserver.service | head -c $C | gzip >$E/units-b$b.txt.gz; done; { cat /proc/cmdline; uptime; free -m; df -h /usr/local; systemctl is-system-running; systemctl --failed --no-legend --plain --no-pager; systemctl list-units --all --no-legend --plain --no-pager "addon-*" hmipserver.service occulited.service; systemctl show hmipserver.service -p NRestarts -p Result -p ExecMainCode -p ExecMainStatus; journalctl --list-boots --no-pager; cat /proc/sys/kernel/core_pattern; ls -l /var/hmipserver; } >$E/state.txt 2>&1; sync; ls -l $E'
+}
+# evidence_guest: on a failure, once, while the guest answers
+evidence_guest() {
+  [ "${SYSTEMD:-0}" = 1 ] && [ "$EVID_DONE" = 0 ] || return 0
+  EVID_DONE=1
+  qemu_alive || return 0
+  say "evidence: the failed run's hs_err files, cores and journals onto the guest's userfs"
+  R=$(guest "$(stash_snippet)"); printf '%s\n' "$R"
+  case "$R" in *'[rc=0]'*) ;; *) say "evidence: the guest shell did not answer; only what is on its disk is kept"; return 0;; esac
+  guest "$(evidence_snippet)"
+}
+# evidence_poweroff: a clean poweroff, so the userfs is unmounted before its copy is read; QEMU
+# exits with its guest. Stopped by force after 180 s.
+evidence_poweroff() {
+  qemu_alive || return 0
+  [ "${SYSTEMD:-0}" = 1 ] || return 0
+  guest 'sync; systemctl --no-block poweroff' >/dev/null
+  guest_close
+  for _ in $(seq 1 90); do qemu_alive || return 0; sleep 2; done
+  say "evidence: the guest did not power off within 180 s; stopping QEMU (its userfs may miss the last writes)"
+  qemu_stop
+}
+# part_offset <disk> <n>: the byte offset of MBR partition <n>, empty when there is none
+part_offset() {
+  python3 -c 'import struct, sys
+d = open(sys.argv[1], "rb").read(512); n = int(sys.argv[2])
+s = struct.unpack("<I", d[446 + 16 * (n - 1) + 8:446 + 16 * (n - 1) + 12])[0] if len(d) == 512 and d[510:512] == b"\x55\xaa" else 0
+print(s * 512 if s else "")' "$1" "$2" 2>/dev/null
+}
+# evidence_extract: after QEMU stopped, copy the evidence out of the disk copy's userfs (partition 3)
+# into <workdir>.evidence/, gzip the cores, hold the whole to EVID_MAX_MB, and say where it lies
+evidence_extract() {
+  [ "${SYSTEMD:-0}" = 1 ] && [ -n "$DEBUGFS" ] && [ -f "$WORK/disk.img" ] || return 0
+  ev_off=$(part_offset "$WORK/disk.img" 3)
+  [ -n "$ev_off" ] || { say "evidence: no userfs partition in the disk copy"; return 0; }
+  ev_fs="$WORK/disk.img?offset=$ev_off"
+  ev="$WORK.evidence"
+  mkdir -p "$ev" || return 0
+  "$DEBUGFS" -R "rdump /lite-qemu-evidence $ev" "$ev_fs" >/dev/null 2>&1
+  [ -d "$ev/lite-qemu-evidence" ] && { mv "$ev/lite-qemu-evidence"/* "$ev"/ 2>/dev/null; rmdir "$ev/lite-qemu-evidence" 2>/dev/null; }
+  # cores the guest did not move (QEMU died first)
+  for n in $("$DEBUGFS" -R 'ls -p /' "$ev_fs" 2>/dev/null | awk -F/ '$6 ~ /^lite-qemu-core\./ {print $6}'); do
+    "$DEBUGFS" -R "dump /$n $ev/$n" "$ev_fs" >/dev/null 2>&1
+  done
+  # no journal export from the guest (it did not answer, or QEMU died): the raw journal, read here
+  # when this host has journalctl
+  if ! ls "$ev"/journal-b*.txt.gz >/dev/null 2>&1; then
+    "$DEBUGFS" -R "rdump /var/log/journal $ev" "$ev_fs" >/dev/null 2>&1
+    if [ -d "$ev/journal" ] && command -v journalctl >/dev/null 2>&1; then
+      for b in $(journalctl -D "$ev/journal" --list-boots --no-pager 2>/dev/null | grep -E '^ *-?[0-9]+ [0-9a-f]{32}' | sed -E 's/^ *(-?[0-9]+) .*/\1/'); do
+        journalctl -D "$ev/journal" -b "$b" --no-pager -o short-precise 2>/dev/null | head -c 67108864 | gzip >"$ev/journal-b$b.txt.gz"
+      done
+    fi
+  fi
+  for f in "$ev"/*lite-qemu-core.*; do
+    case "$f" in *.gz|*'*'*) ;; *) [ -f "$f" ] && gzip -1 "$f";; esac
+  done
+  if [ "$(du -sm --apparent-size "$ev" | cut -f1)" -gt "$EVID_MAX_MB" ]; then
+    say "evidence: more than $EVID_MAX_MB MB (LITE_QEMU_EVIDENCE_MB); dropping the cores, then the raw journal"
+    for f in "$ev"/*lite-qemu-core.* "$ev/journal"; do
+      [ -e "$f" ] || continue
+      [ "$(du -sm --apparent-size "$ev" | cut -f1)" -gt "$EVID_MAX_MB" ] || break
+      say "evidence: dropped ${f##*/} ($(du -sh --apparent-size "$f" | cut -f1))"; rm -rf "$f"
+    done
+  fi
+  if [ -z "$(ls -A "$ev" 2>/dev/null)" ]; then rmdir "$ev"; say "evidence: nothing found on the guest's userfs"; return 0; fi
+  say "evidence kept at $ev ($(du -sh --apparent-size "$ev" | cut -f1)):"; ls -l "$ev" | sed 's/^/  | /'
+}
 cleanup() {
   rc=$?
   trap - EXIT INT TERM
+  # the evidence (B-321): not on a pass, GitHub's quota alone (3) or an interrupt
+  case "$rc" in 0|3|130|143) EVID=0;; *) EVID=1;; esac
+  if [ "$EVID" = 1 ]; then evidence_guest; evidence_poweroff; fi
   guest_close 2>/dev/null
   qemu_stop
   if [ -n "${WORK:-}" ] && [ -d "$WORK" ]; then
@@ -113,6 +226,7 @@ cleanup() {
       say "last serial output:"; tail -n 60 "$WORK/serial.log" | sed 's/^/  | /'
       cp "$WORK/serial.log" "$WORK.serial.log" && say "serial log kept at $WORK.serial.log"
     fi
+    [ "$EVID" = 1 ] && evidence_extract
     rm -rf "$WORK"
   fi
   [ "$rc" = 0 ] || oom_report
@@ -397,7 +511,7 @@ boot() {
   if [ "$SYSTEMD" = 1 ]; then
     qemu-system-x86_64 -m 2048 -smp 2 -cpu qemu64 \
       -kernel "$WORK/zImage" \
-      -append "root=PARTUUID=deedbeef-02 rootfstype=ext4 fsck.repair=yes console=tty2 ro rootwait rootdelay=5 init_on_alloc=1 init_on_free=1 slab_nomerge net.ifnames=0 systemd.debug_shell=ttyS0" \
+      -append "root=PARTUUID=deedbeef-02 rootfstype=ext4 fsck.repair=yes console=tty2 ro rootwait rootdelay=5 init_on_alloc=1 init_on_free=1 slab_nomerge net.ifnames=0 systemd.debug_shell=ttyS0 $EVID_CMDLINE" \
       -drive file="$WORK/disk.img",format=raw,if=virtio \
       -netdev user,id=n0,hostfwd=tcp:127.0.0.1:$PORT-:80 -device virtio-net-pci,netdev=n0 \
       -display none -chardev socket,id=ser0,path="$WORK/serial.sock",server=on,wait=off -serial chardev:ser0 \
@@ -449,6 +563,11 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # --no-pager: systemctl pages on the debug shell's tty and the listing came out as escape codes.
   say "guest: system state"; guest 'systemctl is-system-running; systemctl --failed --no-legend --plain --no-pager'
   boot_checks "boot 1"
+  # B-321: the evidence path on demand - the JVM's own crash handling (hs_err, then abort and core)
+  if [ "${LITE_QEMU_CRASH_TEST:-}" = hmipserver ]; then
+    say "guest: LITE_QEMU_CRASH_TEST - a SIGSEGV to hmipserver's JVM; this run must fail and keep its evidence"
+    guest 'u=hmipserver.service; P=$(systemctl show -p MainPID --value $u); N=$(systemctl show -p NRestarts --value $u); kill -SEGV $P; n=0; while [ "$(systemctl show -p NRestarts --value $u)" = "$N" ] && [ $n -lt 220 ]; do sleep 2; n=$((n+2)); done; echo "pid $P crashed, restarts $N -> $(systemctl show -p NRestarts --value $u) after ${n}s"; ls -l /var/hmipserver /usr/local/lite-qemu-core.* 2>&1 | grep -E "hs_err|core"'
+  fi
   say "guest: boot time"; guest 'journalctl -b --no-pager -o short-monotonic | grep -m1 "Startup finished"; journalctl -b -u occu-leds.service --no-pager -o short-monotonic | grep -m1 "booted, OK"'
   say "guest: the lite units"; guest 'systemctl list-units --all --no-legend --plain "occu-*" "addon*" addons.target occulited.service lighttpd.service chrony.service sshd.service hs485d.service multimacd.service rfd.service hmipserver.service crond.service ca-certificates.service qemu-guest-agent.service'
   say "guest: timers"; guest 'systemctl list-timers --all --no-legend --plain "occu-*"'
@@ -614,6 +733,8 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # image: 192.0.2.1 "answered", so the firmware step ran into eq3configcmd's timeouts). An unused address
   # on the guest's own link gets no ARP answer, so its ping fails as an unplugged gateway's would.
   guest 'cp /usr/local/etc/config/rfd.conf /usr/local/etc/config/rfd.conf.lite-qemu-test 2>/dev/null; cp /etc/config_templates/rfd.conf /usr/local/etc/config/rfd.conf && printf "\n[Interface 1]\nType = HMLGW2\nSerial Number = KEQ0123456\nEncryption Key = 00000000000000000000000000000000\nIP Address = 10.0.2.200\n\n" >>/usr/local/etc/config/rfd.conf && { grep -v "</interfaces>" /etc/config_templates/InterfacesList.xml; printf "\t<ipc>\n\t \t<name>CCU-Jack</name>\n\t \t<url>xmlrpc://127.0.0.1:2121/RPC3</url> \n\t \t<info>CCU-Jack</info> \n\t</ipc>\n</interfaces>\n"; } >/usr/local/etc/config/InterfacesList.xml && grep -c Interface /usr/local/etc/config/rfd.conf && grep -c "<name>" /usr/local/etc/config/InterfacesList.xml'
+  # B-321: hs_err files live in /var/hmipserver, a tmpfs: onto the userfs before the reboot
+  say "guest: crash files of boot 1 onto the userfs (none on a clean boot)"; guest "$(stash_snippet)"
   say "guest: rebooting"; guest 'systemctl --no-block reboot' >/dev/null
   # the shell on the other side dies with the reboot: end the driver, the next guest call reopens
   guest_close
@@ -676,14 +797,18 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # leave the image's userfs as the next test expects it: nothing switched off, no override, the
   # rfd.conf and interface list as the first boot made them
   guest 'rm -rf /usr/local/etc/occulite/unit-overrides /usr/local/etc/occulite/unit-switch.json /usr/local/etc/config/InterfacesList.xml; if [ -e /usr/local/etc/config/rfd.conf.lite-qemu-test ]; then mv /usr/local/etc/config/rfd.conf.lite-qemu-test /usr/local/etc/config/rfd.conf; else rm -f /usr/local/etc/config/rfd.conf; fi' >/dev/null
-  guest 'systemctl --no-block poweroff' >/dev/null; sleep 15
+  # B-321: a failed run keeps its evidence first, and then powers off cleanly (the cleanup copies it)
+  if [ "$FAILED" != 0 ] && ! only_quota; then evidence_guest; evidence_poweroff
+  else guest 'systemctl --no-block poweroff' >/dev/null; sleep 15; fi
   guest_close
 fi
 
 # (no QEMU check here: the systemd phase ends with a poweroff, and QEMU exits with its guest)
+# B-321: a failure before the systemd phase (boot 1's HTTP checks) keeps its evidence too
+if [ "$FAILED" != 0 ] && ! only_quota; then evidence_guest; evidence_poweroff; fi
 qemu_stop
 oom_report
-# the cleanup trap removes the work dir; on a failure it keeps the serial log next to it
+# the cleanup trap removes the work dir; on a failure it keeps the serial log and the evidence next to it
 if [ "$FAILED" = 0 ]; then say "OK"; exit 0; fi
 # task 376: only GitHub's quota failed - the environment, not the image: run again after the reset
 if [ "$ENV_ONLY" = 1 ] && [ "$QUOTA_MET" = 1 ]; then say "FAIL: only GitHub's quota (the environment), not the image - run again after the reset (exit 3)"; exit 3; fi
