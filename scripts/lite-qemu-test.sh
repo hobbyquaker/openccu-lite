@@ -800,9 +800,21 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # VirtualDevices (no HmIP-RF: no module here) at its first try - the Status page says what is
   # missing (hmip-bidcos-degraded). The list is otherwise the template's cut: no foreign entry (D-97),
   # no HmIP-RF without a module. A system whose gateway answers keeps BidCos-RF (lab).
-  R=$(guest 'for i in $(seq 1 84); do [ "$(systemctl is-active hmipserver.service)" = active ] && break; sleep 5; done; echo "state=$(systemctl is-active hmipserver.service) marker=$(grep -c "\"daemon\": \"rfd\"" /run/occulite/radio/hmipserver.bidcos-degraded.json) removed=$(grep -c "\"name\": \"BidCos-RF\"" /run/occulite/radio/hmipserver.bidcos-degraded.json) out=$(journalctl -b -u hmipserver.service -o cat --no-pager | grep -c "rfd does not answer .*BidCos-RF left out of InterfacesList.xml") started=$(test -e /var/status/HMServerStarted && echo y || echo n) died=$(journalctl -b -u hmipserver.service -o cat --no-pager | grep -c "Exception in thread") restarts=$(systemctl show -p NRestarts --value hmipserver.service) list=$(grep -o "<name>[^<]*</name>" /usr/local/etc/config/InterfacesList.xml | sed "s/<[^>]*>//g" | tr "\n" ",") vd=$(curl -s --max-time 20 -H Content-Type:text/xml -d "<?xml version=\"1.0\"?><methodCall><methodName>system.listMethods</methodName><params/></methodCall>" http://127.0.0.1:39292/groups | grep -o "<value>[a-zA-Z.]*</value>" | wc -l) end"')
-  say "guest (boot 2): hmipserver without BidCos-RF: $(printf '%s\n' "$R" | grep -o 'state=[a-z-]* marker=.* end' | tail -n 1)"
-  case "$R" in *'state=active marker=1 removed=1 out='[1-9]*' started=y died=0 restarts=0 list=VirtualDevices, vd='[1-9]*' end'*) ;; *) fail "hmipserver must come up with VirtualDevices and BidCos-RF left out of InterfacesList.xml while rfd does not answer (task 442), at its first try: $R";; esac
+  # the guest's console takes a line of a few hundred characters and every call answers within
+  # 240 s: the wait is split into calls (up to 7 minutes: the prep step's wait, then a TCG JVM start),
+  # and the checks are short lines
+  for _ in 1 2 3 4 5 6 7; do
+    R=$(guest 'for i in $(seq 1 12); do [ "$(systemctl is-active hmipserver)" = active ] && break; sleep 5; done; systemctl is-active hmipserver')
+    case "$R" in *'| active'*) break;; esac
+  done
+  M=/run/occulite/radio/hmipserver.bidcos-degraded.json
+  R=$(guest "echo \"state=\$(systemctl is-active hmipserver) marker=\$(grep -c '\"daemon\": \"rfd\"' $M) removed=\$(grep -c '\"name\": \"BidCos-RF\"' $M) restarts=\$(systemctl show -p NRestarts --value hmipserver) end\"")
+  R2=$(guest 'J="journalctl -b -u hmipserver -o cat --no-pager"; echo "out=$($J | grep -c "BidCos-RF left out of InterfacesList.xml") died=$($J | grep -c "Exception in thread") started=$(test -e /var/status/HMServerStarted && echo y || echo n) end"')
+  R3=$(guest 'echo "list=$(grep -o "<name>[^<]*</name>" /usr/local/etc/config/InterfacesList.xml | sed "s/<[^>]*>//g" | tr "\n" ",") end"')
+  R4=$(guest 'printf "%s" "<?xml version=\"1.0\"?><methodCall><methodName>system.listMethods</methodName></methodCall>" >/tmp/lm.xml; echo "vd=$(curl -s -m 20 -H Content-Type:text/xml -d @/tmp/lm.xml http://127.0.0.1:39292/groups | grep -o "<value>[a-zA-Z.]*</value>" | wc -l) end"')
+  R="$(printf '%s\n' "$R" | grep -o 'state=.* end' | tail -n 1) $(printf '%s\n' "$R2" | grep -o 'out=.* end' | tail -n 1) $(printf '%s\n' "$R3" | grep -o 'list=.* end' | tail -n 1) $(printf '%s\n' "$R4" | grep -o 'vd=.* end' | tail -n 1)"
+  say "guest (boot 2): hmipserver without BidCos-RF: $R"
+  case "$R" in *'state=active marker=1 removed=1 restarts=0 end out='[1-9]*' died=0 started=y end list=VirtualDevices, end vd='[1-9]*' end'*) ;; *) fail "hmipserver must come up with VirtualDevices and BidCos-RF left out of InterfacesList.xml while rfd does not answer (task 442), at its first try: $R";; esac
   R=$(guest 'systemctl show -p Result --value multimacd.service; systemctl is-active multimacd.service')
   case "$R" in *'| '*inactive*) ;; *) fail "multimacd must be skipped (inactive, not failed) without a module: $R";; esac
   # leave the image's userfs as the next test expects it: nothing switched off, no override, the
