@@ -14,8 +14,9 @@
 # 1.2.0-rc is the rc track of the same version, from 1.2.0-dev.0: built as 1.2.0-rc.<N> from 0, pre-releases too; the beta and dev channels are offered them, stable stays on 1.1.0.
 # 1.2.0 is the release of 1.2.0-rc.0's content, built as LITE_VERSION=1.2.0 (no prerelease part).
 # 1.2.1 is a patch release after 1.2.0, built as LITE_VERSION=1.2.1 (no prerelease track).
+# 1.3.0-beta is the beta track of the next minor version after 1.2.1: built as 1.3.0-beta.<N> from 0, pre-releases (D-122); stable systems stay on 1.2.1.
 # BASE is the OpenCCU tag this branch is rebased on, and the first thing a bug report names.
 # /VERSION's VERSION= line carries its first three parts (3.89.11), the eQ-3/OpenCCU-Base release,
 # as a CCU3's /VERSION does (task 396; board/lite/version-file.sh).
-VERSION=1.2.1
+VERSION=1.3.0-beta
 BASE=3.89.11.20260919
