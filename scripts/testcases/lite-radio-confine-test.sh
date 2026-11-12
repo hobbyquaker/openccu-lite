@@ -144,6 +144,8 @@ unit_has hmipserver.service "LogRateLimitIntervalSec=30s"; unit_has hmipserver.s
 for d in rfd multimacd hmipserver hs485d hmlangw; do unit_nomatch "$d.service" '^ReadWritePaths=\(.* \)\{0,1\}/usr/local' "$d: its userfs paths are optional"; done
 unit_has rfd.service "ReadWritePaths=/var/status -/usr/local/etc/config/rfd"
 unit_has hmipserver.service "ReadWritePaths=-/usr/local/etc/config/crRFD -/usr/local/etc/config/eshlight"
+# task 442: the prep step leaves a silent BidCos process's interface out of the list, in place
+unit_has hmipserver.service "ReadWritePaths=-/usr/local/etc/config/InterfacesList.xml"
 unit_has hs485d.service "ReadWritePaths=/var/status -/usr/local/etc/config/hs485d"
 for d in rfd hs485d hmlangw; do unit_has "$d.service" "RestrictRealtime=yes"; unit_has "$d.service" "MemoryDenyWriteExecute=yes"; done
 unit_has hmipserver.service "ReadWritePaths=/var/status /var/hmipserver /run/lock"

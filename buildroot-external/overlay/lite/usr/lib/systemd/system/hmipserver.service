@@ -38,7 +38,15 @@
 # retried with the backoff below.
 [Unit]
 Description=HmIP, HmIPW and VirtualDevices Interface
-# /dev/mmd_hmip comes from multimacd. rfd is not needed: the two start side by side. The server
+# /dev/mmd_hmip comes from multimacd. The units start side by side, but since HMIPServer 1.5.1 the
+# server (HMIPServer.jar, and HMServer.jar without an HmIP module) reads the devices of every BidCos
+# process InterfacesList.xml lists once at its start and does not come up without them: the prep
+# step waits briefly for rfd and hs485d where the plan runs them and, past its bound, leaves the
+# interface of one that does not answer out of InterfacesList.xml for this start, so HmIP-RF and
+# VirtualDevices come up without the BidCos devices (`occulited radio prep`; the Status page's
+# warning hmip-bidcos-degraded). occulited restarts the unit once the process answers again, and
+# that start puts the interface back. No After=rfd.service: rfd's unit is ready only once its LAN
+# gateways or module answer, and a gateway that is gone must not hold HmIP-RF back. The server
 # answers every device that asks for the time with the system clock: a trusted clock first.
 After=multimacd.service occu-clock-valid.service occu-usb-storage.target
 # A stop or restart of multimacd - by hand, by occulited, or systemd's own restart after a
@@ -124,6 +132,10 @@ ReadWritePaths=-/usr/local/etc/config/hmip_address.conf -/usr/local/etc/config/h
 # the heating group store: the prep step creates it, the server writes it in place
 ReadWritePaths=-/usr/local/etc/config/groups.gson
 ReadWritePaths=-/var/LegacyService.handlers -/var/HMSERVER.handlers
+# InterfacesList.xml, the one file: the prep step leaves out the interface of a BidCos process that
+# does not answer and puts it back when it does, writing the file in place (the server reads it
+# only at its start). It opens nothing to the server: the file is root's 0644.
+ReadWritePaths=-/usr/local/etc/config/InterfacesList.xml
 # /var/etc: the prep step renders log4j2.xml there from the current /etc/config/syslog before the
 # server starts, so a level set on the Log page needs a restart, not a reboot. It opens
 # nothing to the server: /var/etc is root:root 0775 and hmipserver is not root.

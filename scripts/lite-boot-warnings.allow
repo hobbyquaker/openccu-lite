@@ -38,7 +38,7 @@
 
 # --- hmipserver ---
 ^hmipserver: de\.eq3\.lib\.measurement\.MeasurementService \[[^]]+\] The configuration file path "(/etc/config|/opt/HMServer)/measurement" doen't exist or is not a directory\.$ ## the diagram feature without its configuration (occulited tasks 32, 33)
-^hmipserver: io\.vertx\.core\.impl\.BlockedThreadChecker \[vertx-blocked-thread-checker\] Thread Thread\[#[0-9]+,vert\.x-eventloop-thread-[0-9]+,[0-9]+,main\] has been blocked for [0-9]+ ms, time limit is [0-9]+ ms$ ## hmipserver's event loop is slow under TCG while occulited's init runs (B-270's shape)
+^hmipserver: io\.vertx\.core\.impl\.BlockedThreadChecker \[vertx-blocked-thread-checker\] Thread (Thread\[#[0-9]+,)?vert\.x-eventloop-thread-[0-9]+(,[0-9]+,main\])? has been blocked for [0-9]+ ms, time limit is [0-9]+ ms$ ## hmipserver's event loop is slow under TCG while occulited's init runs (B-270's shape); HMIPServer 1.5.1 names the thread without the Thread[#n,...,main] wrapper
 ^hmipserver: io\.vertx\.core\.VertxException: Thread blocked$ ## the line above's exception
 ^hmipserver: de\.eq3\.cbcs\.server\.core\.vertx\.KeyServerWorker \[[^]]+\] Missing or invalid key server configuration parameter ## the key server mode without its network key (occulited B-63)
 
