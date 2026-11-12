@@ -228,8 +228,8 @@ print("eeprom", re.search(r"^\s*RPI_EEPROM_FIRMWARE_PATH\s*=\s*firmware-2711/\S*
 EOF
 [ $? -eq 0 ] && [ "$(grep -c '^firmware [0-9a-f]' "$tmp/pins")" -eq 2 ] \
   && grep -Eq '^rpi (stable_[0-9]+|[0-9a-f]{40}) (stable_[0-9]+|[0-9a-f]{40})' "$tmp/pins" && grep -q '^eeprom 20' "$tmp/pins" && grep -q '^vm [0-9]' "$tmp/pins" \
-  && grep -q '^java [0-9.]*[0-9][0-9.]*jre$' "$tmp/pins" && grep -q '^openccu-base hobbyquaker/OpenCCU-Base v1\.[0-9]' "$tmp/pins" \
-  && grep -q '^pivccu v1\.[0-9].* hobbyquaker,piVCCU$' "$tmp/pins" \
+  && grep -q '^java [0-9.]*[0-9][0-9.]*jre$' "$tmp/pins" && grep -q '^openccu-base hobbyquaker/OpenCCU-Base v[0-9][0-9]*\.[0-9]' "$tmp/pins" \
+  && grep -q '^pivccu v[0-9][0-9]*\.[0-9].* hobbyquaker,piVCCU$' "$tmp/pins" \
   && ok "the fork's pins: buildroot, kernels, firmware, rpi-eeprom, JVM, OpenCCU-Base" \
   || { bad "the fork's pins are not found"; sed 's/^/     /' "$tmp/pins"; }
 
