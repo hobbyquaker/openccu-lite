@@ -584,8 +584,31 @@ EOF
 # together with its extraction directory, so that a failed update does not
 # leave a firmware-sized file on the userfs that only blocks the next attempt.
 # Only below the upload directory (/usr/local/tmp, which is /userfs/tmp here).
+#
+# Only in the script's own shell: a progress bar is started as "awk ... &", and
+# when its "kill" comes before the forked child has become awk (a short step - a
+# small tar, a missing fio - on a loaded machine), bash runs this EXIT trap in that
+# child too. It then removed the update's directory under the running fwprepare
+# and the lock under the running install. The PID comes from /proc/self, read by
+# the shell itself ($$ is the script's PID in every subshell; BASHPID is bash's).
+FWINSTALL_PID=$$
+
+# stops the running progress bar. SIGKILL: bash's child that caught a TERM before
+# it had become awk ran the EXIT trap and then still became awk - a progress bar
+# printing dots into the update's output for ever. The wait reaps it, so that
+# bash does not print a "Killed" job notice into that output.
+stop_progress()
+{
+  kill -KILL "${PROGRESS_PID}" 2>/dev/null || return 1
+  wait "${PROGRESS_PID}" 2>/dev/null
+  return 0
+}
+
 on_exit()
 {
+  local self=""
+  read -r self _ </proc/self/stat 2>/dev/null
+  [[ -z "${self}" || "${self}" = "${FWINSTALL_PID}" ]] || return 0
   if [[ -n "${FWPREPARE_FILE}" ]]; then
     case "${FWPREPARE_FILE}" in
       /usr/local/tmp/?*|/userfs/tmp/?*)
@@ -630,14 +653,14 @@ fwprepare()
   awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
   PROGRESS_PID=$!
   # shellcheck disable=SC2064
-  trap "kill ${PROGRESS_PID}; on_exit" EXIT
+  trap "stop_progress; on_exit" EXIT
 
   if ! CHKSUM=$(/usr/bin/sha256sum "${filename}" 2>/dev/null) || [[ -z "${CHKSUM}" ]]; then
     echo "ERROR: (sha256sum)"
     exit 1
   fi
   # stop the progress output
-  kill ${PROGRESS_PID} && trap "on_exit" EXIT
+  stop_progress && trap "on_exit" EXIT
 
   echo "$(echo "${CHKSUM}" | awk '{ print $1 }')<br/>"
 
@@ -670,17 +693,17 @@ fwprepare()
   awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
   PROGRESS_PID=$!
   # shellcheck disable=SC2064
-  trap "kill ${PROGRESS_PID}; on_exit" EXIT
+  trap "stop_progress; on_exit" EXIT
 
   # run the file i/o test using 'fio' which emulates a
   # Apps Class A1 performance test
   if ! RES=$(/usr/bin/fio --output-format=terse --max-jobs=4 /usr/share/agnostics/sd_bench.fio | cut -f 3,7,8,48,49 -d";" -) || [[ -z "${RES}" ]]; then
     echo "WARNING: performance test failed"
     # stop the progress output
-    kill ${PROGRESS_PID} && trap "on_exit" EXIT
+    stop_progress && trap "on_exit" EXIT
   else
     # stop the progress output
-    kill ${PROGRESS_PID} && trap "on_exit" EXIT
+    stop_progress && trap "on_exit" EXIT
     rm -f /usr/local/tmp/sd.test.file
 
     swri=$(echo "${RES}" | head -n 2 | tail -n 1 | cut -d ";" -f 4)
@@ -767,7 +790,7 @@ fwprepare()
       awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
       PROGRESS_PID=$!
       # shellcheck disable=SC2064
-      trap "kill ${PROGRESS_PID}; on_exit" EXIT
+      trap "stop_progress; on_exit" EXIT
 
       if ! /bin/gzip -dc "${filename}" >"${TMPDIR}/rootfs.ext4"; then
         echo "ERROR: (gunzip)"
@@ -775,7 +798,7 @@ fwprepare()
       fi
 
       # stop the progress output
-      kill ${PROGRESS_PID} 2>/dev/null || true
+      stop_progress 2>/dev/null || true
       trap "on_exit" EXIT
 
       # the uncompressed file must be a valid rootfs ext4 filesystem
@@ -812,7 +835,7 @@ fwprepare()
       awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
       PROGRESS_PID=$!
       # shellcheck disable=SC2064
-      trap "kill ${PROGRESS_PID}; on_exit" EXIT
+      trap "stop_progress; on_exit" EXIT
 
       # unarchive the tar
       if ! /bin/tar -C "${TMPDIR}" --warning=no-timestamp --no-same-owner -xmf "${filename}"; then
@@ -821,7 +844,7 @@ fwprepare()
       fi
 
       # stop the progress output
-      kill ${PROGRESS_PID} && trap "on_exit" EXIT
+      stop_progress && trap "on_exit" EXIT
 
       rm -f "${filename}"
 
@@ -848,14 +871,14 @@ fwprepare()
       awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
       PROGRESS_PID=$!
       # shellcheck disable=SC2064
-      trap "kill ${PROGRESS_PID}; on_exit" EXIT
+      trap "stop_progress; on_exit" EXIT
 
       # unarchive the zip
       if ! /usr/bin/unzip -q -o -d "${TMPDIR}" "${filename}" 2>/dev/null; then
         echo "ERROR: (unzip)"
         exit 1
       fi
-      kill ${PROGRESS_PID} 2>/dev/null || true
+      stop_progress 2>/dev/null || true
 
       # use the first found *.img as the image file we analyze regarding
       # potential re-partitioning.
@@ -924,13 +947,13 @@ fwprepare()
               awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
               PROGRESS_PID=$!
               # shellcheck disable=SC2064
-              trap "kill ${PROGRESS_PID}; on_exit" EXIT
+              trap "stop_progress; on_exit" EXIT
               # unarchive the zip once more
               if ! /usr/bin/unzip -q -o -d "${TMPDIR}" "${filename}" 2>/dev/null; then
                 echo "ERROR: (unzip)"
                 exit 1
               fi
-              kill ${PROGRESS_PID} 2>/dev/null || true
+              stop_progress 2>/dev/null || true
             elif [[ "${ROOTFS_IMG_SIZE}" -lt "${ROOTFS_SIZE}" ]]; then
               # if image rootfs is smaller we just shrink the rootfs fs and
               # partition but keep userfs untouched.
@@ -946,7 +969,7 @@ fwprepare()
       fi
 
       # stop the progress output (may already be stopped on resize paths)
-      kill ${PROGRESS_PID} 2>/dev/null || true
+      stop_progress 2>/dev/null || true
       trap "on_exit" EXIT
 
       rm -f "${filename}"
@@ -1064,7 +1087,7 @@ fwprepare()
   awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
   PROGRESS_PID=$!
   # shellcheck disable=SC2064
-  trap "kill ${PROGRESS_PID}; on_exit" EXIT
+  trap "stop_progress; on_exit" EXIT
 
   # check for sha256 checksums
   (cd "${TMPDIR}";
@@ -1093,7 +1116,7 @@ fwprepare()
   ) || exit 1
 
   # stop the progress output
-  kill ${PROGRESS_PID} && trap "on_exit" EXIT
+  stop_progress && trap "on_exit" EXIT
 
   echo "DONE<br>"
 
@@ -1247,7 +1270,7 @@ fwinstall()
       awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
       PROGRESS_PID=$!
       # shellcheck disable=SC2064
-      trap "kill ${PROGRESS_PID}; on_exit" EXIT
+      trap "stop_progress; on_exit" EXIT
 
       # use dd to write the image file to the boot partition
       if ! /bin/dd if="${ext4_file}" of="${ROOTFS_DEV}" bs=4M conv=fsync status=none; then
@@ -1256,7 +1279,7 @@ fwinstall()
       fi
 
       # stop the progress output
-      kill ${PROGRESS_PID} && trap "on_exit" EXIT
+      stop_progress && trap "on_exit" EXIT
 
       if ! mount -o ro "${ROOTFS_DEV}" /rootfs; then
         echo "ERROR: (mount)<br/>"
@@ -1361,7 +1384,7 @@ fwinstall()
       awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
       PROGRESS_PID=$!
       # shellcheck disable=SC2064
-      trap "kill ${PROGRESS_PID}; on_exit" EXIT
+      trap "stop_progress; on_exit" EXIT
 
       # use dd to write the image file to the boot partition
       if ! /bin/dd if="${vfat_file}" of="${BOOTFS_DEV}" bs=4M conv=fsync status=none; then
@@ -1370,7 +1393,7 @@ fwinstall()
       fi
 
       # stop the progress output
-      kill ${PROGRESS_PID} && trap "on_exit" EXIT
+      stop_progress && trap "on_exit" EXIT
 
       if ! mount -o ro "${BOOTFS_DEV}" /bootfs; then
         echo "ERROR: (mount)<br/>"
@@ -1520,7 +1543,7 @@ fwinstall()
       awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
       PROGRESS_PID=$!
       # shellcheck disable=SC2064
-      trap "kill ${PROGRESS_PID}; on_exit" EXIT
+      trap "stop_progress; on_exit" EXIT
 
       # use dd to write the image file to the boot partition
       if ! /bin/dd if="${BOOTFS_LOOPDEV}" of="${BOOTFS_DEV}" bs=4M conv=fsync status=none; then
@@ -1529,7 +1552,7 @@ fwinstall()
       fi
 
       # stop the progress output
-      kill ${PROGRESS_PID} && trap "on_exit" EXIT
+      stop_progress && trap "on_exit" EXIT
 
       if ! mount -o ro "${BOOTFS_DEV}" /bootfs; then
         echo "ERROR: (mount)<br/>"
@@ -1663,7 +1686,7 @@ fwinstall()
       awk 'BEGIN{while(1){printf".";fflush();system("sleep 3");}}' &
       PROGRESS_PID=$!
       # shellcheck disable=SC2064
-      trap "kill ${PROGRESS_PID}; on_exit" EXIT
+      trap "stop_progress; on_exit" EXIT
 
       # use dd to write the image file to the boot partition
       if ! /bin/dd if="${ROOTFS_LOOPDEV}" of="${ROOTFS_DEV}" bs=4M conv=fsync status=none; then
@@ -1672,7 +1695,7 @@ fwinstall()
       fi
 
       # stop the progress output
-      kill ${PROGRESS_PID} && trap "on_exit" EXIT
+      stop_progress && trap "on_exit" EXIT
 
       if ! mount -o ro "${ROOTFS_DEV}" /rootfs; then
         echo "ERROR: (mount)<br/>"

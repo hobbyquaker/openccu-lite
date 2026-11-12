@@ -9,10 +9,17 @@
 # recovery) - and the lock as before. Once fwprepare has linked the update, nothing is removed.
 #
 #   - the static part: on_exit is there, every trap runs it, fwprepare sets and clears the file;
+#   - B-328: on_exit cleans up only in the script's own shell. A progress bar is "awk ... &", and a
+#     "kill" that reached the forked child before it had become awk made bash run the EXIT trap in
+#     that child - it removed the update's directory under the running fwprepare (a CI run failed
+#     at step 6 that way; busybox ash, the recovery's shell, does not run it). Here on_exit, taken
+#     from fwinstall.sh, runs under bash's start-and-kill of 300 progress bars (fwinstall.sh's own
+#     lines) and the file stays; the kills are SIGKILL, so no progress bar outlives its kill;
 #   - fwinstall.sh itself in a container (debian, no privileges): a file of no known type below
 #     /usr/local/tmp and /userfs/tmp is removed with its directory, one elsewhere stays, and an
 #     update that fwprepare accepted keeps its directory when the install after it fails. Skipped
-#     with a note when docker is not available.
+#     with a note when docker is not available. On a failure the container prints every run's
+#     whole log and the state of the upload directories (B-328: the evidence for the next one).
 #
 # Usage: sh scripts/testcases/lite-fwprepare-cleanup-test.sh    (from the fork's checkout)
 set -u
@@ -38,6 +45,43 @@ echo "$fp" | sed -n '3,4p' | grep -q 'FWPREPARE_FILE="${filename}"' && ok "fwpre
 echo "$fp" | awk '/ln -sfn "\$\{TMPDIR\}" \/usr\/local\/.firmwareUpdate/ { l=NR } /^  FWPREPARE_FILE=""$/ { c=NR } END { exit !(l && c > l) }' &&
   ok "fwprepare clears it after linking the update" || bad "FWPREPARE_FILE is not cleared after the link"
 
+# B-328: the progress bars' children must not run the cleanup
+echo "$(sed -n '/^on_exit()$/,/^}$/p' "$FW")" | grep -q 'read -r self _ </proc/self/stat' && grep -q '^FWINSTALL_PID=\$\$$' "$FW" \
+  && ok "on_exit checks that it runs in the script's own shell" || bad "on_exit has no own-shell guard"
+# and they are stopped with SIGKILL (a child that caught the TERM ran the trap and still became awk),
+# reaped so that bash prints no "Killed" notice into the update's output
+sp=$(sed -n '/^stop_progress()$/,/^}$/p' "$FW")
+echo "$sp" | grep -q 'kill -KILL "${PROGRESS_PID}"' && echo "$sp" | grep -q 'wait "${PROGRESS_PID}" 2>/dev/null' \
+  && ok "stop_progress kills with SIGKILL and reaps (no job notice)" || bad "stop_progress: $sp"
+n_kill=$(grep -c 'kill .*PROGRESS_PID' "$FW"); n_sp=$(grep -c 'stop_progress' "$FW")
+[ "$n_kill" = 1 ] && [ "$n_sp" -gt 20 ] && ok "every progress bar is stopped through stop_progress ($n_sp)" || bad "progress bars killed outside stop_progress: $n_kill kill lines, $n_sp stop_progress"
+if [ -r /proc/self/stat ] && command -v bash >/dev/null 2>&1; then
+  R=$(mktemp -d) || exit 2
+  # fwinstall.sh's own start and stop lines, with a marker in the awk program to find leftovers
+  start=$(grep -m1 "^ *awk 'BEGIN{while(1)" "$FW" | sed "s/^ *//; s/BEGIN{/BEGIN{m=\"b328-$$\";/")
+  { sed -n '/^FWINSTALL_PID=\$\$$/p; /^stop_progress()$/,/^}$/p; /^on_exit()$/,/^}$/p' "$FW" | sed "s|/usr/local/tmp/?\*|$R/?*|"
+    echo "R='$R'"
+    echo 'FWPREPARE_FILE="$R/up.bin"'
+    echo 'for i in $(seq 1 300); do'
+    echo "  $start"
+    echo '  PROGRESS_PID=$!'
+    grep -m1 '^ *trap "stop_progress; on_exit" EXIT$' "$FW"
+    grep -m1 '^ *stop_progress && trap "on_exit" EXIT$' "$FW"
+    echo '  [ -e "$R/up.bin" ] || { echo "removed at round $i"; break; }'
+    echo 'done'
+    echo 'trap - EXIT'
+  } >"$R/probe.sh"
+  : >"$R/up.bin"; mkdir -p "$R/up.bin-dir"
+  timeout 120 bash "$R/probe.sh" >"$R/probe.log" 2>&1
+  [ -e "$R/up.bin" ] && [ -d "$R/up.bin-dir" ] && ok "300 progress bars started and stopped at once: the update stays (bash)" || bad "a progress bar's child cleaned up: $(cat "$R/probe.log")"
+  # a bar that became awk before its kill may have printed its dot; nothing else may appear
+  [ -z "$(tr -d . <"$R/probe.log")" ] && ok "and nothing printed but progress dots (no job notice)" || bad "the stops printed: $(head -c 300 "$R/probe.log")"
+  sleep 1
+  left=$(pgrep -f "b328-$$" | wc -l)
+  [ "$left" = 0 ] && ok "and no progress bar is left running" || { bad "$left progress bars outlived their kill"; pkill -KILL -f "b328-$$"; }
+  rm -rf "$R"
+fi
+
 # --- fwinstall.sh in a container --------------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
   echo "skip the container part: docker is not available"
@@ -48,7 +92,7 @@ else
 set -u
 f=0; ok() { echo "ok   $1"; }; bad() { echo "FAIL $1"; f=$((f+1)); }
 mkdir -p /usr/local/tmp /userfs/tmp /root
-fw() { bash /fw/fwinstall.sh "$1" >/tmp/run.log 2>&1; echo $?; }
+fw() { bash /fw/fwinstall.sh "$1" >/tmp/run.log 2>&1; r=$?; { echo "== $1 -> rc $r"; cat /tmp/run.log; echo; } >>/tmp/runs.log; echo $r; }
 for up in /usr/local/tmp/upload.bin /userfs/tmp/upload.bin; do
   head -c 4096 /dev/urandom >"$up"; mkdir -p "$up-dir"; touch "$up-dir/half"
   rc=$(fw "$up")
@@ -68,10 +112,24 @@ rc=$(fw "$up")
 [ "$rc" = 1 ] && grep -q "update_script ran" /tmp/run.log && ok "the accepted update ran its update_script" || bad "accepted: rc $rc: $(tr "\n" " " </tmp/run.log)"
 [ -x "$up-dir/update_script" ] && ok "the prepared update stays after the install failed" || bad "the prepared update was removed"
 grep -q "removed after the failure" /tmp/run.log && bad "the accepted update was reported removed" || ok "nothing reported removed for it"
+if [ "$f" != 0 ]; then
+  echo "---- evidence (B-328): every run of fwinstall.sh, whole"; cat /tmp/runs.log
+  echo "---- the upload directories and the update link"
+  ls -laR /usr/local/tmp /userfs/tmp 2>&1; ls -la /usr/local/.firmwareUpdate /tmp/.runningFirmwareUpdate 2>&1
+  echo "---- processes left"; for p in /proc/[0-9]*; do [ -r $p/cmdline ] && printf "%s %s\n" "${p#/proc/}" "$(tr "\0" " " <$p/cmdline)"; done
+  echo "---- bash $BASH_VERSION, $(. /etc/os-release; echo $PRETTY_NAME)"
+fi
 [ "$f" = 0 ]'
-  # file(1) and tar come from apt; no privileges, no network beyond the package mirror
+  # file(1) and tar come from apt; no privileges, no network beyond the package mirror. A mirror
+  # that does not answer once is tried three times (a CI run failed on a single "apt failed"),
+  # and the last try's output is shown when all fail.
+  apt='export DEBIAN_FRONTEND=noninteractive; for try in 1 2 3; do
+  apt-get -qq update >/tmp/apt.log 2>&1 && apt-get -qq install -y --no-install-recommends file >>/tmp/apt.log 2>&1 && break
+  [ $try = 3 ] && { echo "apt failed 3 times:"; tail -n 20 /tmp/apt.log; exit 3; }
+  sleep $((try * 10))
+done'
   if docker run --rm -v "$FW:/fw/fwinstall.sh:ro" debian:trixie-slim \
-       sh -c "export DEBIAN_FRONTEND=noninteractive; apt-get -qq update >/dev/null 2>&1 && apt-get -qq install -y --no-install-recommends file >/dev/null 2>&1 || { echo 'apt failed'; exit 3; }; bash -c '$inner'" \
+       sh -c "$apt; bash -c '$inner'" \
        >"$out" 2>&1; then
     sed 's/^/     /' "$out"
     ok "fwinstall.sh's cleanup (container)"
