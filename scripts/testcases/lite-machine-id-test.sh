@@ -6,7 +6,8 @@
 # the boot that changes the ID restarts the syslog forwarder, whose journalctl -f reads the old
 # ID's directory only (on the userfs), once the files have moved. And B-341: the boot that applies
 # a restore finds the backup's stored ID while journald runs on the previous one, and switches the
-# same way.
+# same way. And task 434: a restore takes the backup's ID; a backup without one leaves the system
+# its own (restore-pre/-post around S05CheckBackupRestore), with and without a board serial.
 #
 # Usage: sh scripts/testcases/lite-machine-id-test.sh    (from the fork's checkout)
 set -u
@@ -126,6 +127,58 @@ printf '%s\n' "$OLD" > "$T/run/machine-id"
 out=$(sh "$TOOL" store); rc=$?
 [ $rc = 0 ] && grep -qx "try-restart systemd-journald.service" "$T/log" && [ ! -e "$T/journal/$WANT" ] && ok "store without a journal directory: restart only ($out)" || bad "store without a journal directory: rc $rc ($out)"
 grep -qx "try-restart --no-block occu-syslog-forward.service" "$T/log" && ok "store without a journal directory: the forwarder is restarted all the same" || bad "store without a journal directory: the forwarder is not restarted"
+
+# task 434: a restore moves the identity. restore-pre notes the system's stored ID when a restore is
+# pending, S05CheckBackupRestore empties the userfs and unpacks the backup, restore-post keeps the
+# system's ID only when the backup brought none; "store" then switches to whatever is stored.
+export LITE_RESTORE_MARKER="$T/userfs/.doBackupRestore" LITE_RESTORE_ARCHIVE="$T/userfs/tmp/usr_local.tar.gz" \
+  LITE_MACHINE_ID_KEEP="$T/run/occulite/machine-id.before-restore"
+mkdir -p "$T/userfs/tmp"
+OWN=4a8f2e1c9b3d4e5f8a6b7c8d9e0f1a2b
+BKP=3cf25f52aaaa4bbb8ccc0000dddd0001
+restore() { # <backup's stored ID or "">: the boot that applies a restore, up to "store"
+  : > "$T/log"; rm -f "$T/restarted"; rm -rf "$T/journal"; mkdir -p "$T/journal"
+  printf '%s\n' "$OWN" > "$T/userfs/etc/machine-id"; printf '%s\n' "$OWN" > "$T/run/machine-id"
+  : > "$LITE_RESTORE_MARKER"; : > "$LITE_RESTORE_ARCHIVE"
+  pre=$(sh "$TOOL" restore-pre); pre_rc=$?
+  rm -f "$T/userfs/etc/machine-id" "$LITE_RESTORE_MARKER"   # S05CheckBackupRestore: the userfs emptied
+  [ -n "$1" ] && printf '%s\n' "$1" > "$T/userfs/etc/machine-id"   # ... and the backup unpacked
+  post=$(sh "$TOOL" restore-post); post_rc=$?
+  out=$(sh "$TOOL" store); rc=$?
+}
+for serial in with without; do
+  if [ $serial = with ]; then printf 'NEQ0123456\n' > "$T/var/board_serial"; else rm -f "$T/var/board_serial"; fi
+  restore "$BKP"
+  [ $pre_rc = 0 ] && [ $post_rc = 0 ] && [ $rc = 0 ] && ok "restore, $serial a serial, the backup has an ID: rc 0" || bad "restore $serial serial: rc $pre_rc/$post_rc/$rc ($pre / $post / $out)"
+  [ "$(cat "$T/userfs/etc/machine-id")" = "$BKP" ] && [ "$(cat "$T/run/machine-id")" = "$BKP" ] && ok "restore, $serial a serial: the backup's ID taken over and running" || bad "restore $serial serial: stored '$(cat "$T/userfs/etc/machine-id")', running '$(cat "$T/run/machine-id")'"
+  echo "$post" | grep -q "the backup's machine ID $BKP is taken over (was $OWN)" && ok "restore, $serial a serial: restore-post says so" || bad "restore-post: '$post'"
+  grep -qx "try-restart systemd-journald.service" "$T/log" && ok "restore, $serial a serial: journald switched to it" || bad "restore $serial serial: no switch: '$(cat "$T/log")'"
+  [ ! -e "$LITE_MACHINE_ID_KEEP" ] && ok "restore, $serial a serial: the note is gone" || bad "the note stayed"
+
+  restore ""
+  [ $rc = 0 ] && [ "$(cat "$T/userfs/etc/machine-id")" = "$OWN" ] && [ "$(cat "$T/run/machine-id")" = "$OWN" ] \
+    && ok "restore, $serial a serial, a backup without an ID (an older one): the system keeps its own" \
+    || bad "restore $serial serial without ID: stored '$(cat "$T/userfs/etc/machine-id" 2>&1)', running '$(cat "$T/run/machine-id")' ($post / $out)"
+  echo "$post" | grep -q "carries no machine ID: the system keeps its own, $OWN" && ok "restore, $serial a serial, without an ID: restore-post says so" || bad "restore-post: '$post'"
+  [ ! -s "$T/log" ] && ok "restore, $serial a serial, without an ID: no switch, nothing restarted" || bad "without ID: '$(cat "$T/log")'"
+done
+# without restore-pre/-post (the old behaviour) the ID-less restore gave a new identity: shown here
+# on the store alone - from the serial with one, random without
+rm -f "$T/userfs/etc/machine-id" "$T/var/board_serial"; : > "$T/log"; printf '%s\n' "$OWN" > "$T/run/machine-id"
+out=$(sh "$TOOL" store)
+[ "$(cat "$T/userfs/etc/machine-id")" != "$OWN" ] && echo "$out" | grep -q "random" && ok "(without the note an emptied store gets a new random ID: $(echo "$out" | head -n1))" || bad "store on an empty store: $out"
+# no restore pending: restore-pre notes nothing, restore-post does nothing
+: > "$T/log"; rm -f "$LITE_RESTORE_MARKER" "$LITE_MACHINE_ID_KEEP"; printf '%s\n' "$OWN" > "$T/userfs/etc/machine-id"
+sh "$TOOL" restore-pre >/dev/null; sh "$TOOL" restore-post >/dev/null
+[ ! -e "$LITE_MACHINE_ID_KEEP" ] && [ "$(cat "$T/userfs/etc/machine-id")" = "$OWN" ] && ok "no restore pending: nothing noted, nothing changed" || bad "no restore pending"
+# a marker without the archive: S05CheckBackupRestore restores nothing, so nothing is noted
+: > "$LITE_RESTORE_MARKER"; rm -f "$LITE_RESTORE_ARCHIVE"
+sh "$TOOL" restore-pre >/dev/null
+[ ! -e "$LITE_MACHINE_ID_KEEP" ] && ok "a marker without the archive: nothing noted" || bad "noted without an archive"
+rm -f "$LITE_RESTORE_MARKER"
+grep -q 'lite-machine-id restore-pre' "$HERE/buildroot-external/overlay/lite/usr/lib/systemd/system/occu-backup-restore.service" &&
+  grep -q 'lite-machine-id restore-post' "$HERE/buildroot-external/overlay/lite/usr/lib/systemd/system/occu-backup-restore.service" &&
+  ok "occu-backup-restore.service runs restore-pre and restore-post around the script" || bad "occu-backup-restore.service lacks the restore hooks"
 
 # the unit says what it does
 grep -q "as archived files" "$HERE/buildroot-external/overlay/lite/usr/lib/systemd/system/occu-machine-id-store.service" && ok "the store unit's comment names the adoption" || bad "unit comment"

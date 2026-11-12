@@ -44,6 +44,8 @@ enable occu-firewall.service
 enable occu-persist.service
 enable occu-radio-shadow-check.service
 enable occu-journal-sync.service
+enable occu-first-boot-journal.service
+enable occu-first-boot-journal-save.timer
 enable occu-syslog-forward.service
 enable occu-rc-local.service
 enable occu-seedrng.service

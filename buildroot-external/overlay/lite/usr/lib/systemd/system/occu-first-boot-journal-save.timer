@@ -1,0 +1,10 @@
+# openccu-lite: 30 minutes into every boot; the service does something only on the first boot
+# after a switch (its condition, the mark occu-first-boot-journal.service leaves).
+[Unit]
+Description=Copy the journal of the first boot after a switch, 30 minutes in
+
+[Timer]
+OnBootSec=30min
+
+[Install]
+WantedBy=timers.target

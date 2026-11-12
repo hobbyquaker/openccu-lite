@@ -1,0 +1,70 @@
+#!/bin/sh
+# openccu-lite: the journal of the first boot after a switch to openccu-lite, kept once on the
+# userfs.
+#
+# The first boot after a switch from a CCU3 or OpenCCU is the one whose journal matters most - the
+# recovery's import, the import of the ReGa names, the addon scans and what they switched off, the
+# first starts of the radios - and on the products whose journal is in RAM (every SD-card product
+# by default) it was gone at the next reboot. So that boot's journal is copied once to
+# /usr/local/var/log/first-boot-journal.txt.gz: text (journalctl's short-iso-precise), the first
+# 8 MiB of it, gzipped. /usr/local/var is .nobackup (lite-journal-persist): it is in no backup,
+# and nothing removes it - it stays until the user deletes it. Whatever the journal's own storage
+# is: on a persistent journal the copy costs a megabyte and outlives the size limit.
+#
+#   mark  - at boot, before occulited (occu-first-boot-journal.service): this boot is the first
+#           after a switch when the ReGa database of the CCU is on the userfs and occulited has not
+#           yet recorded its first-boot import of it (regadom-imported.json), and no copy exists yet.
+#           Leaves /run/occu-journal/first-boot.
+#   save  - copies the journal of this boot when the mark is there, once: 30 minutes into the
+#           boot (occu-first-boot-journal-save.timer), or at shutdown when the system goes down
+#           before that (the unit's stop).
+#
+# OCCU_FIRST_BOOT_* and the variables below point it at other files for
+# scripts/testcases/lite-first-boot-journal-test.sh.
+set -u
+
+CONFIG_DIR=${OCCU_FIRST_BOOT_CONFIG:-/usr/local/etc/config}
+STATE_DIR=${OCCU_FIRST_BOOT_STATE:-/usr/local/etc/occulite}
+MARK=${OCCU_FIRST_BOOT_MARK:-/run/occu-journal/first-boot}
+OUT=${OCCU_FIRST_BOOT_OUT:-/usr/local/var/log/first-boot-journal.txt.gz}
+CAP=${OCCU_FIRST_BOOT_CAP:-8388608}
+JOURNALCTL=${OCCU_JOURNALCTL:-journalctl}
+
+log() { printf 'first-boot journal: %s\n' "$*"; }
+
+case "${1:-}" in
+	mark)
+		rm -f "${MARK}"
+		[ -e "${CONFIG_DIR}/homematic.regadom" ] || exit 0
+		[ -e "${STATE_DIR}/regadom-imported.json" ] && exit 0
+		if [ -e "${OUT}" ]; then
+			log "a copy is there already (${OUT}), not made again"
+			exit 0
+		fi
+		mkdir -p "$(dirname "${MARK}")" && : >"${MARK}" || { log "ERROR: cannot write ${MARK}"; exit 0; }
+		log "the first boot after a switch to openccu-lite: its journal is kept as ${OUT}"
+		;;
+	save)
+		[ -e "${MARK}" ] || exit 0
+		dir=$(dirname "${OUT}")
+		mkdir -p "${dir}" || { log "ERROR: cannot create ${dir}"; exit 0; }
+		[ -e /usr/local/var/.nobackup ] || touch /usr/local/var/.nobackup 2>/dev/null
+		tmp="${OUT}.tmp"
+		# the head of the boot: the switch's work is at its start. A journalctl that printed
+		# nothing (it failed) leaves an empty archive, which is no copy.
+		if { "${JOURNALCTL}" -b 0 --no-pager -o short-iso-precise 2>/dev/null | head -c "${CAP}"; } | gzip -c >"${tmp}" &&
+			[ -n "$(gzip -dc "${tmp}" 2>/dev/null | head -c 1)" ]; then
+			mv -f "${tmp}" "${OUT}"
+			rm -f "${MARK}"
+			log "the journal of this boot copied to ${OUT} ($(wc -c <"${OUT}") bytes, the first $((CAP / 1048576)) MiB of it at most)"
+		else
+			rm -f "${tmp}"
+			log "ERROR: the journal of this boot could not be copied to ${OUT}"
+		fi
+		;;
+	*)
+		echo "Usage: $0 {mark|save}" >&2
+		exit 1
+		;;
+esac
+exit 0

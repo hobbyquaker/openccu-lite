@@ -2,12 +2,15 @@
 # openccu-lite: the box's machine ID, without ever writing to the rootfs.
 #
 # The rootfs is read-only and /etc/machine-id is the empty file buildroot's systemd package
-# installs, so PID 1 generates a transient ID at every boot, writes it to /run/machine-id and
-# bind-mounts that over /etc/machine-id. journald names its directory after the ID, so a fresh
-# one per boot leaves a /var/log/journal/<id>/ per boot that no size cap ever vacuums.
+# installs, so PID 1 sets up a transient ID at every boot, writes it to /run/machine-id and
+# bind-mounts that over /etc/machine-id. Where it comes from is systemd's: in a VM the
+# hypervisor's UUID for it (the same at every boot - on an x86_64 VM it is the stored ID too), on bare
+# hardware (a Pi) a random one per boot. journald names its directory after the ID, so a fresh
+# one per boot would leave a /var/log/journal/<id>/ per boot that no size cap ever vacuums.
 #
 # Two things are settled: the ID is derived from the board serial, and it is installed
-# with a bind mount instead of a "mount -o remount,rw /" of the rootfs.
+# with a bind mount instead of a "mount -o remount,rw /" of the rootfs. And a restore moves the
+# identity: the system takes the machine ID of the backup, like a clone of the old one.
 #
 #   install  - runs before systemd-journald (occu-machine-id.service), with the userfs mounted:
 #              takes the ID stored on the userfs and makes it the running one by writing
@@ -19,12 +22,22 @@
 #              writes /var/board_serial: derives the ID from that serial (sha256, truncated to
 #              128 bit, with the UUID version and variant nibbles systemd's own id128 helpers
 #              set) and stores it on the userfs, so the box keeps its identity across a userfs
-#              wipe as long as the radio module stays. Without a serial - no module attached -
-#              it generates a random one, once. /var is a tmpfs, so the serial cannot be read at
+#              wipe as long as the radio module stays. Without a serial - no module attached, or
+#              one the box reaches over the LAN - it generates a random one, once, and keeps it
+#              (it does not take PID 1's, which is random per boot on a Pi). /var is a tmpfs, so
+#              the serial cannot be read at
 #              "install" time on any boot; this is why the ID is written on one boot and picked
 #              up by the next, and why the first boot applies it in place (below). A stored
 #              ID it finds is applied in place as well when it is not the running one: the boot
 #              that applies a restore replaced the userfs, and the backup's ID, after "install".
+#   restore-pre, restore-post - around S05CheckBackupRestore (occu-backup-restore.service). The
+#              restore empties the userfs and unpacks the backup: an openccu-lite backup carries
+#              the stored ID, and the system takes it over ("store" switches to it). A backup
+#              without one - a CCU3's or an OpenCCU's, or an openccu-lite one made before the ID
+#              was stored - would leave nothing, and "store" would derive a new ID (from the
+#              serial, or a random one without a serial): a new identity for a restore. So
+#              restore-pre notes the stored ID when a restore is pending, and restore-post puts it
+#              back when the backup brought none: the system keeps its own.
 #
 # PID 1 keeps the ID it read at startup in memory either way; only journald and everything that
 # reads /etc/machine-id see the final one before the next reboot.
@@ -36,6 +49,9 @@ SERIAL=${LITE_BOARD_SERIAL:-/var/board_serial}
 ETC_ID=${LITE_ETC_MACHINE_ID:-/etc/machine-id}
 RUN_ID=${LITE_RUN_MACHINE_ID:-/run/machine-id}
 JOURNAL_DIR=${LITE_JOURNAL_DIR:-/var/log/journal}
+RESTORE_MARKER=${LITE_RESTORE_MARKER:-/usr/local/.doBackupRestore}
+RESTORE_ARCHIVE=${LITE_RESTORE_ARCHIVE:-/usr/local/tmp/usr_local.tar.gz}
+KEEP=${LITE_MACHINE_ID_KEEP:-/run/occulite/machine-id.before-restore}
 JOURNALCTL=${LITE_JOURNALCTL:-journalctl}
 SYSTEMCTL=${LITE_SYSTEMCTL:-systemctl}
 
@@ -204,8 +220,35 @@ case "${1:-}" in
 		log "machine ID ${id} stored in ${STORE} (${src})"
 		switch_to "${id}" || { log "ERROR: could not install machine ID ${id}"; exit 1; }
 		;;
+	restore-pre)
+		# S05CheckBackupRestore restores only with both the marker and the archive
+		rm -f "${KEEP}"
+		[ -r "${RESTORE_MARKER}" ] && [ -f "${RESTORE_ARCHIVE}" ] || exit 0
+		id=$(read_id "${STORE}")
+		valid "${id}" || exit 0
+		mkdir -p "$(dirname "${KEEP}")" && printf '%s\n' "${id}" >"${KEEP}" ||
+			log "ERROR: could not note the machine ID ${id} before the restore"
+		;;
+	restore-post)
+		[ -s "${KEEP}" ] || exit 0
+		own=$(read_id "${KEEP}")
+		rm -f "${KEEP}"
+		[ -e "${RESTORE_MARKER}" ] && exit 0 # the restore did not run
+		id=$(read_id "${STORE}")
+		if valid "${id}"; then
+			if [ "${id}" = "${own}" ]; then
+				log "the backup carries this system's machine ID ${id}"
+			else
+				log "the backup's machine ID ${id} is taken over (was ${own}); it is switched to at the end of the radio start"
+			fi
+			exit 0
+		fi
+		mkdir -p "$(dirname "${STORE}")"
+		printf '%s\n' "${own}" >"${STORE}" || { log "ERROR: could not keep the machine ID ${own}"; exit 1; }
+		log "the backup carries no machine ID: the system keeps its own, ${own}"
+		;;
 	*)
-		echo "Usage: $0 {install|store}" >&2
+		echo "Usage: $0 {install|store|restore-pre|restore-post}" >&2
 		exit 1
 		;;
 esac

@@ -1,0 +1,11 @@
+# openccu-lite: copies the journal of the first boot after a switch to the userfs, 30 minutes into
+# that boot (occu-first-boot-journal-save.timer); see occu-first-boot-journal.service.
+[Unit]
+Description=Copy the journal of the first boot after a switch
+After=occu-first-boot-journal.service
+ConditionPathExists=/run/occu-journal/first-boot
+RequiresMountsFor=/usr/local
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/occu/lite-first-boot-journal save

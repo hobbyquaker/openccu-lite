@@ -1,5 +1,6 @@
 # openccu-lite: replaces /etc/init.d/S05CheckBackupRestore. The script runs unchanged; the
 # cgroup keeps whatever it starts (KillMode=control-group), so stop and status are systemd's.
+# Around it lite-machine-id keeps the system's machine ID when the backup carries none.
 [Unit]
 Description=Backup restore at boot
 After=occu-factory-reset.service
@@ -8,7 +9,11 @@ After=occu-factory-reset.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStartPre=-/usr/libexec/occu/lite-psplash boot S05CheckBackupRestore
+# the machine ID: a restore takes the backup's; one without an ID leaves the system its own
+# (lite-machine-id, restore-pre/-post)
+ExecStartPre=-/usr/libexec/occu/lite-machine-id restore-pre
 ExecStart=/etc/init.d/S05CheckBackupRestore.script start
+ExecStartPost=-/usr/libexec/occu/lite-machine-id restore-post
 ExecStartPost=-/usr/libexec/occu/lite-psplash done S05CheckBackupRestore
 ExecStop=/etc/init.d/S05CheckBackupRestore.script stop
 KillMode=control-group

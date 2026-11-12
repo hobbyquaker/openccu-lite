@@ -1,8 +1,9 @@
 # openccu-lite: a stable machine ID, part one.
 #
-# The rootfs is read-only, so systemd boots with a random transient ID every time unless one is
-# committed; journald names its directory after the ID, so a new one per boot would leave
-# orphaned journal directories that no size cap ever vacuums. The ID lives in
+# The rootfs is read-only, so systemd boots with a transient ID unless one is committed - in a VM
+# the hypervisor's UUID for it, on bare hardware a random one per boot; journald names its
+# directory after the ID, so a new one per boot would leave orphaned journal directories that no
+# size cap ever vacuums. The ID lives in
 # /usr/local/etc/machine-id on the userfs; occu-machine-id-store.service puts it there, derived
 # from the board serial.
 #

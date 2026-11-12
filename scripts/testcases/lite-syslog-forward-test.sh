@@ -39,6 +39,26 @@ grep -qx 'ForwardToSyslog=no' "$CONF" && ok "journald does not forward to syslog
 grep -qx 'DynamicUser=yes' "$UNIT" && grep -qx 'SupplementaryGroups=systemd-journal' "$UNIT" && ok "the unit runs as its own user in systemd-journal" || bad "the unit's user"
 grep -qx 'RuntimeDirectoryPreserve=yes' "$UNIT" && ok "the cursor lasts until the reboot" || bad "RuntimeDirectoryPreserve"
 
+# B-342: a stop drains to the journal's last entry within occulited's 3 s and keeps its cursor on
+# the userfs for the next boot - in a directory the unit may write (DynamicUser makes the system
+# read-only), made by root for the systemd-journal group, setgid, as the next boot's uid may differ
+bc=$(sed -n 's/^Environment=OCCU_SYSLOG_BOOT_CURSOR=//p' "$UNIT")
+bdir=${bc%/*}
+case "$bc" in
+  /usr/local/*/cursor) ok "the cursor for the next boot is on the userfs: $bc" ;;
+  *) bad "OCCU_SYSLOG_BOOT_CURSOR is '$bc', not a file on the userfs" ;;
+esac
+grep -qx "ReadWritePaths=-$bdir" "$UNIT" && ok "the unit may write $bdir" || bad "no ReadWritePaths=-$bdir"
+pre=$(sed -n 's/^ExecStartPre=+//p' "$UNIT")
+case "$pre" in
+  *"mkdir -p $bdir "*"chown root:systemd-journal $bdir "*"chmod 2770 $bdir'") ok "root makes $bdir the journal group's, setgid" ;;
+  *) bad "ExecStartPre does not make $bdir root:systemd-journal 2770: '$pre'" ;;
+esac
+tss=$(sed -n 's/^TimeoutStopSec=\([0-9]*\)$/\1/p' "$UNIT")
+[ -n "$tss" ] && [ "$tss" -ge 5 ] && [ "$tss" -le 30 ] && ok "TimeoutStopSec=$tss leaves room for the 3 s drain" || bad "TimeoutStopSec '$tss' (5 to 30 s: the drain, not the default 90 s)"
+grep -qx 'KillMode=mixed' "$UNIT" && ok "the stop's SIGTERM goes to the forwarder alone, not its journalctl" || bad "KillMode=mixed"
+grep -q "B-342\|task [0-9]" "$UNIT" && bad "the unit names a roadmap id" || ok "the unit names no roadmap id"
+
 # B-340: journalctl -f reads the journal directories of the moment it started, so the forwarder
 # starts after the journal's move at boot, and the two that move the journal under a running one
 # restart it once they are done - without waiting, both run as jobs themselves

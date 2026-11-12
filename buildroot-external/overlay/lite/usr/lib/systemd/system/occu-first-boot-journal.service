@@ -1,0 +1,20 @@
+# openccu-lite: the journal of the first boot after a switch to openccu-lite, kept once on the
+# userfs (/usr/local/var/log/first-boot-journal.txt.gz; lite-first-boot-journal says when and
+# what). The start decides whether this is that boot - before occulited, which records its first
+# import of the CCU's ReGa names; the stop copies the journal when the system goes down before
+# occu-first-boot-journal-save.timer did, 30 minutes into the boot. Replaces nothing in
+# /etc/init.d.
+[Unit]
+Description=Journal of the first boot after a switch
+After=occu-persist.service
+Before=occulited.service
+RequiresMountsFor=/usr/local
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/occu/lite-first-boot-journal mark
+ExecStop=/usr/libexec/occu/lite-first-boot-journal save
+
+[Install]
+WantedBy=multi-user.target

@@ -25,6 +25,17 @@
 # changed - and starts journalctl again after the last entry sent, within about 10 s; the two
 # restarts stay, as the cure that needs no wait. Every start logs the first entry it sends, so a
 # forwarder that went quiet shows in the journal by the line it lacks.
+#
+# A reboot: the lines logged just before it are the ones a remote log is for. A stop sends what
+# the journal has after the last entry sent, within 3 s (TimeoutStopSec leaves room for that), and
+# writes the cursor of the last entry sent to the userfs (OCCU_SYSLOG_BOOT_CURSOR). The next boot
+# sends the previous boot's entries after it - what the shutdown logged after the stop, once -
+# when the journal still has that boot (persistent), then its own. The forwarder removes the file
+# with its first entry sent, so a power loss leaves none and nothing is sent twice. Written once
+# per stop, never while entries flow: the userfs may be an SD card. Its directory belongs to the
+# systemd-journal group (setgid), as the dynamic user's uid may differ from boot to boot; the
+# ExecStartPre (as root) makes it. KillMode=mixed: the stop's SIGTERM goes to the forwarder alone,
+# not to its journalctl, so the forwarder ends that itself and drains instead of seeing it die.
 [Unit]
 Description=Forward the journal to a remote syslog host
 After=network-online.target local-fs.target systemd-journald.service occu-persist.service
@@ -33,7 +44,12 @@ Wants=network-online.target
 [Service]
 Type=exec
 ExecCondition=/bin/sh -c '[ -r /etc/config/syslog ] && . /etc/config/syslog && [ -n "$${LOGHOST:-}" ]'
+ExecStartPre=+/bin/sh -c 'mkdir -p /usr/local/var/occu-syslog-forward && chown root:systemd-journal /usr/local/var/occu-syslog-forward && chmod 2770 /usr/local/var/occu-syslog-forward'
 ExecStart=/usr/libexec/occu/lite-syslog-forward
+Environment=OCCU_SYSLOG_BOOT_CURSOR=/usr/local/var/occu-syslog-forward/cursor
+ReadWritePaths=-/usr/local/var/occu-syslog-forward
+TimeoutStopSec=10
+KillMode=mixed
 # journalctl ending or an unusable LOGHOST is a failure and comes back; a clean stop is not
 Restart=on-failure
 RestartSec=5
