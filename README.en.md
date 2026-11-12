@@ -79,6 +79,8 @@ These addons cannot be installed on a CCU3 or on OpenCCU.
   and interfaces, traps
 - [lite-addon-tailscale](https://github.com/hobbyquaker/lite-addon-tailscale) - remote access to the system over a
   Tailscale network, also with your own Headscale
+- [lite-addon-tools](https://github.com/hobbyquaker/lite-addon-tools) - debugging and admin tools for the command line
+  (SSH): tcpdump, nmap, strace, htop, mtr, socat, tmux, nano and more
 - [lite-addon-wireguard](https://github.com/hobbyquaker/lite-addon-wireguard) - remote access to the system over a
   WireGuard VPN
 

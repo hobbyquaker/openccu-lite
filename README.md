@@ -80,6 +80,8 @@ Diese Addons lassen sich nicht auf einer CCU3 oder auf OpenCCU installieren.
   -Schnittstellen, Traps
 - [lite-addon-tailscale](https://github.com/hobbyquaker/lite-addon-tailscale) - Fernzugriff auf das System über ein
   Tailscale-Netz, auch mit eigenem Headscale
+- [lite-addon-tools](https://github.com/hobbyquaker/lite-addon-tools) - Werkzeuge für die Fehlersuche und Verwaltung auf
+  der Kommandozeile (SSH): tcpdump, nmap, strace, htop, mtr, socat, tmux, nano u. a.
 - [lite-addon-wireguard](https://github.com/hobbyquaker/lite-addon-wireguard) - Fernzugriff auf das System per
   WireGuard-VPN
 

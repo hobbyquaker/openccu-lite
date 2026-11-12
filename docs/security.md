@@ -162,8 +162,10 @@ breached passwords ([security-asvs.md](security-asvs.md) V6.2 says why).
   `auth:admin`, the RPC tiers `rpc:read` … `rpc:admin`, or Full access (`*`) — and optionally an expiry and the
   address ranges it may come from. The route table and what each scope opens are in
   [system-api.md → Scopes](https://github.com/hobbyquaker/occulited/blob/master/docs/system-api.md#scopes). A token
-  is sent as `Authorization: Bearer`, as the password of HTTP basic authentication (for XML-RPC libraries), or as
-  `?sid=` (see [Known gaps](#known-gaps)).
+  is sent as `Authorization: Bearer` or as the password of HTTP basic authentication (for XML-RPC libraries) — **never
+  in the URL**: since 1.3.0 the API reads no credential from `?sid=`, neither a token nor a session id, and answers
+  such a request `401` with a message that names the header. `?sid=` lives on under `/addons/` alone, where the gate
+  takes the session id and the CCU's legacy alias for the addon pages that need it.
 - **The local token** `/usr/local/etc/occulite/local-token` is world-readable on purpose: every program on the system
   may read names and rooms with it. It holds **`meta:read` alone**.
 - **An addon's own token** comes from its manifest's `runtime.api_scopes`: minted at every start into
@@ -383,8 +385,8 @@ accepted and what would remove it.
 - **Addon pages share the shell's origin** (R1); a malicious addon page acts with the user's rights.
 - **The interface daemons' loopback ports have no authentication** (R2): every addon reaches the devices.
 - **Classic RPC has no real authentication** when you switch it on (R8).
-- **`?sid=` puts a credential in a URL**: the API still takes a session id or a token as `?sid=`, and the CCU's legacy
-  alias in addon URLs is on for the addons that need it (R9).
+- **The CCU's legacy alias in addon URLs** is on for the addons that need it (R9): a short-lived alias of the session,
+  under `/addons/` alone, which the API refuses everywhere. The API itself takes no credential from a URL since 1.3.0.
 - **No second factor** of the system's own: passkeys are an alternative login.
 - **No quota** for an addon (R5), and **no AppArmor** profiles.
 - **lighttpd does not refuse invalid UTF-8 in a URL**; control characters it does.

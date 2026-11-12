@@ -238,6 +238,12 @@ lieferte.
   nicht hat. Die Integration verbindet sich über
   [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom), als Addon auf dem System (im Addon-Katalog) oder anderswo
   laufend, mit ihrem Backend *OpenCCU-Loom daemon*, in Version 2.12.4 als Beta gekennzeichnet.
+  Wer einen bestehenden Eintrag der Integration (gesehen mit 2.12.3) auf dieses Backend umstellt, behält darin
+  `username` und `password` der alten Direktverbindung; der Start bricht dann mit
+  `box_token is the only credential behind the box` ab. Abhilfe: Home Assistant Core anhalten, eine Kopie von
+  `.storage/core.config_entries` anlegen, im Eintrag der Integration die beiden Schlüssel `username` und `password`
+  löschen und Home Assistant wieder starten. Das ist ein Verhalten der Integration; neuere Versionen können es
+  anders handhaben.
 - **ioBroker:** [ioBroker.hm-rpc](https://github.com/ioBroker/ioBroker.hm-rpc) verbindet sich mit den
   Schnittstellenprozessen wie mit einer CCU, über klassisches RPC (oben).
 - **Was die ReGa braucht, geht nicht:** Systemvariablen, Programme, HM-Script, die JSON-RPC-API der WebUI

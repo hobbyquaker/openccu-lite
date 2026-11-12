@@ -7,7 +7,7 @@ Zusatzsoftware mit dem Homematic Manager und zuletzt Namen, Räume und Gewerke. 
 Englisch verfügbar und hat ein helles und ein dunkles Design (Einstellungen → Design, oder wie das Betriebssystem es
 vorgibt). Jedes Bild gibt es in beiden Designs: Ihr Browser zeigt das, das zu seiner eigenen Einstellung passt.
 
-Die Bilder zeigen die Version `1.0.0-rc.0`. Die meisten sind mit erfundenen Beispieldaten entstanden: Namen, Adressen
+Die Bilder zeigen die Version `1.0.0-rc.0`, die Willkommensseite und die Seite Sicherung den Stand nach `1.2.1`. Die meisten sind mit erfundenen Beispieldaten entstanden: Namen, Adressen
 (`192.0.2.x`, `198.51.100.x`, `2001:db8::`), Seriennummern und Geräte gibt es so nicht; Seriennummern, Geräteadressen
 und SGTINs sind zusätzlich mit `X` unkenntlich gemacht. Der Homematic Manager läuft dabei mit seinen eigenen
 Beispieldaten. Von echten Systemen stammen die Lizenzen-Seite, der Startablauf und die Beispiele für
@@ -50,9 +50,11 @@ Dinge, die sich später jederzeit auf ihrer eigenen Seite ändern lassen:
    Gerät angelernt ist. Eine Sicherung von openccu-lite wird dagegen eingespielt („Sicherung von openccu-lite
    einspielen“): das ganze System kommt zurück, wie es war. Wenn Sie OpenCCU an Ort und Stelle gewechselt haben, sind
    die Geräte schon da und die Namen werden beim ersten Start übernommen, siehe [switching.de.md](../switching.de.md).
-   Das Bild oben zeigt diesen Schritt noch in einer früheren Fassung.
-4. **Ein Frontend.** openccu-lite bringt keine eigene Geräteverwaltung mit; der Homematic Manager (Anlernen,
-   Parameter, Direktverknüpfungen, Namen) und die anderen Addons sind im Katalog einen Klick entfernt.
+4. **Geräteverwaltung.** openccu-lite verwaltet selbst keine Geräte: Anlernen, Parameter, Direktverknüpfungen und
+   Namen brauchen ein Addon. „Homematic Manager installieren“ installiert ihn mit einem Klick aus dem Katalog, ohne die
+   Seite zu verlassen; dafür lädt das System den Katalog und die neueste Version von GitHub. Ist er schon installiert
+   (etwa nach dem Einspielen einer Sicherung), öffnet der Knopf ihn. „Weitere Addons im Katalog“ führt zu den übrigen
+   Addons.
 
 ## Anmeldung
 
@@ -366,8 +368,8 @@ oder den Verlauf.
   mit ihren Schlüsseln und die Namen, Räume und Gewerke, auf Wunsch Addons, die Adresse des HB-RF-ETH, Hostname,
   Syslog-Server und klassisches RPC. Vorher sagt die Seite, wenn die HmIP-Identität der Sicherung zu einem anderen
   Funkmodul gehört (hmipserver übernimmt sie beim Start auf das Modul dieses Systems; die Seite Schnittstellen zeigt
-  danach, wie es ausging) und wenn die Sicherung einen eigenen BidCos-Sicherheitsschlüssel hat (er kommt so mit). Das
-  Bild oben zeigt diesen Abschnitt noch in seiner früheren Fassung mit zwei Knöpfen; die Einzelheiten stehen in
+  danach, wie es ausging) und wenn die Sicherung einen eigenen BidCos-Sicherheitsschlüssel hat (er kommt so mit). Die
+  Knöpfe erscheinen erst, wenn eine Datei geprüft ist; die Einzelheiten stehen in
   [switching.de.md](../switching.de.md#geräte-in-eine-neuinstallation-übernehmen).
 - **Werkseinstellungen:** alles löschen und neu mit der Einrichtungsseite beginnen.
 

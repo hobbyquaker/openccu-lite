@@ -193,6 +193,12 @@ Before a restore or an import the Backup page also judges the backup's HmIP secu
 - **Other CCU remnants are removed once, at the first start:** the configuration directories of addons that are no
   longer installed (`/usr/local/etc/config/addons/<id>`, e.g. CloudMatic's `mh`), the ReGa's crash dump
   `homematic.regadom.err` and an empty `eQ-3-Backup`. Each is logged with its path and size (`ccu remnants: removed`).
+- **The first start's log is kept:** the journal of the first boot after the switch - the import, the addon checks,
+  the first starts of the radios - is copied once to `/usr/local/var/log/first-boot-journal.txt.gz` (text, gzipped, at
+  most its first 8 MiB), 30 minutes into that boot or when the system is shut down before then. It is in no backup and
+  stays until you delete it. Where the journal is kept in RAM (the default on a Raspberry Pi or a CCU3), everything
+  else is lost at a reboot; the Status page says so, and the Log page's journal settings keep it on the userfs, a USB
+  stick or a network share.
 
 Everything removed on the first start is in the CCU backup taken before the switch: **that backup is the way back.**
 
@@ -220,6 +226,11 @@ Programs elsewhere on the network that talked to the CCU keep its devices, but l
   does not have. It connects through [OpenCCU-Loom](https://github.com/SukramJ/openccu-loom), as an addon on
   the system (in the addon catalogue) or running elsewhere, with the integration's backend *OpenCCU-Loom daemon*,
   marked Beta in version 2.12.4.
+  An existing entry of the integration (seen with 2.12.3) that is switched to this backend keeps the old direct
+  connection's `username` and `password`, and its start then aborts with
+  `box_token is the only credential behind the box`. The way out: stop Home Assistant Core, make a copy of
+  `.storage/core.config_entries`, delete the two keys `username` and `password` from the integration's entry, and
+  start Home Assistant again. This is the integration's behaviour; newer versions may handle it differently.
 - **ioBroker:** [ioBroker.hm-rpc](https://github.com/ioBroker/ioBroker.hm-rpc) connects to the interface processes
   as to a CCU, through classic RPC (above).
 - **Whatever needs the ReGa does not work:** system variables, programs, HM-Script, the WebUI's JSON-RPC API
