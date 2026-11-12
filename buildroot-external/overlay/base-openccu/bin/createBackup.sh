@@ -84,6 +84,11 @@ if [[ -d "${TMPDIR}" ]]; then
 
   # store the firmware VERSION
   echo "VERSION=${VERSION}" >"${TMPDIR}/firmware_version"
+  # a firmware whose /VERSION names its own release in a LITE= line (openccu-lite) adds it,
+  # so that a restore can tell its backups from a CCU's; the readers take VERSION= only
+  if [[ -n "${LITE}" ]]; then
+    echo "LITE=${LITE}" >>"${TMPDIR}/firmware_version"
+  fi
 
   # create sha256 checksum of all files
   (cd "${TMPDIR}" && /usr/bin/sha256sum ./* >signature.sha256)
