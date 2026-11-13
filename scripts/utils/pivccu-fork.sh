@@ -1,6 +1,6 @@
 #!/bin/bash
 # openccu-lite (B-330): the bump of generic_raw_uart and detect_radio_module, the two packages
-# built from the piVCCU fork https://github.com/hobbyquaker/piVCCU (task 373: Alex's master plus
+# built from the piVCCU fork https://github.com/openccu-lite/piVCCU (task 373: Alex's master plus
 # our changes as commits on the branch lite). update-generic_raw_uart.sh and
 # update-detect_radio_module.sh call pivccu_fork_update; upstream's versions resolved Alex's
 # master, which would re-pin the packages without our commits.
@@ -10,7 +10,7 @@
 #     the fork's lite (lite's head or an ancestor of it);
 #   - without an argument: the newest v* tag on lite's head (a build round tags it, builds.md),
 #     else lite's head commit;
-#   - the archive is the one buildroot downloads ($(call github,hobbyquaker,piVCCU,<pin>)),
+#   - the archive is the one buildroot downloads ($(call github,openccu-lite,piVCCU,<pin>)),
 #     downloaded twice: the two must be the same file, its sha256 is the hash;
 #   - only the package's _VERSION line in its .mk and the archive's line in its .hash change. The
 #     _SITE must be the fork's archive macro and the LICENSE must hash as the .hash says, or
@@ -22,7 +22,7 @@
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/version-order.sh"
 
-PIVCCU_FORK_OWNER="hobbyquaker"
+PIVCCU_FORK_OWNER="openccu-lite"
 PIVCCU_FORK_REPO="piVCCU"
 PIVCCU_FORK_BRANCH="lite"
 

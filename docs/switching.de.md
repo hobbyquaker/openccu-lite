@@ -173,7 +173,7 @@ siehe [bekannte-probleme.md](bekannte-probleme.md#hmip-geräte-nach-einem-neusta
 - **Nicht übernommen:** Programme, Systemvariablen, Alarme, Favoriten, Diagramme. Die Automatisierung wandert zu
   Node-RED (RedMatic), Home Assistant, ioBroker oder was man sonst schon einsetzt; siehe
   [Externe Clients nach dem Wechsel](#externe-clients-nach-dem-wechsel).
-- **Addons:** die im [Katalog](https://github.com/hobbyquaker/occulited/blob/master/docs/catalog-format.md)
+- **Addons:** die im [Katalog](https://github.com/openccu-lite/occulited/blob/master/docs/catalog-format.md)
   funktionieren. Addons, die die ReGa brauchen (CUxD, die XML-API, …), werden deaktiviert und als *deaktiviert,
   inkompatibel* geführt. Addons mit Binaries für eine andere Architektur stehen als *deaktiviert, braucht ein Update*
   da; *Installieren* / *Aktualisieren* im Katalog holt den passenden Build

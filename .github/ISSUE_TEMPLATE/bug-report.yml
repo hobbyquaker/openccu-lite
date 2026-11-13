@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Bugs in the firmware and in [occulited](https://github.com/hobbyquaker/occulited) (the web interface and the system service) both go here.
-        A security problem goes to the private report instead, see [SECURITY.md](https://github.com/hobbyquaker/openccu-lite/blob/main/SECURITY.md).
+        Bugs in the firmware and in [occulited](https://github.com/openccu-lite/occulited) (the web interface and the system service) both go here.
+        A security problem goes to the private report instead, see [SECURITY.md](https://github.com/openccu-lite/openccu-lite/blob/main/SECURITY.md).
   - type: dropdown
     id: component
     attributes:

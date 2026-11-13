@@ -2,11 +2,11 @@
 # how long are they supported? Is the JVM the newest Zulu build of its Java line, is HMIPServer older than the
 # one at the newest OpenCCU-Base version tag, and which
 # relevant OpenCCU-Base commits does OpenCCU's latest release build that our line lacks (findings), which
-# only OpenCCU's master (notes; from https://hobbyquaker.github.io/OpenCCU-Base/)?
+# only OpenCCU's master (notes; from https://openccu-lite.github.io/OpenCCU-Base/)?
 # Which upstream commits on the drivers does our piVCCU fork lack (against alexreinert/piVCCU)?
 # scripts/lite-upstream-versions.py reads the pins and compares them with upstream (the components and
 # the rule for "current" are in its header) and writes a report page, which this publishes on GitHub
-# Pages (source "GitHub Actions"): https://hobbyquaker.github.io/openccu-lite/, with badge.json for the
+# Pages (source "GitHub Actions"): https://openccu-lite.github.io/openccu-lite/, with badge.json for the
 # README's badge - green "up to date", yellow "updates available", grey "check failed".
 # The report has a column for the release marked Latest and, when there is a newer one, for the newest
 # pre-release; each reads the pins at its release tag (the script fetches a tag the shallow checkout
@@ -18,10 +18,10 @@
 # It only reports: no pull request, no issue, no commit.
 #
 # When a release is published (a pre-release too), the run first refreshes the OpenCCU-Base fork's
-# comparison (its filtered.yml, https://hobbyquaker.github.io/OpenCCU-Base/), whose report.json the
+# comparison (its filtered.yml, https://openccu-lite.github.io/OpenCCU-Base/), whose report.json the
 # report reads, and waits for that run and its Pages deployment; then the report runs. The scheduled
 # and the manual runs refresh it first as well. The dispatch in the other repository needs the secret
-# OCB_DISPATCH_TOKEN (a fine-grained token for hobbyquaker/OpenCCU-Base with Actions: read and write
+# OCB_DISPATCH_TOKEN (a fine-grained token for openccu-lite/OpenCCU-Base with Actions: read and write
 # only - GITHUB_TOKEN cannot dispatch there); without it the refresh is skipped with a notice and the
 # report reads the comparison of the fork's last scheduled run (every 6 hours).
 # The github-pages environment deploys from main only, and a release run's ref is its tag: so on a
@@ -61,7 +61,7 @@ jobs:
       - name: Refresh the OpenCCU-Base comparison and wait for it
         env:
           GH_TOKEN: ${{ secrets.OCB_DISPATCH_TOKEN }}
-          BASE_REPO: hobbyquaker/OpenCCU-Base
+          BASE_REPO: openccu-lite/OpenCCU-Base
         run: |
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
@@ -82,7 +82,7 @@ jobs:
             echo "$2 succeeded: https://github.com/$BASE_REPO/actions/runs/$1"
           }
           since=$(date -u -d '-30 seconds' +%Y-%m-%dT%H:%M:%SZ)
-          gh workflow run filtered.yml -R "$BASE_REPO" --ref main
+          gh workflow run filtered.yml -R "$BASE_REPO" --ref lite
           run=
           for _ in $(seq 1 30); do
             sleep 10

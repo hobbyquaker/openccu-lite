@@ -12,7 +12,7 @@
 # instead of starting a second daemon as root.
 [Unit]
 Description=Backup: create, and copy to the directory and share targets (%i)
-Documentation=https://github.com/hobbyquaker/openccu-lite
+Documentation=https://github.com/openccu-lite/openccu-lite
 # the timer's catch-up at boot waits for the boot; occulited writes the shares' mount units at its start
 After=multi-user.target occulited.service occu-usb-storage.target
 Wants=occu-backup-deliver@%i.service

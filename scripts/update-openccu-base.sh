@@ -28,7 +28,7 @@ function pin_type() {
 
 CURRENT_PIN_TYPE=$(pin_type "${CURRENT_ID}")
 # checked before anything is changed: the archive below is OpenCCU/OpenCCU-Base's. While
-# openccu-base is pinned to the fork hobbyquaker/OpenCCU-Base (openccu-lite tasks 348, 352: the
+# openccu-base is pinned to the fork openccu-lite/OpenCCU-Base (openccu-lite tasks 348, 352: the
 # build round's tag v1.0.0-<pre>.<N> on the fork's branch lite, set by the round, see the .mk),
 # set OPENCCU_BASE_SITE back to OpenCCU's archive macro by hand first.
 if [[ "${PACKAGE_SITE}" != *'$(call github,OpenCCU,OpenCCU-Base,'* ]]; then

@@ -59,7 +59,7 @@ tree() {
   printf 'ifeq ($(BR2_PACKAGE_RPI_EEPROM_RPI4),y)\n  RPI_EEPROM_FIRMWARE_PATH = firmware-2711/default/pieeprom-%s.bin\n' "$6" \
     >"$tmp/root/buildroot-external/package/rpi-eeprom/rpi-eeprom.mk"
   java_mk "$tmp/root/buildroot-external/package/java-azul/java-azul.mk" 21.52.203-ca-jre21.0.12.1
-  base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 '$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
+  base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 '$(call github,openccu-lite,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
   pv_mk v1.0.0
   git -C "$tmp/root" init -q
 }
@@ -111,7 +111,7 @@ zulu_eol() { # <eolFrom of 21> [isEol]
 }
 pv_mk() { # <GENERIC_RAW_UART_VERSION> [<GENERIC_RAW_UART_SITE>]
   mkdir -p "$tmp/root/buildroot-external/package/generic_raw_uart"
-  printf '# Generic raw uart\nGENERIC_RAW_UART_VERSION = %s\nGENERIC_RAW_UART_SITE = %s\n' "$1" "${2:-\$(call github,hobbyquaker,piVCCU,\$(GENERIC_RAW_UART_VERSION))}" \
+  printf '# Generic raw uart\nGENERIC_RAW_UART_VERSION = %s\nGENERIC_RAW_UART_SITE = %s\n' "$1" "${2:-\$(call github,openccu-lite,piVCCU,\$(GENERIC_RAW_UART_VERSION))}" \
     >"$tmp/root/buildroot-external/package/generic_raw_uart/generic_raw_uart.mk"
 }
 pv_cmp() { # <ref> <our commits on top> <how many we lack> [<sha:subject of a commit we lack>]...
@@ -180,7 +180,7 @@ base() { # a current world
   printf 'ref: refs/heads/rpi-6.18.y\tHEAD\naeadd6ed\tHEAD\n' >"$tmp/fx/rpi-head.txt"
   tags openccu-base-tags.txt 3.89.9 3.89.11 v1.0.0-rc.3 3.89.11.20260919 lts-1 4.0.0-rc1
   azul aarch64 21.52.203-ca-jre21.0.12.1 21.50.19-ca-jre21.0.11; azul x64 21.52.203-ca-jre21.0.12.1
-  contents hobbyquaker_OpenCCU-Base-v1.0.0-rc.3 $JAR_OURS; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_OURS
+  contents openccu-lite_OpenCCU-Base-v1.0.0-rc.3 $JAR_OURS; contents OpenCCU_OpenCCU-Base-3.89.11 $JAR_OURS
   echo '{"full_name": "homematicip/OpenCCU-Base", "default_branch": "main"}' >"$tmp/fx/eq3-repo.json"
   contents homematicip_OpenCCU-Base-main $JAR_OURS
   jar $JAR_OURS 1.60.1
@@ -228,8 +228,8 @@ print("eeprom", re.search(r"^\s*RPI_EEPROM_FIRMWARE_PATH\s*=\s*firmware-2711/\S*
 EOF
 [ $? -eq 0 ] && [ "$(grep -c '^firmware [0-9a-f]' "$tmp/pins")" -eq 2 ] \
   && grep -Eq '^rpi (stable_[0-9]+|[0-9a-f]{40}) (stable_[0-9]+|[0-9a-f]{40})' "$tmp/pins" && grep -q '^eeprom 20' "$tmp/pins" && grep -q '^vm [0-9]' "$tmp/pins" \
-  && grep -q '^java [0-9.]*[0-9][0-9.]*jre$' "$tmp/pins" && grep -q '^openccu-base hobbyquaker/OpenCCU-Base v[0-9][0-9]*\.[0-9]' "$tmp/pins" \
-  && grep -q '^pivccu v[0-9][0-9]*\.[0-9].* hobbyquaker,piVCCU$' "$tmp/pins" \
+  && grep -q '^java [0-9.]*[0-9][0-9.]*jre$' "$tmp/pins" && grep -q '^openccu-base openccu-lite/OpenCCU-Base v[0-9][0-9]*\.[0-9]' "$tmp/pins" \
+  && grep -q '^pivccu v[0-9][0-9]*\.[0-9].* openccu-lite,piVCCU$' "$tmp/pins" \
   && ok "the fork's pins: buildroot, kernels, firmware, rpi-eeprom, JVM, OpenCCU-Base" \
   || { bad "the fork's pins are not found"; sed 's/^/     /' "$tmp/pins"; }
 
@@ -250,13 +250,13 @@ grep -q '<html lang="de">' "$tmp/site/index.html" && grep -qF 'aktuell' "$tmp/si
   && grep -qF '</td><td></td><td><span class="ok">aktuell</span>' "$tmp/site/index.html" \
   && grep -qF '</td><td></td><td><span class="ok">up to date</span>' "$tmp/site/en.html" \
   && ok "no published support period: the cell stays empty" || bad "no published support period: the cell stays empty"
-grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 0 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 0 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
+grep -qF '<td><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 0 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
+  && grep -qF '<td><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && grep -qF '<td><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 0 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
+  && grep -qF '<td><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
   && ok "OpenCCU-Base: both counts name their OpenCCU build and link the commit report" || bad "OpenCCU-Base: both counts name their OpenCCU build and link the commit report"
-grep -qF '<a href="https://hobbyquaker.github.io/OpenCCU-Base/">der OpenCCU-Base-Commit-Bericht</a>' "$tmp/site/index.html" \
-  && grep -qF '<a href="https://hobbyquaker.github.io/OpenCCU-Base/">the OpenCCU-Base commit report</a>' "$tmp/site/en.html" \
+grep -qF '<a href="https://openccu-lite.github.io/OpenCCU-Base/">der OpenCCU-Base-Commit-Bericht</a>' "$tmp/site/index.html" \
+  && grep -qF '<a href="https://openccu-lite.github.io/OpenCCU-Base/">the OpenCCU-Base commit report</a>' "$tmp/site/en.html" \
   && ok "both pages link the OpenCCU-Base commit report" || bad "both pages link the OpenCCU-Base commit report"
 grep -qF '| JVM (Azul Zulu) | 21.0.12.1 (Zulu 21.52.203, JRE) | 21.0.12.1 (Zulu 21.52.203, JRE) | 2031-09 | up to date |' "$tmp/sum" \
   && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base 3.89.11) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU/OpenCCU-Base 3.89.11: 1.60.1 (the same jar) |  | up to date |' "$tmp/sum" \
@@ -389,8 +389,8 @@ base; rm "$tmp/root/buildroot-external/package/java-azul/java-azul.mk"; expect "
 
 # HMIPServer: the jar by its blob sha, the version by range
 base; tags openccu-base-tags.txt 3.89.12; contents OpenCCU_OpenCCU-Base-3.89.12 $JAR_THEIRS; jar $JAR_THEIRS 1.61.11-SNAPSHOT
-expect "HMIPServer: the newest OpenCCU-Base tag has a newer snapshot" 0 "$UPD" "OpenCCU-Base 3.89.12 has a newer HMIPServer, a snapshot: 1.61.11-SNAPSHOT (ours: 1.60.1) - see the OpenCCU-Base report https://hobbyquaker.github.io/OpenCCU-Base/"
-grep -qF '<li><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU-Base 3.89.12 hat einen neueren HMIPServer, einen Snapshot' "$tmp/site/index.html" \
+expect "HMIPServer: the newest OpenCCU-Base tag has a newer snapshot" 0 "$UPD" "OpenCCU-Base 3.89.12 has a newer HMIPServer, a snapshot: 1.61.11-SNAPSHOT (ours: 1.60.1) - see the OpenCCU-Base report https://openccu-lite.github.io/OpenCCU-Base/"
+grep -qF '<li><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU-Base 3.89.12 hat einen neueren HMIPServer, einen Snapshot' "$tmp/site/index.html" \
   && grep -qF '| HMIPServer | 1.60.1 (OpenCCU-Base 3.89.11) | homematicip/OpenCCU-Base main: 1.60.1 (the same jar) · OpenCCU/OpenCCU-Base 3.89.12: 1.61.11-SNAPSHOT (snapshot) |' "$tmp/sum" \
   && ok "HMIPServer: the snapshot finding links the OpenCCU-Base report, both versions shown" || bad "HMIPServer: the snapshot finding links the OpenCCU-Base report, both versions shown"
 base; contents homematicip_OpenCCU-Base-main $JAR_EQ3; jar $JAR_EQ3 1.61.11-SNAPSHOT
@@ -444,9 +444,9 @@ base; base_report 2026-10-24 'webui: default objects (#222)' 'rfd: a fix (#230)'
 expect "OpenCCU-Base: commits the OpenCCU release builds, one finding each" 0 "$UPD" "not taken yet: 2026-10-12 rfd: a fix (#230) https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000002"
 [ "$(grep -c "::warning::update available - $BREL" "$tmp/out")" -eq 2 ] \
   && grep -qF '<li><a href="https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000001">noch nicht übernommen: 2026-10-11 webui: default objects (#222)</a></li>' "$tmp/site/index.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 2 commit(s) missing</a></td>' "$tmp/site/en.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 2 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && grep -qF '<td><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 2 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && grep -qF '<td><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 2 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
+  && grep -qF '<td><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
   && ! grep -qF "$BMAS: " "$tmp/out" \
   && ok "OpenCCU-Base: two warnings, the subjects linked, the count linked; nothing counted twice for master" || bad "OpenCCU-Base: two warnings, the subjects linked, the count linked"
 # what only OpenCCU's master builds, or only OpenCCU-Base's main has, is no finding: the badge stays green
@@ -455,9 +455,9 @@ expect "OpenCCU-Base: commits only OpenCCU master builds are notes, the badge st
 ! grep -qF '::warning::' "$tmp/out" && grep -qF '**All current.**' "$tmp/sum" \
   && grep -qF "note - $BMAS: 1 more commit(s) on OpenCCU-Base main that OpenCCU master does not build yet" "$tmp/out" \
   && ! grep -qF 'rfd: brand new' "$tmp/out" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 2 commit(s) missing</a></td>' "$tmp/site/en.html" \
-  && grep -qF '<td><a href="https://hobbyquaker.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 2 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
+  && grep -qF '<td><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU 3.89.11.20260919 (OpenCCU-Base 3.89.11): 0 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && grep -qF '<td><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 2 commit(s) missing</a></td>' "$tmp/site/en.html" \
+  && grep -qF '<td><a href="https://openccu-lite.github.io/OpenCCU-Base/">OpenCCU master (OpenCCU-Base 79d0a44a28): 2 Commit(s) fehlen</a></td>' "$tmp/site/index.html" \
   && grep -qF '<li class="note"><a href="https://github.com/OpenCCU/OpenCCU-Base/commit/0000000000000000000000000000000000000001">in OpenCCU master, in keinem Release: 2026-10-11 licenses: a note (#342)</a></li>' "$tmp/site/index.html" \
   && [ "$(grep -c "$ICON" "$tmp/site/en.html")" -eq 10 ] \
   && ok "OpenCCU-Base: master's commits linked notes, main's only counted, every row with its check disc" || { bad "OpenCCU-Base: master's commits linked notes, main's only counted"; cat "$tmp/out"; }
@@ -482,7 +482,7 @@ PVR='piVCCU drivers (our fork against alexreinert)'
 base; expect "piVCCU: nothing missing is current, our own commits on top are no finding" 0 "up to date" "all current"
 grep -qF "| $PVR | v1.0.0: 4 ahead, 0 behind | alexreinert/piVCCU master: 0 driver commit(s) missing |  | up to date |" "$tmp/sum" \
   && grep -qF '<td>v1.0.0: 4 voraus, 0 zurück ' "$tmp/site/index.html" \
-  && grep -qF '<a href="https://github.com/hobbyquaker/piVCCU/compare/v1.0.0...alexreinert:master">alexreinert/piVCCU master: 0 Treiber-Commit(s) fehlen</a>' "$tmp/site/index.html" \
+  && grep -qF '<a href="https://github.com/openccu-lite/piVCCU/compare/v1.0.0...alexreinert:master">alexreinert/piVCCU master: 0 Treiber-Commit(s) fehlen</a>' "$tmp/site/index.html" \
   && grep -qF 'piVCCU-Treiber (unser Fork gegen alexreinert)' "$tmp/site/index.html" \
   && ! grep -qF 'pivccu-kernel' "$tmp/out" \
   && ok "piVCCU: the row in the summary and on the page, no driver list asked for when nothing is missing" || { bad "piVCCU: the row"; grep -F piVCCU "$tmp/sum"; }
@@ -515,11 +515,11 @@ grep -qF "| $PVR | v1.0.0: 4 ahead, 0 behind | v1.1.0-dev.0: 6 ahead, 1 behind |
   && grep -qF '<td>v1.1.0-dev.0: 6 ahead, 1 behind <span class="due">update available</span><ul><li><a href="https://github.com/alexreinert/piVCCU/commit/aa01">' "$tmp/site/en.html" \
   && ok "piVCCU: one cell per release, the pre-release's finding in its cell" || { bad "piVCCU: one cell per release"; grep -F piVCCU "$tmp/sum"; }
 base; rm "$tmp/fx/pivccu-compare-v1.0.0.json"; expect "piVCCU: the compare unreachable, or the tag does not exist: exit 3" 3 "check failed" "pivccu-compare-v1.0.0.json"
-base; echo '{"message": "Not Found"}' >"$tmp/fx/pivccu-compare-v1.0.0.json"; expect "piVCCU: a compare without its numbers: exit 3" 3 "check failed" "hobbyquaker/piVCCU v1.0.0 against alexreinert/piVCCU master"
+base; echo '{"message": "Not Found"}' >"$tmp/fx/pivccu-compare-v1.0.0.json"; expect "piVCCU: a compare without its numbers: exit 3" 3 "check failed" "openccu-lite/piVCCU v1.0.0 against alexreinert/piVCCU master"
 base; rm "$tmp/fx/pivccu-head.txt"; expect "piVCCU: upstream's HEAD unreachable: exit 3" 3 "check failed" "pivccu-head.txt"
 base; pv_cmp v1.0.0 4 1 'aa01:kernel: a fix'; rm -f "$tmp/fx/pivccu-kernel.json"; expect "piVCCU: the driver commits unreachable: exit 3" 3 "check failed" "pivccu-kernel.json"
 base; pv_mk v1.0.0 'https://example.org/x.tar.gz'; expect "piVCCU: our generic_raw_uart.mk not on GitHub: exit 2" 2 "check failed" "generic_raw_uart.mk"
-base; pv_mk v1.0.0 '$(call github,alexreinert,piVCCU,$(GENERIC_RAW_UART_VERSION))'; expect "piVCCU: built from another repository: exit 2" 2 "check failed" "not hobbyquaker/piVCCU"
+base; pv_mk v1.0.0 '$(call github,alexreinert,piVCCU,$(GENERIC_RAW_UART_VERSION))'; expect "piVCCU: built from another repository: exit 2" 2 "check failed" "not openccu-lite/piVCCU"
 
 # the release columns: each from its tag, one for Latest, a second only for a newer pre-release
 base; expect "one release: one column" 0 "up to date" "all current"
@@ -592,9 +592,9 @@ expect "a release tag not in the checkout: exit 2" 2 "check failed" "release tag
 base; echo '{"message": "Not Found"}' >"$tmp/fx/gh-release-latest.json"
 expect "no latest release: exit 3" 3 "check failed" "no latest release"
 # the OpenCCU-Base row: exact only for the release that pins the report's lite commit
-base; AUTOTAG=0; base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v0.9.0 '$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
-contents hobbyquaker_OpenCCU-Base-v0.9.0 $JAR_OURS; snap_tag v1.0.0
-base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 '$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
+base; AUTOTAG=0; base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v0.9.0 '$(call github,openccu-lite,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
+contents openccu-lite_OpenCCU-Base-v0.9.0 $JAR_OURS; snap_tag v1.0.0
+base_mk "$tmp/root/buildroot-external/package/openccu-base/openccu-base.mk" v1.0.0-rc.3 '$(call github,openccu-lite,OpenCCU-Base,$(OPENCCU_BASE_VERSION))'
 snap_tag v1.1.0-dev.0; gh_releases v1.0.0 v1.1.0-dev.0:true:false v1.0.0
 expect "OpenCCU-Base: an older pin than lite's is a note" 0 "up to date" "this release pins v0.9.0 (8b96a44a74)"
 grep -qF '<td>OpenCCU-Base v0.9.0 (8b96a44a74), not lite&#x27;s line (d771beda34) <span class="note">not measured exactly</span></td><td>lite at: libXmlRpc: regenerate (#190) (2026-10-13) '"$ICON" "$tmp/site/en.html" \

@@ -1,5 +1,5 @@
 #!/bin/sh
-# openccu-lite (task 327, hobbyquaker/openccu-lite#4): the host name of a fresh install.
+# openccu-lite (task 327, openccu-lite/openccu-lite#4): the host name of a fresh install.
 #
 # OpenCCU's netconfig template names every system "openccu", so a fresh openccu-lite registered
 # with the router under OpenCCU's name, and two of them under the same one. openccu-lite's

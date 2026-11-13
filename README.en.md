@@ -5,8 +5,8 @@
   </picture>
 </h1>
 
-[![stable release](https://img.shields.io/github/v/release/hobbyquaker/openccu-lite?label=stable)](https://github.com/hobbyquaker/openccu-lite/releases/latest)
-[![upstream versions](https://img.shields.io/endpoint?url=https://hobbyquaker.github.io/openccu-lite/badge.json)](https://hobbyquaker.github.io/openccu-lite/en.html)
+[![stable release](https://img.shields.io/github/v/release/openccu-lite/openccu-lite?label=stable)](https://github.com/openccu-lite/openccu-lite/releases/latest)
+[![upstream versions](https://img.shields.io/endpoint?url=https://openccu-lite.github.io/openccu-lite/badge.json)](https://openccu-lite.github.io/openccu-lite/en.html)
 
 [:de: Deutsches README](README.md)
 
@@ -71,17 +71,17 @@ possible.
 
 These addons cannot be installed on a CCU3 or on OpenCCU.
 
-- [lite-addon-forwarder](https://github.com/hobbyquaker/lite-addon-forwarder) - forwarding events and system data to
+- [lite-addon-forwarder](https://github.com/openccu-lite/lite-addon-forwarder) - forwarding events and system data to
   InfluxDB, Prometheus, Elasticsearch, SQL databases, syslog, Loki, webhooks and more
-- [lite-addon-nut](https://github.com/hobbyquaker/lite-addon-nut) - a NUT client: shuts the system down in time when the
+- [lite-addon-nut](https://github.com/openccu-lite/lite-addon-nut) - a NUT client: shuts the system down in time when the
   UPS reports a power failure
-- [lite-addon-snmp](https://github.com/hobbyquaker/lite-addon-snmp) - an SNMP agent with data from the Homematic devices
+- [lite-addon-snmp](https://github.com/openccu-lite/lite-addon-snmp) - an SNMP agent with data from the Homematic devices
   and interfaces, traps
-- [lite-addon-tailscale](https://github.com/hobbyquaker/lite-addon-tailscale) - remote access to the system over a
+- [lite-addon-tailscale](https://github.com/openccu-lite/lite-addon-tailscale) - remote access to the system over a
   Tailscale network, also with your own Headscale
-- [lite-addon-tools](https://github.com/hobbyquaker/lite-addon-tools) - debugging and admin tools for the command line
+- [lite-addon-tools](https://github.com/openccu-lite/lite-addon-tools) - debugging and admin tools for the command line
   (SSH): tcpdump, nmap, strace, htop, mtr, socat, tmux, nano and more
-- [lite-addon-wireguard](https://github.com/hobbyquaker/lite-addon-wireguard) - remote access to the system over a
+- [lite-addon-wireguard](https://github.com/openccu-lite/lite-addon-wireguard) - remote access to the system over a
   WireGuard VPN
 
 More addons are in the catalogue. How addons work on openccu-lite, and how an existing CCU addon can be adapted, is
@@ -89,13 +89,13 @@ described in [Addons](docs/addons.md).
 
 ## Installation
 
-The releases are at [github.com/hobbyquaker/openccu-lite/releases](https://github.com/hobbyquaker/openccu-lite/releases).
+The releases are at [github.com/openccu-lite/openccu-lite/releases](https://github.com/openccu-lite/openccu-lite/releases).
 
 - **Raspberry Pi 3/4:** unpack the release's `.zip` and write the `.img` inside it to the SD card.
 - **Virtual machine:** import the `.ova` (Proxmox, VMware, VirtualBox and so on).
 - **Proxmox by script:** as root on the Proxmox VE host, a script creates the VM in one step (`--help` lists the
   options):
-  `bash -c "$(wget -qLO - https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh)"`
+  `bash -c "$(wget -qLO - https://raw.githubusercontent.com/openccu-lite/openccu-lite/main/scripts/install-proxmox.sh)"`
 
 ## Switching from (Open)CCU to openccu-lite
 
@@ -114,7 +114,7 @@ way; a new installation with an import of the old backup is for new hardware. Ev
 On the web interface's *Updates* page: *Check now*, *Download and stage*, *Reboot and install*. Before the install a
 backup is written to the configured backup targets and the checksum is verified. Over SSH the same works with
 `occulited update check` and `occulited update install`
-([commands and options](https://github.com/hobbyquaker/occulited/blob/master/docs/config.md)).
+([commands and options](https://github.com/openccu-lite/occulited/blob/master/docs/config.md)).
 
 Which versions are offered is configurable: **stable** (finished releases only, the default), **beta** (beta and
 release candidate versions as well) or **dev** (everything, development builds too).
@@ -124,16 +124,16 @@ release candidate versions as well) or **dev** (everything, development builds t
 - **Every new HMIPServer from eQ-3 brings a new release** of openccu-lite, so that new HmIP devices and eQ-3's fixes
   arrive quickly. A new HMIPServer always raises the major version.
 - **The interface processes rfd, hs485d and multimacd** come from an
-  [own fork of OpenCCU-Base](https://github.com/hobbyquaker/OpenCCU-Base). It is meant to stay as close to OpenCCU as
-  possible; a [comparison](https://hobbyquaker.github.io/OpenCCU-Base/) shows which of OpenCCU's changes are already in.
+  [own fork of OpenCCU-Base](https://github.com/openccu-lite/OpenCCU-Base). It is meant to stay as close to OpenCCU as
+  possible; a [comparison](https://openccu-lite.github.io/OpenCCU-Base/) shows which of OpenCCU's changes are already in.
 - **The radio module drivers from piVCCU** (such as `generic_raw_uart` and `hb_rf_eth`) come from an
-  [own fork](https://github.com/hobbyquaker/piVCCU). It is meant to stay as close as possible to
+  [own fork](https://github.com/openccu-lite/piVCCU). It is meant to stay as close as possible to
   [Alexander Reinert's original](https://github.com/alexreinert/piVCCU).
 - **From Buildroot 2027.02 on, openccu-lite is based on Buildroot's LTS versions.** They get security updates for
   longer; in between the system stays on a maintained base, and their point releases can be taken over with little
   effort.
 - Whether the components are current (Buildroot, kernel, firmware, Java, HMIPServer, OpenCCU-Base) is shown by an
-  [overview](https://hobbyquaker.github.io/openccu-lite/en.html) renewed every day.
+  [overview](https://openccu-lite.github.io/openccu-lite/en.html) renewed every day.
 
 ## Documentation
 
@@ -147,7 +147,7 @@ release candidate versions as well) or **dev** (everything, development builds t
 - [Local key mode for HmIP](docs/lokaler-schluesselmodus.md): offline-capable, radio module swaps without eQ-3's key
   server (German)
 - [Certificates](docs/tls-acme.md) (your own or automatically via ACME)
-- [occulite-backup](https://github.com/hobbyquaker/occulite-backup): download the backups of one or more systems from
+- [occulite-backup](https://github.com/openccu-lite/occulite-backup): download the backups of one or more systems from
   cron or a timer
 
 **Security and privacy**
@@ -159,15 +159,15 @@ release candidate versions as well) or **dev** (everything, development builds t
 - [Porting kit: from ReGa to openccu-lite](docs/porting-from-rega.md)
 - [ccu-addon-kit](https://github.com/hobbyquaker/ccu-addon-kit): settings page, service control and Go building blocks
   for addons
-- [occulite-client](https://github.com/hobbyquaker/occulite-client): the client for openccu-lite's APIs (npm)
-- [occulited](https://github.com/hobbyquaker/occulited): the system service; its
-  [documentation](https://github.com/hobbyquaker/occulited/tree/master/docs) describes the metadata, system and auth
+- [occulite-client](https://github.com/openccu-lite/occulite-client): the client for openccu-lite's APIs (npm)
+- [occulited](https://github.com/openccu-lite/occulited): the system service; its
+  [documentation](https://github.com/openccu-lite/occulited/tree/master/docs) describes the metadata, system and auth
   APIs, `occulited.json`, the addon manifest and the catalogue
 
 ## Bugs and help
 
 Bugs and wishes, for the firmware and for occulited alike: this repository's
-[issue tracker](https://github.com/hobbyquaker/openccu-lite/issues) ([SUPPORT.md](SUPPORT.md)); security problems as
+[issue tracker](https://github.com/openccu-lite/openccu-lite/issues) ([SUPPORT.md](SUPPORT.md)); security problems as
 described in [SECURITY.md](SECURITY.md). OpenCCU's tracker and forum section are for OpenCCU, please do not report
 openccu-lite's problems there.
 

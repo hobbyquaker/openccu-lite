@@ -5,15 +5,15 @@
 # VM id, CPU, memory, machine type, network (bridge, VLAN, MAC address) and disk size (the system grows its data partition to the
 # disk at the first boot), passes a Homematic radio stick through if asked, and starts the VM.
 #
-# https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh
+# https://raw.githubusercontent.com/openccu-lite/openccu-lite/main/scripts/install-proxmox.sh
 #
 # Based on OpenCCU's install-proxmox.sh, Copyright (c) 2022-2026 Jens Maus <mail@jens-maus.de>
 # (inspired by https://github.com/whiskerz007/proxmox_hassos_install). Apache 2.0 License applies.
 #
 # Usage, on the Proxmox host as root:
-#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh)"
+#   bash -c "$(wget -qLO - https://raw.githubusercontent.com/openccu-lite/openccu-lite/main/scripts/install-proxmox.sh)"
 # or with options:
-#   wget -qO install-proxmox.sh https://raw.githubusercontent.com/hobbyquaker/openccu-lite/main/scripts/install-proxmox.sh
+#   wget -qO install-proxmox.sh https://raw.githubusercontent.com/openccu-lite/openccu-lite/main/scripts/install-proxmox.sh
 #   bash install-proxmox.sh --help
 #
 
@@ -22,7 +22,7 @@ set -o nounset
 set -o pipefail
 
 SCRIPT_VERSION="1.1"
-REPO="hobbyquaker/openccu-lite"
+REPO="openccu-lite/openccu-lite"
 API="https://api.github.com/repos/${REPO}"
 ASSET_PLATFORM="x86_64-ova"
 

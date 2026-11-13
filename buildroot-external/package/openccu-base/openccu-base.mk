@@ -5,7 +5,7 @@
 ################################################################################
 
 # OpenCCU-Base 3.89.11 plus five fixes from its main branch, cherry-picked (-x) onto the branch
-# lite of the fork hobbyquaker/OpenCCU-Base (openccu-lite task 348): libXmlRpc #138 (nested
+# lite of the fork openccu-lite/OpenCCU-Base (openccu-lite task 348): libXmlRpc #138 (nested
 # system.multicall) and #140 (BIN-RPC length fields), rfd #115 and #116 (serial read errors),
 # eq3_char_loop 1.6 #112 (hang up slaves when their master closes); and four fixes of our own for
 # OpenCCU-Base's issues, offered upstream: rfd and hs485d end cleanly on SIGTERM, rfd's USB and
@@ -34,7 +34,7 @@ OPENCCU_BASE_COMPAT_VERSION = 3.89.11
 # cannot reach the image, and the extract fails when an entry names nothing in the archive
 # (openccu-lite task 335). The list is the one place that says what openccu-lite takes from
 # OpenCCU-Base; package/eq3_char_loop prunes the same way.
-OPENCCU_BASE_SITE = $(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))
+OPENCCU_BASE_SITE = $(call github,openccu-lite,OpenCCU-Base,$(OPENCCU_BASE_VERSION))
 OPENCCU_BASE_SITE_METHOD = wget
 OPENCCU_BASE_PATHS_FILE = $(OPENCCU_BASE_PKGDIR)/openccu-base-paths.txt
 # python3 is one of buildroot's own host prerequisites, so it is there before any host package

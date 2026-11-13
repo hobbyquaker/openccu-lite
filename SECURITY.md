@@ -11,7 +11,7 @@ pre-releases of 1.1.0 (`1.1.0-dev.<N>`) follow `main`. There is no maintained ol
 
 ## Reporting a vulnerability
 
-Please report it privately, through GitHub's **[Report a vulnerability](https://github.com/hobbyquaker/openccu-lite/security/advisories/new)**
+Please report it privately, through GitHub's **[Report a vulnerability](https://github.com/openccu-lite/openccu-lite/security/advisories/new)**
 form (the repository's *Security* tab), not as a public issue. Say which release you run (the
 Updates page shows it), what an attacker needs (network access, a user account, an addon) and how to
 reproduce it. You get an answer as soon as possible; a fix is released and the advisory published

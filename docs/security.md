@@ -5,8 +5,8 @@ How openccu-lite protects the system, what it leaves to you, and what is known t
 mechanisms at each boundary in detail; [security-asvs.md](security-asvs.md) — the code against OWASP ASVS 5.0
 Level 2, row by row; [security-en303645.md](security-en303645.md) — the product against ETSI EN 303 645. Reporting a
 vulnerability: [SECURITY.md](../SECURITY.md). The API's routes, scopes and files are in occulited's
-[system-api.md](https://github.com/hobbyquaker/occulited/blob/master/docs/system-api.md) and
-[config.md](https://github.com/hobbyquaker/occulited/blob/master/docs/config.md).
+[system-api.md](https://github.com/openccu-lite/occulited/blob/master/docs/system-api.md) and
+[config.md](https://github.com/openccu-lite/occulited/blob/master/docs/config.md).
 
 - [Overview](#overview)
 - [What listens where](#what-listens-where)
@@ -161,7 +161,7 @@ breached passwords ([security-asvs.md](security-asvs.md) V6.2 says why).
   `meta:write`, `system:read`, `logs:read`, `system:write`, `addons:write`, `power`, `backup`, `led`, `radio:keys`,
   `auth:admin`, the RPC tiers `rpc:read` … `rpc:admin`, or Full access (`*`) — and optionally an expiry and the
   address ranges it may come from. The route table and what each scope opens are in
-  [system-api.md → Scopes](https://github.com/hobbyquaker/occulited/blob/master/docs/system-api.md#scopes). A token
+  [system-api.md → Scopes](https://github.com/openccu-lite/occulited/blob/master/docs/system-api.md#scopes). A token
   is sent as `Authorization: Bearer` or as the password of HTTP basic authentication (for XML-RPC libraries) — **never
   in the URL**: since 1.3.0 the API reads no credential from `?sid=`, neither a token nor a session id, and answers
   such a request `401` with a message that names the header. `?sid=` lives on under `/addons/` alone, where the gate

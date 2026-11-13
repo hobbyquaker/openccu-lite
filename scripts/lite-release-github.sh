@@ -21,12 +21,12 @@
 #     same name is deleted first, three tries, and the uploaded size and GitHub's sha256 digest must
 #     match the local file.
 # No sources archive: the sources are available on request (decision of 2026-09-25).
-# Needs: GH_TOKEN (a fine-grained token for hobbyquaker/openccu-lite, Contents read and write),
+# Needs: GH_TOKEN (a fine-grained token for openccu-lite/openccu-lite, Contents read and write),
 # curl, python3, sha256sum. --dry-run does every local check and the read-only GitHub checks, and
 # writes nothing to GitHub.
 #
 # Environment (defaults for the build host): TREE (/ssd/build/openccu-lite-3899), PRODUCTS
-# ("aarch64-rpi3 aarch64-rpi4 x86_64-ova"), GH_REPO (hobbyquaker/openccu-lite), GH_API
+# ("aarch64-rpi3 aarch64-rpi4 x86_64-ova"), GH_REPO (openccu-lite/openccu-lite), GH_API
 # (https://api.github.com), GH_UPLOADS (https://uploads.github.com), STAGE (a new temporary
 # directory, removed on exit; a STAGE given is kept).
 set -euo pipefail
@@ -38,7 +38,7 @@ V="$1"
 SHA="$2"
 TREE="${TREE:-/ssd/build/openccu-lite-3899}"
 PRODUCTS="${PRODUCTS:-aarch64-rpi3 aarch64-rpi4 x86_64-ova}"
-GH_REPO="${GH_REPO:-hobbyquaker/openccu-lite}"
+GH_REPO="${GH_REPO:-openccu-lite/openccu-lite}"
 GH_API="${GH_API:-https://api.github.com}"
 GH_UPLOADS="${GH_UPLOADS:-https://uploads.github.com}"
 # a STAGE of our own goes on every exit (B-306: each release left a few MB in the runner's /tmp);
@@ -176,7 +176,7 @@ python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d["status"] i
 say "GitHub's main contains $SHA"
 
 # occulited's tag v$V goes to GitHub with the release, before it: the notes link it
-OREPO="${OCCULITED_REPO:-hobbyquaker/occulited}"
+OREPO="${OCCULITED_REPO:-openccu-lite/occulited}"
 oref=$(api GET "/repos/$OREPO/git/ref/tags/v$V") || fail "$OREPO has no tag v$V on GitHub: push occulited's tag first"
 otarget=$(python3 -c '
 import json, sys
@@ -206,7 +206,7 @@ if [ "$dry" = 1 ]; then
 fi
 
 if [ -z "$ID" ]; then
-  OCC_NOTE="occulited [\`${PIN:0:7}\`](https://github.com/hobbyquaker/occulited/tree/v$V)"
+  OCC_NOTE="occulited [\`${PIN:0:7}\`](https://github.com/openccu-lite/occulited/tree/v$V)"
   body=$(cat <<EOF
 openccu-lite $V: a Homematic CCU firmware without ReGaHSS, built on OpenCCU $BASE, with $OCC_NOTE. **Alpha software** — read the [README](https://github.com/$GH_REPO/blob/$SHA/README.en.md) first.
 

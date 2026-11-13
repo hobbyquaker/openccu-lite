@@ -3,7 +3,7 @@
 # occulited - the openccu-lite system service (lite-only)
 #
 # Built from GitHub's source archive of the occulited repository
-# (github.com/hobbyquaker/occulited) at a pinned commit, vendored by buildroot's
+# (github.com/openccu-lite/occulited) at a pinned commit, vendored by buildroot's
 # Go infrastructure at download time. Everything installed here comes out of that archive: the Go binary
 # (the web UI is embedded from internal/ui/dist, which the repository commits
 # so that this build needs no Node), deploy/lighttpd/*, deploy/init/* and the
@@ -12,7 +12,7 @@
 ################################################################################
 
 OCCULITED_VERSION = c671c9dce99613a64c71cc3dfba9bd164e078dc6
-OCCULITED_SITE = $(call github,hobbyquaker,occulited,$(OCCULITED_VERSION))
+OCCULITED_SITE = $(call github,openccu-lite,occulited,$(OCCULITED_VERSION))
 OCCULITED_LICENSE = GPL-3.0-only
 OCCULITED_LICENSE_FILES = LICENSE
 # openccu-base is a dependency for the install order, not for the build: buildroot installs the

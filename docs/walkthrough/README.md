@@ -3,7 +3,7 @@
 Dieser Rundgang zeigt jede Seite der Weboberfläche von openccu-lite in der Reihenfolge, in der Sie ihr auf einem neuen
 System begegnen: Einrichtung und Anmeldung, die Statusseite, die Bedienung, die Seiten im Menü **System**, die
 Zusatzsoftware mit dem Homematic Manager und zuletzt Namen, Räume und Gewerke. Die Oberfläche kommt von
-[occulited](https://github.com/hobbyquaker/occulited), dem Systemdienst von openccu-lite; sie ist auf Deutsch und
+[occulited](https://github.com/openccu-lite/occulited), dem Systemdienst von openccu-lite; sie ist auf Deutsch und
 Englisch verfügbar und hat ein helles und ein dunkles Design (Einstellungen → Design, oder wie das Betriebssystem es
 vorgibt). Jedes Bild gibt es in beiden Designs: Ihr Browser zeigt das, das zu seiner eigenen Einstellung passt.
 
@@ -360,7 +360,7 @@ oder den Verlauf.
 - **Sicherung erstellen:** eine Sicherung sofort herunterladen.
 - **Sicherungsziele:** jede Nacht automatisch auf ein USB-Verzeichnis, eine Netzwerkfreigabe oder einen SSH-Server
   (SFTP), mit Test, „Jetzt sichern“ und der Liste der Sicherungen dort. Von einem Server oder NAS aus holt
-  [occulite-backup](https://github.com/hobbyquaker/occulite-backup) die Sicherung mit einem API-Token ab.
+  [occulite-backup](https://github.com/openccu-lite/occulite-backup) die Sicherung mit einem API-Token ab.
 - **Sicherung einspielen oder importieren:** eine Sicherung hochladen und prüfen; der Abschnitt „Diese Datei“ sagt,
   was sie ist und was sie enthält. Eine Sicherung von openccu-lite wird eingespielt („Auf dieses System einspielen“)
   und ersetzt alles unter `/usr/local`. Eine Sicherung einer CCU, von OpenCCU oder RaspberryMatic wird importiert („In

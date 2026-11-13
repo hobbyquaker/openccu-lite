@@ -8,8 +8,8 @@ the system — and a `tclrega.so` shim for the one call every addon settings pag
 check).
 
 This document is the mapping. The copy-paste prompt for a coding agent is
-[PORTING-PROMPT.md](PORTING-PROMPT.md); the normative API is [meta-api.md](https://github.com/hobbyquaker/occulited/blob/master/docs/meta-api.md), the
-file format [meta-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/meta-format.md), and the test data [`occulited/fixtures/`](https://github.com/hobbyquaker/occulited/tree/master/fixtures/).
+[PORTING-PROMPT.md](PORTING-PROMPT.md); the normative API is [meta-api.md](https://github.com/openccu-lite/occulited/blob/master/docs/meta-api.md), the
+file format [meta-format.md](https://github.com/openccu-lite/occulited/blob/master/docs/meta-format.md), and the test data [`occulited/fixtures/`](https://github.com/openccu-lite/occulited/tree/master/fixtures/).
 
 ## The one rule
 
@@ -99,7 +99,7 @@ Be blunt in your README about this; it saves everyone a round trip.
   addon should expose the feature as "not available on this system" — not as an error every 30 s.
 - **`exec()`** of HM-Script, `dom.GetObject`, `system.GetSessionVarStr` from your own code: gone.
   The *Tcl* form `rega_script` used by addon settings pages for the **session check** keeps working
-  (`tclrega.so` shim, [occulited/deploy/tclrega](https://github.com/hobbyquaker/occulited/tree/master/deploy/tclrega/)): it answers exactly that call and
+  (`tclrega.so` shim, [occulited/deploy/tclrega](https://github.com/openccu-lite/occulited/tree/master/deploy/tclrega/)): it answers exactly that call and
   errors on anything else. Do not build on the shim for more than the session check.
 - **ReGa ids** (`dom.GetObject(1234)`): there are none. Refs are the identity.
 - **Service messages / alarms** (variables 40 and 41): no ReGa variables; the system collects the service

@@ -4,7 +4,7 @@
 
 - Everything authored for openccu-lite in this repository is under the Apache License 2.0
   ([LICENSE](LICENSE)), as upstream OpenCCU's own work is.
-- The system service [occulited](https://github.com/hobbyquaker/occulited), which the image builds from its own
+- The system service [occulited](https://github.com/openccu-lite/occulited), which the image builds from its own
   repository, is under the GPL-3.0-only.
 - **eQ-3's software** — the OCCU payloads (`rfd`, `hs485d`, `multimacd`, `hmipserver` and their
   files), fetched at build time with OpenCCU-Base as upstream does — keeps eQ-3's terms, the

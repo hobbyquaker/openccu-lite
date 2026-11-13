@@ -77,7 +77,7 @@
 #                         an older one shows its pin, lite's commits above the line as a lower bound, a
 #                         note, and "not measured exactly" instead of the check mark.
 #   piVCCU drivers        GENERIC_RAW_UART_VERSION of package/generic_raw_uart, the tag of our fork
-#                         hobbyquaker/piVCCU (openccu-lite tags it with each release, so a release column's
+#                         openccu-lite/piVCCU (openccu-lite tags it with each release, so a release column's
 #                         pin is the fork's tag of that name), compared with the default branch of
 #                         PIVCCU_UP (alexreinert/piVCCU; OpenCCU/piVCCU is a separate line and not compared):
 #                         ahead and behind, from GitHub's compare API (all three are one fork network, so
@@ -146,7 +146,7 @@ BUILDROOT_EOL_WARN_DAYS = 14         # a quarterly series: supported about four 
 BUILDROOT_LTS_EOL_WARN_MONTHS = 6    # an LTS series: supported three years, warn six months ahead
 BUILDROOT_DOWNLOAD = "https://buildroot.org/download.html"
 NO_PERIOD = ("", "")   # no published support period: the cell stays empty
-PAGE = "https://hobbyquaker.github.io/openccu-lite/"
+PAGE = "https://openccu-lite.github.io/openccu-lite/"
 BASE_UP = "OpenCCU/OpenCCU-Base"   # the OpenCCU-Base our fork follows
 BASE_TAG_RE = re.compile(r"^\d+\.\d+\.\d+$")   # its version tags, e.g. 3.89.11
 BASE_TAGS_SCAN = 10   # how many of its newest version tags are searched for the tag our jar comes from
@@ -158,10 +158,10 @@ HMIP_POM = "META-INF/maven/de.eq3.cbcs.server/server-core/pom.properties"
 ZULU_EOL = "https://endoflife.date/api/v1/products/azul-zulu/"
 AZUL_API = "https://api.azul.com/metadata/v1/zulu/packages/"
 AZUL_ARCHES = ["aarch64", "x64"]   # the architectures java-azul.mk downloads (linux_aarch64, linux_x64)
-BASE_REPORT = "https://hobbyquaker.github.io/OpenCCU-Base/"
+BASE_REPORT = "https://openccu-lite.github.io/OpenCCU-Base/"
 EQ3_BASE = "homematicip/OpenCCU-Base"   # eQ-3's own OpenCCU-Base repository
 BASE_REPORT_STALE_DAYS = 2
-PIVCCU_FORK = "hobbyquaker/piVCCU"
+PIVCCU_FORK = "openccu-lite/piVCCU"
 PIVCCU_UP = "alexreinert/piVCCU"
 PIVCCU_MK = "buildroot-external/package/generic_raw_uart/generic_raw_uart.mk"
 PIVCCU_DRIVERS = "kernel"
@@ -358,7 +358,7 @@ def read(root, rel):
 
 # ---- the releases the report has a column for
 
-RELEASES_REPO = "hobbyquaker/openccu-lite"
+RELEASES_REPO = "openccu-lite/openccu-lite"
 SEMVER_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$")
 PRE_RANK = {"dev": 1, "alpha": 2, "beta": 3, "rc": 4}   # our pre-release order; any other word ranks below them
 

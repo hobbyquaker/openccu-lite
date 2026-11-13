@@ -15,7 +15,7 @@ on OpenCCU simply comes along.
 > service does not answer, the script installs on its own as before.
 
 > **Where the declarations live:** an addon describes itself in its own manifest, `openccu-lite.json`
-> at the root of its archive ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)): its `ui` facts and its `runtime`
+> at the root of its archive ([manifest-format.md](https://github.com/openccu-lite/occulited/blob/master/docs/manifest-format.md)): its `ui` facts and its `runtime`
 > block. The system reads it at every install and update; the catalogue only says where an addon's
 > manifest is.
 
@@ -25,10 +25,10 @@ an addon does through the radio interfaces (XML-RPC/BIN-RPC on the loopback), th
 through openccu-lite's own metadata API keeps working.
 
 - The **catalogue** — which addons are known to work, and how their entries are written — is
-  [catalog-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/catalog-format.md).
+  [catalog-format.md](https://github.com/openccu-lite/occulited/blob/master/docs/catalog-format.md).
 - **Porting** an addon away from ReGa is [PORTING-PROMPT.md](PORTING-PROMPT.md) and
   [porting-from-rega.md](porting-from-rega.md).
-- The **API** behind the Addons page is in [system-api.md](https://github.com/hobbyquaker/occulited/blob/master/docs/system-api.md).
+- The **API** behind the Addons page is in [system-api.md](https://github.com/openccu-lite/occulited/blob/master/docs/system-api.md).
 
 ## Enabled and disabled
 
@@ -200,7 +200,7 @@ CCU's *Systemsteuerung* button into its app — `settings.cgi` checks the sessio
 browser over to the frontend with its token cookie — and its settings are `settings.cgi?cmd=config`.
 On openccu-lite the frontend has its own menu entry, and the `Config-Url` is what the shell frames
 behind ⚙ and the *Settings* button, so the addon's manifest names the settings page in
-`ui.settings_url` ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)); `GET /addons` answers it as
+`ui.settings_url` ([manifest-format.md](https://github.com/openccu-lite/occulited/blob/master/docs/manifest-format.md)); `GET /addons` answers it as
 `config_url`. An addon on openccu-lite is better off writing the settings page itself as its
 `Config-Url` (its `update_script` knows the firmware from `/VERSION`); the manifest key covers the
 versions that do not.
@@ -397,7 +397,7 @@ cannot bring its own unit any more.
   generator used it as the addon's unit at the next boot, and an `ExecStartPre=+…` or `User=root`
   line in it ran as root.
 - **What an addon needs beyond the generated unit** is declared in its manifest
-  ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md), `runtime`): capabilities, groups, extra paths, data
+  ([manifest-format.md](https://github.com/openccu-lite/occulited/blob/master/docs/manifest-format.md), `runtime`): capabilities, groups, extra paths, data
   directories, ports and the interfaces it waits for. Something the `runtime` block cannot say yet
   is a manifest format change, never a unit file.
 - **Addons affected:** none known. No manifest in the catalogue and none of the addons maintained here

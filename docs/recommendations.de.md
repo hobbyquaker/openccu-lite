@@ -48,6 +48,6 @@ aufbewahren, etwa in einem Passwort-Manager: ohne ihn lässt sich eine verschlü
 System einspielen, und auf diesem nicht mehr, sobald sein Speicher verloren ist.
 
 **Von einem anderen Rechner abholen:** Wer die Sicherung lieber von einem Server oder NAS aus holt (cron, systemd-Timer,
-Synology, QNAP), nimmt [occulite-backup](https://github.com/hobbyquaker/occulite-backup): ein Shell-Skript, das mit
+Synology, QNAP), nimmt [occulite-backup](https://github.com/openccu-lite/occulite-backup): ein Shell-Skript, das mit
 einem API-Token, das nur Sicherungen darf, eine frische Sicherung herunterlädt, sie prüft und die neuesten N behält;
 eine verschlüsselte Sicherung bleibt verschlüsselt.

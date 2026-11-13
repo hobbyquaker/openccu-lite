@@ -6,7 +6,7 @@ versioned with it — if `GET /api/meta/v1/version` answers a higher `version`, 
 from the matching openccu-lite release.*
 
 *An addon declares what it needs in its own manifest, `openccu-lite.json` at the root of its package
-([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)); the catalogue only
+([manifest-format.md](https://github.com/openccu-lite/occulited/blob/master/docs/manifest-format.md)); the catalogue only
 says where it is.*
 
 ---
@@ -129,7 +129,7 @@ the user's session. The cookie's names can change, and have.
 - **Declare it, and `?sid=` stops**. Once a release of your addon reads the header
   everywhere the shell opens it (the frontend your fragment proxies, and the settings page with
   every CGI it calls), say so in that release's manifest `openccu-lite.json`:
-  `"ui": {"session_header": true}` ([manifest-format.md](https://github.com/hobbyquaker/occulited/blob/master/docs/manifest-format.md)). The manifest is per
+  `"ui": {"session_header": true}` ([manifest-format.md](https://github.com/openccu-lite/occulited/blob/master/docs/manifest-format.md)). The manifest is per
   version, so this is a boolean. The system then opens that installed version without `?sid=@…@`:
   embedded, in a new tab and in the settings frame. Older releases whose manifest does not say so
   and addons without a manifest keep getting `?sid=`, and a CCU always sends it, so keep accepting

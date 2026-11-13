@@ -60,13 +60,13 @@ Base release that moved or dropped a listed path then fails at the extract,
 not silently in the image.
 
 While a fix from OpenCCU-Base's `main` is needed before its next release, the
-package is built from the branch `lite` of the fork `hobbyquaker/OpenCCU-Base`
+package is built from the branch `lite` of the fork `openccu-lite/OpenCCU-Base`
 (the release tag plus `git cherry-pick -x` of the fixes and fixes of our own;
 task 348, since 2026-10-12; named `lite-3.89.11` until 2026-10-13). Every build
 round tags the fork commit it builds with the image version, annotated
 (`v1.0.0-<pre>.<N>`, e.g. `v1.0.0-beta.2`), and pins that tag (task 352):
 `OPENCCU_BASE_SITE` is
-`$(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))`,
+`$(call github,openccu-lite,OpenCCU-Base,$(OPENCCU_BASE_VERSION))`,
 `OPENCCU_BASE_VERSION` the tag, `openccu-base.hash` the hash of GitHub's
 archive of that tag, and `OPENCCU_BASE_COMPAT_VERSION` stays the release. A tag
 never moves once pushed. The updater refuses to run then; at the next release

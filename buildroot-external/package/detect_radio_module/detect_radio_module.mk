@@ -7,12 +7,12 @@
 #
 # openccu-lite builds it from its piVCCU fork at the same commit as generic_raw_uart (task 373;
 # a pin change sets both):
-# https://github.com/hobbyquaker/piVCCU/tree/lite
+# https://github.com/openccu-lite/piVCCU/tree/lite
 #
 ################################################################################
 
 DETECT_RADIO_MODULE_VERSION = v2.0.0-beta.3
-DETECT_RADIO_MODULE_SITE = $(call github,hobbyquaker,piVCCU,$(DETECT_RADIO_MODULE_VERSION))
+DETECT_RADIO_MODULE_SITE = $(call github,openccu-lite,piVCCU,$(DETECT_RADIO_MODULE_VERSION))
 DETECT_RADIO_MODULE_LICENSE = Apache-2.0
 DETECT_RADIO_MODULE_LICENSE_FILES = LICENSE
 

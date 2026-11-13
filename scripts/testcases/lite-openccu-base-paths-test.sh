@@ -16,7 +16,7 @@
 #    and lib/<arch>/, usr/, tests/, the repository's own files).
 # 3. The wiring: openccu-base.mk fetches OpenCCU/OpenCCU-Base's archive at OPENCCU_BASE_VERSION,
 #    the compat version is that release (or, while task 348's fork is pinned, the archive of
-#    hobbyquaker/OpenCCU-Base at an openccu-lite tag v1.0.0-<pre>.<N> of its branch lite, task 352,
+#    openccu-lite/OpenCCU-Base at an openccu-lite tag v1.0.0-<pre>.<N> of its branch lite, task 352,
 #    the compat version a release), the hook runs the prune with the list, no extra download
 #    and no openccu-lite-base are left; eq3_char_loop.mk prunes too; openccu-base.hash names the
 #    archive and nothing of openccu-lite-base.
@@ -102,8 +102,8 @@ if echo "$ver" | grep -Eq '^v'; then
 	# tasks 348, 352: OpenCCU-Base's release plus cherry-picks on the fork's branch lite, pinned by the
 	# openccu-lite tag of the build round (never a branch name or a bare hash)
 	echo "$ver" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[a-z]+\.[0-9]+)?$' && ok "OPENCCU_BASE_VERSION $ver is an openccu-lite tag" || fail "OPENCCU_BASE_VERSION '$ver' is not an openccu-lite tag v<x.y.z>[-<pre>.<N>]"
-	grep -q '^OPENCCU_BASE_SITE = $(call github,hobbyquaker,OpenCCU-Base,$(OPENCCU_BASE_VERSION))$' "$MK" && ok "the site is the fork hobbyquaker/OpenCCU-Base's archive of that tag" || fail "OPENCCU_BASE_SITE for the tag $ver"
-	grep -q "the branch\$" "$MK" && grep -q "^# lite of the fork hobbyquaker/OpenCCU-Base" "$MK" && ok "openccu-base.mk names the fork's branch lite" || fail "openccu-base.mk does not name the fork's branch lite"
+	grep -q '^OPENCCU_BASE_SITE = $(call github,openccu-lite,OpenCCU-Base,$(OPENCCU_BASE_VERSION))$' "$MK" && ok "the site is the fork openccu-lite/OpenCCU-Base's archive of that tag" || fail "OPENCCU_BASE_SITE for the tag $ver"
+	grep -q "the branch\$" "$MK" && grep -q "^# lite of the fork openccu-lite/OpenCCU-Base" "$MK" && ok "openccu-base.mk names the fork's branch lite" || fail "openccu-base.mk does not name the fork's branch lite"
 	if grep -q 'lite-[0-9]' "$MK"; then fail "openccu-base.mk still names a branch lite-<release>"; else ok "no branch lite-<release> in openccu-base.mk"; fi
 else
 	[ -n "$ver" ] && [ "$ver" = "$compat" ] && echo "$ver" | grep -Eq '^[0-9]+(\.[0-9]+)+$' && ok "OPENCCU_BASE_VERSION $ver is OpenCCU-Base's release and the compat version" || fail "version '$ver', compat '$compat'"

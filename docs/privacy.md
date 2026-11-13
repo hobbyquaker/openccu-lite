@@ -48,7 +48,7 @@ Everything else stays on your local network, unless you point it elsewhere yours
 
 ### System release check
 
-- **To:** `GET https://api.github.com/repos/hobbyquaker/openccu-lite/releases?per_page=20` (the feed can be changed
+- **To:** `GET https://api.github.com/repos/openccu-lite/openccu-lite/releases?per_page=20` (the feed can be changed
   in `occulited.json`, `system_update.feed`).
 - **When:** *Check now* on the Updates page, always, and `occulited update check` or `install` on the command line. With
   *Check daily* on (off by default; the welcome page's GitHub checkbox): 2–7 minutes after the start, then every 24–26
@@ -99,7 +99,7 @@ the version a device ran before an update - comes from the OpenCCU firmware arch
 
 The catalogue is a list of addons with a manifest for each; it lives on GitHub.
 
-- **The catalogue file:** `GET https://raw.githubusercontent.com/hobbyquaker/occulited/master/catalog/catalog.json`
+- **The catalogue file:** `GET https://raw.githubusercontent.com/openccu-lite/occulited/master/catalog/catalog.json`
   (the list of catalogue URLs is in `occulited.json`, `catalog.urls`). A copy of it ships in the image; the system
   keeps the copy its last check fetched.
 - **When the catalogue file is fetched:**

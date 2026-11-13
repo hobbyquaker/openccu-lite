@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security problem
-    url: https://github.com/hobbyquaker/openccu-lite/security/advisories/new
+    url: https://github.com/openccu-lite/openccu-lite/security/advisories/new
     about: Please report security problems privately, not as an issue (see SECURITY.md).
   - name: Documentation
-    url: https://github.com/hobbyquaker/openccu-lite/tree/main/docs
+    url: https://github.com/openccu-lite/openccu-lite/tree/main/docs
     about: Installing, switching from OpenCCU, addons, security and more.

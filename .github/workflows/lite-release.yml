@@ -20,8 +20,8 @@
 #      SHA256SUMS.minisig to the draft, edits the notes and publishes - which creates the tag on GitHub.
 #
 # The secret GH_RELEASE_TOKEN (a repository secret here; a name starting with GITHUB_ is not allowed)
-# is a fine-grained GitHub token of the maintainer for hobbyquaker/openccu-lite and
-# hobbyquaker/occulited, permission Contents: read and write only, with an expiry. It is used by the
+# is a fine-grained GitHub token of the maintainer for openccu-lite/openccu-lite and
+# openccu-lite/occulited, permission Contents: read and write only, with an expiry. It is used by the
 # one step below and nowhere else.
 name: lite-release
 

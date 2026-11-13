@@ -2,12 +2,12 @@
 
 openccu-lite is a fork of [OpenCCU](https://github.com/OpenCCU/OpenCCU) (see the [README](README.en.md)).
 This repository builds the firmware images; the system service and its web interface are
-[occulited](https://github.com/hobbyquaker/occulited), which the images build from its own repository.
+[occulited](https://github.com/openccu-lite/occulited), which the images build from its own repository.
 
 ## Issues
 
 - **Bugs and feature requests go to this repository's
-  [issue tracker](https://github.com/hobbyquaker/openccu-lite/issues)**, for the firmware and for occulited
+  [issue tracker](https://github.com/openccu-lite/openccu-lite/issues)**, for the firmware and for occulited
   alike (occulited has no tracker of its own). The forms ask for the version (the Updates page shows it), the
   product and the journal (the Log page, or `journalctl -b` on the system).
 - **Security problems** are reported privately, see [SECURITY.md](SECURITY.md).

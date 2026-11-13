@@ -164,7 +164,7 @@ Before a restore or an import the Backup page also judges the backup's HmIP secu
 - **Not taken over:** programs, system variables, alarms, favourites, diagrams. Automation moves to Node-RED
   (RedMatic), Home Assistant, ioBroker or whatever you already use; see
   [External clients after the switch](#external-clients-after-the-switch).
-- **Addons:** those in the [catalogue](https://github.com/hobbyquaker/occulited/blob/master/docs/catalog-format.md)
+- **Addons:** those in the [catalogue](https://github.com/openccu-lite/occulited/blob/master/docs/catalog-format.md)
   work. Addons that need the ReGa (CUxD, the XML-API, …) are disabled and listed as *disabled, incompatible*. Addons
   with binaries for another architecture are listed as *disabled, needs update*; the catalogue's *Install* /
   *Update* fetches the right build ([addons.md](addons.md#architecture-and-addon-binaries)). Nothing is uninstalled.

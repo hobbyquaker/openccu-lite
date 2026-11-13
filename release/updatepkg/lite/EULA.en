@@ -8,10 +8,10 @@
 <p>openccu-lite is a separate project based on OpenCCU, but it is <b>not OpenCCU</b>: no ReGaHSS, no WebUI programs or
 Homematic scripts, its own web interface and the system service occulited.</p>
 <p><b>Support:</b> please report questions and problems with openccu-lite <b>only</b> in openccu-lite's issue tracker:
-<a href="https://github.com/hobbyquaker/openccu-lite/issues" target="_blank">https://github.com/hobbyquaker/openccu-lite/issues</a> -
+<a href="https://github.com/openccu-lite/openccu-lite/issues" target="_blank">https://github.com/openccu-lite/openccu-lite/issues</a> -
 <b>not</b> in the OpenCCU forum and not in OpenCCU's issue tracker. The OpenCCU team cannot help with openccu-lite.</p>
 <p><b>Donations:</b> openccu-lite's maintainer does not accept donations. If you want to support the project, give it a star
-on GitHub: <a href="https://github.com/hobbyquaker/openccu-lite" target="_blank">https://github.com/hobbyquaker/openccu-lite</a>.
+on GitHub: <a href="https://github.com/openccu-lite/openccu-lite" target="_blank">https://github.com/openccu-lite/openccu-lite</a>.
 The donation buttons in OpenCCU's text below go to OpenCCU's developers, not to openccu-lite's maintainer.</p>
 <p>The text below is OpenCCU's, which openccu-lite builds on, and applies to its parts.</p>
 </div>

@@ -62,7 +62,7 @@ EOF
 # 1. the real tree
 for p in generic_raw_uart detect_radio_module; do
   v=$(echo "$p" | tr 'a-z' 'A-Z')
-  grep -qxF "${v}_SITE = \$(call github,hobbyquaker,piVCCU,\$(${v}_VERSION))" "$PKG/$p/$p.mk" &&
+  grep -qxF "${v}_SITE = \$(call github,openccu-lite,piVCCU,\$(${v}_VERSION))" "$PKG/$p/$p.mk" &&
     ok "$p: _SITE is the fork's archive macro" || fail "$p: _SITE is not the fork's archive macro"
   pin=$(sed -n "s/^${v}_VERSION = //p" "$PKG/$p/$p.mk")
   echo "$pin" | grep -qE '^(v[0-9][A-Za-z0-9._-]*|[0-9a-f]{40})$' &&
@@ -202,7 +202,7 @@ EOF
 chmod +x "$T/bin/curl"
 setup; out=$(cd "$R" && PATH="$T/bin:$PATH" bash scripts/update-$p.sh "$OURS2" 2>&1); rc=$?
 [ "$rc" != 0 ] && unchanged && echo "$out" | grep -q 'differ' && ok "two downloads that differ are refused" || { fail "differing downloads"; echo "$out"; }
-setup; sed -i 's/hobbyquaker,piVCCU/alexreinert,piVCCU/' "$R/buildroot-external/package/$p/$p.mk"; cp -r "$R/buildroot-external/." "$T/orig/"
+setup; sed -i 's/openccu-lite,piVCCU/alexreinert,piVCCU/' "$R/buildroot-external/package/$p/$p.mk"; cp -r "$R/buildroot-external/." "$T/orig/"
 run "$p" "$OURS2"
 [ "$rc" != 0 ] && unchanged && echo "$out" | grep -q '_SITE' && ok "a _SITE that is not the fork's is refused" || { fail "foreign _SITE"; echo "$out"; }
 setup 1111111111111111111111111111111111111111111111111111111111111111; run "$p" "$OURS2"
