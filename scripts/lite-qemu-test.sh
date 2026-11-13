@@ -791,30 +791,28 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # the gateway here is a documentation address nobody answers: rfd runs and keeps trying it, so its
   # unit may stay "activating"; a refusal is failed or inactive
   R=$(guest 'systemctl is-active rfd.service'); case "$R" in *'| active'*|*'| activating'*) ;; *) fail "rfd did not run on the LAN gateway alone (task 129 measurement 8: does rfd refuse without a local interface?): $R";; esac
-  # task 442: since HMIPServer 1.5.1 the HmIP server - here HMServer.jar, the VirtualDevices half -
-  # reads the devices of every BidCos process InterfacesList.xml lists at its start and does not come
-  # up without them (2.0.0-beta.0's boot 2: the JVM's start thread ended on the refused connection and
-  # the unit restarted it every 5 minutes; beta.1 held it back, VirtualDevices stayed down). rfd never
-  # answers here (the seeded gateway is silent), so the prep step leaves BidCos-RF out of the list for
-  # the start: the marker names rfd and the entry, the journal says so, and hmipserver comes up with
-  # VirtualDevices (no HmIP-RF: no module here) at its first try - the Status page says what is
-  # missing (hmip-bidcos-degraded). The list is otherwise the template's cut: no foreign entry (D-97),
-  # no HmIP-RF without a module. A system whose gateway answers keeps BidCos-RF (lab).
+  # the interface list is the template's cut for the hardware: BidCos-RF for the gateway, no
+  # foreign entry (D-97), no HmIP-RF without a module - and it stays so while rfd does not answer
+  R=$(guest 'grep -o "<name>[^<]*</name>" /usr/local/etc/config/InterfacesList.xml | tr "\n" " "'); case "$R" in *'BidCos-RF'*'VirtualDevices'*) case "$R" in *CCU-Jack*|*HmIP-RF*) fail "InterfacesList.xml must be the template's cut: no foreign entry (D-97), no HmIP-RF without a module: $R";; esac;; *) fail "InterfacesList.xml lost BidCos-RF (the gateway) or VirtualDevices: $R";; esac
+  # HMIPServer 1.5.2 - here HMServer.jar, the VirtualDevices half - starts while rfd does not answer
+  # and registers with it every 5 seconds until it does (1.5.1 did not come up without it: 2.0.0-beta.0's
+  # boot 2 restarted it every 5 minutes; beta.1 held it back, beta.2 left BidCos-RF out of the list for
+  # the start). rfd never answers here (the seeded gateway is silent), so hmipserver must come up at its
+  # first try with BidCos-RF still listed, VirtualDevices answering, no marker and no JVM exception.
   # the guest's console takes a line of a few hundred characters and every call answers within
-  # 240 s: the wait is split into calls (up to 7 minutes: the prep step's wait, then a TCG JVM start),
-  # and the checks are short lines
+  # 240 s: the wait is split into calls (up to 7 minutes for a TCG JVM start), and the checks are
+  # short lines
   for _ in 1 2 3 4 5 6 7; do
     R=$(guest 'for i in $(seq 1 12); do [ "$(systemctl is-active hmipserver)" = active ] && break; sleep 5; done; systemctl is-active hmipserver')
     case "$R" in *'| active'*) break;; esac
   done
-  M=/run/occulite/radio/hmipserver.bidcos-degraded.json
-  R=$(guest "echo \"state=\$(systemctl is-active hmipserver) marker=\$(grep -c '\"daemon\": \"rfd\"' $M) removed=\$(grep -c '\"name\": \"BidCos-RF\"' $M) restarts=\$(systemctl show -p NRestarts --value hmipserver) end\"")
-  R2=$(guest 'J="journalctl -b -u hmipserver -o cat --no-pager"; echo "out=$($J | grep -c "BidCos-RF left out of InterfacesList.xml") died=$($J | grep -c "Exception in thread") started=$(test -e /var/status/HMServerStarted && echo y || echo n) end"')
+  R=$(guest 'echo "state=$(systemctl is-active hmipserver) marker=$(ls /run/occulite/radio | grep -c bidcos) restarts=$(systemctl show -p NRestarts --value hmipserver) end"')
+  R2=$(guest 'J="journalctl -b -u hmipserver -o cat --no-pager"; echo "out=$($J | grep -c "left out of InterfacesList.xml") died=$($J | grep -c "Exception in thread") started=$(test -e /var/status/HMServerStarted && echo y || echo n) end"')
   R3=$(guest 'echo "list=$(grep -o "<name>[^<]*</name>" /usr/local/etc/config/InterfacesList.xml | sed "s/<[^>]*>//g" | tr "\n" ",") end"')
   R4=$(guest 'printf "%s" "<?xml version=\"1.0\"?><methodCall><methodName>system.listMethods</methodName></methodCall>" >/tmp/lm.xml; echo "vd=$(curl -s -m 20 -H Content-Type:text/xml -d @/tmp/lm.xml http://127.0.0.1:39292/groups | grep -o "<value>[a-zA-Z.]*</value>" | wc -l) end"')
   R="$(printf '%s\n' "$R" | grep -o 'state=.* end' | tail -n 1) $(printf '%s\n' "$R2" | grep -o 'out=.* end' | tail -n 1) $(printf '%s\n' "$R3" | grep -o 'list=.* end' | tail -n 1) $(printf '%s\n' "$R4" | grep -o 'vd=.* end' | tail -n 1)"
-  say "guest (boot 2): hmipserver without BidCos-RF: $R"
-  case "$R" in *'state=active marker=1 removed=1 restarts=0 end out='[1-9]*' died=0 started=y end list=VirtualDevices, end vd='[1-9]*' end'*) ;; *) fail "hmipserver must come up with VirtualDevices and BidCos-RF left out of InterfacesList.xml while rfd does not answer (task 442), at its first try: $R";; esac
+  say "guest (boot 2): hmipserver while rfd does not answer: $R"
+  case "$R" in *'state=active marker=0 restarts=0 end out=0 died=0 started=y end list=BidCos-RF,VirtualDevices, end vd='[1-9]*' end'*) ;; *) fail "hmipserver must come up with VirtualDevices at its first try while rfd does not answer, BidCos-RF kept in InterfacesList.xml: $R";; esac
   R=$(guest 'systemctl show -p Result --value multimacd.service; systemctl is-active multimacd.service')
   case "$R" in *'| '*inactive*) ;; *) fail "multimacd must be skipped (inactive, not failed) without a module: $R";; esac
   # leave the image's userfs as the next test expects it: nothing switched off, no override, the
