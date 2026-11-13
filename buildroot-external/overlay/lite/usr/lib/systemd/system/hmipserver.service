@@ -39,8 +39,10 @@
 [Unit]
 Description=HmIP, HmIPW and VirtualDevices Interface
 # /dev/mmd_hmip comes from multimacd. rfd and hs485d are not needed: the units start side by side,
-# and the server (HMIPServer.jar, and HMServer.jar without an HmIP module; 1.5.2) starts while they
-# do not answer and registers with them every 5 seconds until they do. No After=rfd.service: rfd's
+# and the server (HMIPServer.jar, or HMServer.jar with HmIP set to none - never because no module
+# was found: HMIPServer.jar without its module is refused by the prep step with the known-fatal
+# marker no-module; 1.5.2) starts while they do not answer and registers with them every 5 seconds
+# until they do. No After=rfd.service: rfd's
 # unit is ready only once its LAN gateways or module answer, and a gateway that is gone must not
 # hold HmIP-RF back. The server answers every device that asks for the time with the system clock:
 # a trusted clock first.

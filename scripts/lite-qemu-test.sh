@@ -561,6 +561,23 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # framebuffer; on a box or a VM with a display it does not. occu-interface-clock.service is
   # skipped without rfd since task 129 (B-142); its old failure stays tolerated for older images.
   # --no-pager: systemctl pages on the debug shell's tty and the listing came out as escape codes.
+  # occulited task 147: a VM without radio on HmIP Automatic - hmipserver runs HMIPServer.jar, which
+  # cannot start without its module, so the prep step refuses it with the known-fatal marker
+  # no-module and the unit is not restarted; HMServer.jar runs only with HmIP set to none, never as a
+  # fallback. Then the choice none is written as the Interfaces page writes it, the radio stack runs
+  # again, and hmipserver comes up as HMServer.jar with the virtual devices - what the rest of this
+  # run (the crash test, the unit override, boot 2) checks. The end of the run sets it back.
+  say "guest: HmIP on Automatic without a module (occulited task 147)"
+  R=$(guest 'echo "fatal=$(grep -c no-module /run/occulite/radio/hmipserver.fatal 2>/dev/null) state=$(systemctl is-active hmipserver) end"')
+  case "$R" in *'fatal=1 state='*) case "$R" in *'state=active'*) fail "hmipserver ran without an HmIP module on Automatic (task 147: no fallback to HMServer.jar): $R";; esac;; *) fail "hmipserver without an HmIP module must be refused with the no-module marker (task 147): $R";; esac
+  say "guest: HmIP set to none, the radio stack again"
+  guest 'H=/usr/local/etc/config/crRFD/hmip_user.conf; mkdir -p ${H%/*}; touch $H; sed -i "/^occulite.hmip.adapter=/d" $H; echo occulite.hmip.adapter=none >>$H; systemctl restart occu-init-rf-hardware.service; systemctl reset-failed hmipserver.service; systemctl start --no-block hmipserver.service; echo restarted' >/dev/null
+  for _ in 1 2 3 4 5 6 7; do
+    R=$(guest 'for i in $(seq 1 12); do [ "$(systemctl is-active hmipserver)" = active ] && break; sleep 5; done; systemctl is-active hmipserver')
+    case "$R" in *'| active'*) break;; esac
+  done
+  R=$(guest 'echo "state=$(systemctl is-active hmipserver) class=$(sed -n "s/^HMIP_CLASS=//p" /run/occulite/radio/hmipserver.env) fatal=$(test -e /run/occulite/radio/hmipserver.fatal && echo y || echo n) crrfd=$(test -e /var/etc/crRFD.conf && echo y || echo n) end"')
+  case "$R" in *'state=active class=de.eq3.ccu.server.HMServer fatal=n crrfd=n end'*) ;; *) fail "with HmIP none hmipserver must run HMServer.jar (task 147): $R";; esac
   say "guest: system state"; guest 'systemctl is-system-running; systemctl --failed --no-legend --plain --no-pager'
   boot_checks "boot 1"
   # B-321: the evidence path on demand - the JVM's own crash handling (hs_err, then abort and core)
@@ -610,8 +627,8 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   R=$(guest 'systemctl stop addon-litetest.service; pgrep -f "sleep 100000" | wc -l'); case "$R" in *'| 0'*) ;; *) fail "the addon's sleeper survived systemctl stop";; esac
   # task 27.4 / B-26: what the Services page stores on the userfs must be in force at the NEXT
   # boot before the units start - occu-unit-overrides.service, not occulited, does that. Seed an
-  # override on hmipserver (the one interface daemon that runs on a VM without radio: its
-  # VirtualDevices half; rfd is skipped by its marker condition since task 129) and a switch-off of
+  # override on hmipserver (the one interface daemon that runs on a VM without radio: HMServer.jar
+  # with HmIP set to none above; rfd is skipped by its marker condition since task 129) and a switch-off of
   # crond the way occulited writes them; boot 2 checks.
   # task 14: the addon install e2e - the D-19 set from the catalogue (homematic-manager, RedMatic,
   # ccu-addon-mosquitto, hm2mqtt.js), each installed through the API as the Addons page does, its
@@ -783,7 +800,7 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   R=$(guest 'A=$(systemctl show -p ExecMainExitTimestampMonotonic --value occu-unit-overrides.service); B=$(systemctl show -p InactiveExitTimestampMonotonic --value hmipserver.service); [ -n "$A" ] && [ -n "$B" ] && [ "$A" -lt "$B" ] && echo before || echo "after: $A vs $B"'); case "$R" in *'| before'*) ;; *) fail "occu-unit-overrides did not finish before hmipserver started: $R";; esac
   # task 129, boot 2: the switch guarantee. The plan ran (its markers and files), rfd runs on the
   # gateway alone, the interface list is the template's cut for the hardware, hmipserver runs
-  # its VirtualDevices half, multimacd is skipped (inactive, not failed) without a module.
+  # HMServer.jar (HmIP none, set on boot 1), multimacd is skipped (inactive, not failed) without a module.
   say "guest (boot 2): the radio plan on an OpenCCU-shaped userfs"
   guest 'journalctl -b -o short-monotonic -u occu-init-rf-hardware.service --no-pager | grep -E "plan:|run:" | head -12; ls /run/occulite/radio; systemctl is-active multimacd.service rfd.service hmipserver.service hs485d.service occu-init-hs485d.service occu-interface-clock.service | tr "\n" " "; echo; grep -E "^#?\[Interface|^#?Type|^Listen" /var/etc/rfd.conf; grep -o "<name>[^<]*</name>" /usr/local/etc/config/InterfacesList.xml | tr "\n" " "; echo'
   R=$(guest 'test -e /run/occulite/radio/rfd.enabled && test ! -e /run/occulite/radio/multimacd.enabled && test -e /run/occulite/radio/hmipserver.enabled && echo markers-ok'); case "$R" in *'| markers-ok'*) ;; *) fail "the plan's markers: rfd and hmipserver expected, no multimacd (task 129): $R";; esac
@@ -794,7 +811,7 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   # the interface list is the template's cut for the hardware: BidCos-RF for the gateway, no
   # foreign entry (D-97), no HmIP-RF without a module - and it stays so while rfd does not answer
   R=$(guest 'grep -o "<name>[^<]*</name>" /usr/local/etc/config/InterfacesList.xml | tr "\n" " "'); case "$R" in *'BidCos-RF'*'VirtualDevices'*) case "$R" in *CCU-Jack*|*HmIP-RF*) fail "InterfacesList.xml must be the template's cut: no foreign entry (D-97), no HmIP-RF without a module: $R";; esac;; *) fail "InterfacesList.xml lost BidCos-RF (the gateway) or VirtualDevices: $R";; esac
-  # HMIPServer 1.5.2 - here HMServer.jar, the VirtualDevices half - starts while rfd does not answer
+  # HMIPServer 1.5.2 - here HMServer.jar, HmIP set to none - starts while rfd does not answer
   # and registers with it every 5 seconds until it does (1.5.1 did not come up without it: 2.0.0-beta.0's
   # boot 2 restarted it every 5 minutes; beta.1 held it back, beta.2 left BidCos-RF out of the list for
   # the start). rfd never answers here (the seeded gateway is silent), so hmipserver must come up at its
@@ -817,7 +834,7 @@ if [ "$SYSTEMD" = 1 ] && [ "$FAILED" = 0 ]; then
   case "$R" in *'| '*inactive*) ;; *) fail "multimacd must be skipped (inactive, not failed) without a module: $R";; esac
   # leave the image's userfs as the next test expects it: nothing switched off, no override, the
   # rfd.conf and interface list as the first boot made them
-  guest 'rm -rf /usr/local/etc/occulite/unit-overrides /usr/local/etc/occulite/unit-switch.json /usr/local/etc/config/InterfacesList.xml; if [ -e /usr/local/etc/config/rfd.conf.lite-qemu-test ]; then mv /usr/local/etc/config/rfd.conf.lite-qemu-test /usr/local/etc/config/rfd.conf; else rm -f /usr/local/etc/config/rfd.conf; fi' >/dev/null
+  guest 'sed -i "/^occulite.hmip.adapter=/d" /usr/local/etc/config/crRFD/hmip_user.conf; rm -rf /usr/local/etc/occulite/unit-overrides /usr/local/etc/occulite/unit-switch.json /usr/local/etc/config/InterfacesList.xml; if [ -e /usr/local/etc/config/rfd.conf.lite-qemu-test ]; then mv /usr/local/etc/config/rfd.conf.lite-qemu-test /usr/local/etc/config/rfd.conf; else rm -f /usr/local/etc/config/rfd.conf; fi' >/dev/null
   # B-321: a failed run keeps its evidence first, and then powers off cleanly (the cleanup copies it)
   if [ "$FAILED" != 0 ] && ! only_quota; then evidence_guest; evidence_poweroff
   else guest 'systemctl --no-block poweroff' >/dev/null; sleep 15; fi

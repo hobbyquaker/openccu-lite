@@ -1,7 +1,7 @@
 #!/bin/sh
-# openccu-lite: HMServer.jar is in the image (B-313). On a system without an HmIP module occulited
-# runs hmipserver as HMServer.jar for its VirtualDevices half (as OpenCCU's S62HMServer); without
-# the jar it loops (dev.44). package/openccu-base takes it with the rest of opt/ from OpenCCU-Base's
+# openccu-lite: HMServer.jar is in the image (B-313). With HmIP set to none occulited runs
+# hmipserver as HMServer.jar for the virtual devices alone (occulited task 147; OpenCCU's S62HMServer
+# took it whenever no HmIP module was found); without the jar it loops (dev.44). package/openccu-base takes it with the rest of opt/ from OpenCCU-Base's
 # release archive, pruned to openccu-base-paths.txt (task 335).
 #
 # 1. openccu-base-paths.txt lists opt/HMServer/HMServer.jar, and neither HMServer's pages nor the

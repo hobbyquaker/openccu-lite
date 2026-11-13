@@ -75,15 +75,16 @@ rm -f "${TARGET_DIR}/bin/checkInternet"
 rm -f "${TARGET_DIR}/bin/setfirewall.tcl" "${TARGET_DIR}/lib/libfirewall.tcl" \
 	"${TARGET_DIR}/lib/libsecuritylevel.tcl" "${TARGET_DIR}/bin/enforcesecuritylevel.tcl"
 
-# hmipserver runs HMIPServer.jar with the ESHBridge, and on a system without an HmIP module
-# HMServer.jar for the VirtualDevices half alone (occulited's radio plan, as OpenCCU's S62HMServer).
+# hmipserver runs HMIPServer.jar with the ESHBridge, and HMServer.jar for the virtual devices alone
+# when HmIP is set to none (occulited's radio plan, task 147; OpenCCU's S62HMServer took it whenever
+# no HmIP module was found).
 # openccu-base is OpenCCU-Base pruned to package/openccu-base/openccu-base-paths.txt, which lists
 # HMServer.jar (B-313) and neither HMServer's FreeMarker pages nor the measurement templates (tasks
 # 329, 335): the overlay's four group pages, which occulited reads, are the only pages. The build
-# stops when HMServer.jar is missing - hmipserver would loop on such a system - or when anything
+# stops when HMServer.jar is missing - hmipserver would loop with HmIP set to none - or when anything
 # else shows up there again.
 if [ ! -s "${TARGET_DIR}/opt/HMServer/HMServer.jar" ]; then
-	echo "post-build (lite): ERROR: /opt/HMServer/HMServer.jar is missing - a system without an HmIP module needs it for VirtualDevices (B-313)" >&2
+	echo "post-build (lite): ERROR: /opt/HMServer/HMServer.jar is missing - HmIP set to none needs it for VirtualDevices (B-313)" >&2
 	exit 1
 fi
 if [ -e "${TARGET_DIR}/opt/HMServer/measurement" ]; then

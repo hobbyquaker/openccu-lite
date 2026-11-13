@@ -50,6 +50,7 @@ One row per class, and a release names the ones that were run. Add the device yo
 | HB-RF-USB / HB-RF-ETH | | | detected; the coprocessor firmware update path runs (the bootloader is handed over only before a firmware update) |
 | coprocessor flash from the UI | HmIP-RFUSB, RPI-RF-MOD | | the Interfaces page's *Radio firmware* section: the running version, the shipped 4.4.18 and an uploaded file listed; a flash to another version stops hmipserver/rfd/multimacd, flashes, re-detects, starts them; the page shows the new version without a reboot and `GET /radio` agrees; a truncated `.eq3` fails with the daemons back up; occulited killed mid-flash leaves the daemons up and the attempt failed |
 | dual-copro / HmIP-HAP | | | as far as the hardware at hand allows; otherwise **written down as untested** |
+| HmIP set to None | any module that carries both | | *Interfaces → Connections → HmIP-RF → None*: hmipserver runs HMServer.jar (VirtualDevices answers on 39292, no HmIP-RF in the interface list), BidCos-RF keeps the module; back to Automatic brings HmIP-RF and its devices back. Without an HmIP module on Automatic hmipserver is not started and the Status page says so. Every option: [radio.md](radio.md) |
 
 ## 3. The things only a device can prove
 

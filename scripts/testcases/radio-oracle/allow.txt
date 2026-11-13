@@ -32,6 +32,22 @@ rpi4-pcb-hb-rf-usb-plus-hm-cfg-usb-2-fresh crRFD.conf s|^Adapter.1.Port=.*|Adapt
 rpi4-pcb-hb-rf-usb-plus-hm-cfg-usb-2-fresh daemons s|SerialPorts=/dev/[a-z_0-9-]*|SerialPorts=(deviation 15)|
 rpi4-pcb-hb-rf-usb-plus-hm-cfg-usb-2-fresh multimacd.conf s|^Coprocessor Device Path = .*|Coprocessor Device Path = (deviation 15)|
 #
+# 18 (occulited task 147): hmipserver runs HMIPServer.jar unless HmIP is set to none (the choice
+# occulite.hmip.adapter=none, HMServer.jar then); upstream runs HMServer.jar whenever no HmIP module
+# is found. Without its module HMIPServer.jar never comes up, so the prep step refuses that start
+# (the known-fatal marker no-module) - a missing module never switches the jar. The cases without
+# an HmIP module:
+rpi3-hm-mod-rpi-pcb-fresh daemons s|^hmipserver: .*|hmipserver: (deviation 18)|
+rpi3-hm-mod-rpi-pcb-fresh crRFD.conf 1!d;s|.*|(deviation 18)|
+ova-no-radio-fresh daemons s|^hmipserver: .*|hmipserver: (deviation 18)|
+ova-no-radio-fresh crRFD.conf 1!d;s|.*|(deviation 18)|
+rpi4-no-radio-fresh daemons s|^hmipserver: .*|hmipserver: (deviation 18)|
+rpi4-no-radio-fresh crRFD.conf 1!d;s|.*|(deviation 18)|
+rpi4-hm-cfg-usb-2-fresh daemons s|^hmipserver: .*|hmipserver: (deviation 18)|
+rpi4-hm-cfg-usb-2-fresh crRFD.conf 1!d;s|.*|(deviation 18)|
+rpi4-lgw-only-userfs daemons s|^hmipserver: .*|hmipserver: (deviation 18)|
+rpi4-lgw-only-userfs crRFD.conf 1!d;s|.*|(deviation 18)|
+#
 # 12 (proposed): a BidCos-Wired entry in InterfacesList.xml when hs485d runs; upstream on lite never
 # writes one (the CCU WebUI's wired page did)
 * interfaces /^BidCos-Wired|/d

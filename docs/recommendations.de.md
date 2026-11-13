@@ -18,7 +18,9 @@ wenigsten.
 **Empfehlung: HmIP und BidCos trennen.** Das RPI-RF-MOD bedient nur HmIP (direkt, ohne multimacd), BidCos läuft über ein
 zweites Funkmodul, via USB oder Netzwerk. So hat jeder Funkstandard sein eigenes Modul und seinen eigenen Duty Cycle. Wer kein
 BidCos-Gerät hat, schaltet BidCos-RF ab: Schnittstellen → BidCos-RF → „Aus (nur HmIP)“ – das RPI-RF-MOD bedient dann
-nur HmIP.
+nur HmIP. Umgekehrt schaltet HmIP-RF → „Keins (nur virtuelle Geräte)“ HmIP ab, wenn es kein HmIP-Gerät gibt: hmipserver
+läuft dann als HMServer.jar mit etwa halb so viel Speicher. Ohne HmIP-Funkmodul ist das nötig, denn HMIPServer.jar
+startet ohne sein Modul nicht. Alle Einstellungen: [radio.md](radio.md).
 
 ## Lokaler Schlüsselmodus
 

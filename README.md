@@ -32,7 +32,9 @@ die Funkmodulerkennung wurden von Grund auf neu gestaltet.
   Verbindungen (Update-Checks) gibt es nur mit Zustimmung des Benutzers. Details: [Datenschutz](docs/privacy.md).
 - **Freie Funkkonfiguration.** Welches Funkmodul welche Schnittstelle bedient, ist frei wählbar. Das ermöglicht
   besondere Konfigurationen, etwa getrennte Funkmodule für BidCos-RF und HmIP-RF oder einen reinen HmIP-Betrieb ohne
-  BidCos. [Beispiele](docs/walkthrough/README.md#beispiele-für-funk-konfigurationen) zeigt der Rundgang.
+  BidCos oder einen reinen BidCos-Betrieb ohne HmIP. [Beispiele](docs/walkthrough/README.md#beispiele-für-funk-konfigurationen)
+  zeigt der Rundgang, [alle Einstellungen der Funkmodule und von multimacd](docs/radio.md) und was sie jeweils starten
+  eine Übersicht.
 - **Minimal.** openccu-lite bringt nur mit, was die Zentrale grundlegend braucht. Alles andere kommt als Addon dazu,
   und zwar nur das, was man wirklich nutzen möchte. So bleibt das Image klein, Updates gehen schneller und der
   Wartungsaufwand sinkt.
@@ -143,6 +145,7 @@ Beta- und Release-Candidate-Versionen) oder **dev** (alles, auch Entwicklungsst�
 - [Wechsel von und zu OpenCCU](docs/switching.de.md)
 - [Empfehlungen](docs/recommendations.de.md)
 - [Was sich gegenüber OpenCCU ändert](docs/aenderungen.md)
+- [Funkmodule und multimacd: alle Einstellungen](docs/radio.md) (englisch)
 
 **Betrieb**
 - [Lokaler Schlüsselmodus für HmIP](docs/lokaler-schluesselmodus.md): offlinefähig, Funkmodultausch ohne den

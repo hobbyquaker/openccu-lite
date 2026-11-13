@@ -65,6 +65,7 @@ Was openccu-lite gegenüber OpenCCU ändert, entfernt oder hinzufügt.
 - HmIP: lokaler Schlüsselmodus, Geräteschlüssel per QR-Code, Schlüsselblatt zum Drucken
 - Warnung, wenn ein HmIP-Gerät wegen eines falschen lokalen Schlüssels nicht angelernt wird
 - Nur-HmIP-Betrieb ohne BidCos-Geräte: rfd aus, hmipserver direkt am Funkmodul ohne multimacd (außer beim HM-MOD-RPI-PCB)
+- Nur-BidCos-Betrieb: HmIP-RF auf „Keins“ startet HMServer.jar nur mit den virtuellen Geräten, ein Funkmodul mit beiden Protokollen bedient dann nur BidCos-RF. HMServer.jar läuft ausschließlich mit dieser Wahl: bei „Automatisch“ oder einem gewählten Modul startet immer HMIPServer.jar, und ohne sein Modul startet hmipserver gar nicht, mit einer Warnung auf der Statusseite (OpenCCU nimmt HMServer.jar, sobald kein HmIP-Modul gefunden wird). Alle Einstellungen und was sie starten: [radio.md](radio.md)
 - Die Identitätsdateien des HmIP-Access-Points ändern sich nur nach einer Warnung und Bestätigung; die automatische Wahl verschiebt HmIP-RF nie auf ein anderes Funkmodul
 - Wechsel des HmIP-Funkmoduls: vorher ein Schnappschuss, ein Weg zurück zum vorherigen Modul, eine Diagnose, wenn der Schlüsseltausch abgelehnt wird
 - Schutz vor dem zurückgesetzten HmIP-Sicherheitszähler: der Uhr wird nur zwischen dem Bau des Images und 15 Jahren danach vertraut, gefährdete Access Points werden erkannt, hmipserver wartet auf eine verlässliche Uhr; Details in [bekannte-probleme.md](bekannte-probleme.md)
