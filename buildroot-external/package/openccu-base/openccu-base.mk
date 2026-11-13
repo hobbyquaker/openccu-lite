@@ -19,14 +19,15 @@
 # error (#162). Since 2.0.0-beta.0 eQ-3's HMIPServer 1.5.1 (HMIPServer.jar, HMServer.jar,
 # ESHBridge.jar; homematicip/OpenCCU-Base #16, cherry-picked); since 2.0.0-beta.1 crRFD.conf's
 # Legacy.Client.Socket.Timeout 30000 ms; since 2.0.0-beta.3 eQ-3's HMIPServer 1.5.2-SNAPSHOT (the
-# same three jars, homematicip/OpenCCU-Base #17, cherry-picked). Back to OpenCCU/OpenCCU-Base at
-# its next tag.
+# same three jars, homematicip/OpenCCU-Base #17, cherry-picked); since 2.0.0-beta.4 crRFD.conf's
+# Legacy.Client.Connection.Timeout 30000 ms (OpenCCU/OpenCCU-Base #361, cherry-picked). Back to
+# OpenCCU/OpenCCU-Base at its next tag.
 # The version is a tag of the fork: every build round tags the commit of the fork's lite branch
 # it builds with the image version (v1.0.0-<pre>.<N>, annotated) and pins that tag here
 # (task 352); a tag never moves once pushed. The compat version is the release's identity
 # (PRODUCT_VERSION, the recovery's hm-platform; the top Makefile reads both lines) and stays the
 # release while the version is a tag of the fork.
-OPENCCU_BASE_VERSION = v2.0.0-beta.3
+OPENCCU_BASE_VERSION = v2.0.0-beta.4
 OPENCCU_BASE_COMPAT_VERSION = 3.89.11
 # GitHub's archive of that tag (the recovery's hm-platform downloads OpenCCU-Base's own
 # release archive of the compat version), pruned right after the extract to the paths
