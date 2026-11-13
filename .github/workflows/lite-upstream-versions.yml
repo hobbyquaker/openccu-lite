@@ -10,7 +10,8 @@
 # README's badge - green "up to date", yellow "updates available", grey "check failed".
 # The report has a column for the release marked Latest and, when there is a newer one, for the newest
 # pre-release; each reads the pins at its release tag (the script fetches a tag the shallow checkout
-# lacks). The badge follows the latest release.
+# lacks). The badge follows the latest release. Beside it, beta.svg is the READMEs' beta badge ("beta | v<version>")
+# while the newest pre-release is newer than the latest release, else an empty 1x1 image.
 #
 # Outdated components are not a failure: the run is green, the report and the badge say what is due,
 # with a warning annotation each. The run is red only when the check itself fails (a pin not found, an

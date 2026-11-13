@@ -105,7 +105,10 @@
 # green on a network error.
 # Prints a table; with GITHUB_STEP_SUMMARY set (or --summary FILE) it appends it as Markdown.
 # --site DIR writes the report page (index.html German, en.html English) and badge.json, a shields.io
-# endpoint: green "up to date", yellow "updates available", grey "check failed".
+# endpoint: green "up to date", yellow "updates available", grey "check failed"; and beta.svg, the READMEs'
+# beta badge: "beta | v<version>" (blue, shields.io's flat style, self-contained) while the newest pre-release
+# is newer than the release marked Latest, otherwise an empty, transparent 1x1 image (a Markdown image cannot
+# be hidden; a stable release as the newest one hides it). Empty too when the release list is unreadable.
 #
 # Usage: python3 scripts/lite-upstream-versions.py [--root DIR] [--fixtures DIR] [--summary FILE]
 #                                                   [--site DIR]
@@ -123,6 +126,7 @@ import argparse
 import datetime
 import html
 import json
+import math
 import os
 import re
 import struct
@@ -1285,7 +1289,43 @@ def page(lang, cols, error, when, run_url):
     return "\n".join(out)
 
 
-def write_site(d, cols, error):
+# Verdana 11px advance widths (shields.io's measure) for what a version tag holds; others count as 7.5
+BADGE_WIDTHS = {**{c: 7.0 for c in "0123456789"}, ".": 3.52, "-": 4.71, "+": 9.21, "a": 6.66, "b": 6.86, "c": 5.73,
+                "d": 6.86, "e": 6.59, "h": 6.96, "i": 3.02, "l": 3.02, "n": 6.96, "o": 6.68, "p": 6.86, "r": 4.69,
+                "s": 5.73, "t": 4.33, "v": 6.52}
+
+
+def badge_svg(label, message, color="#007ec6"):
+    """a badge in shields.io's flat style, with no external reference"""
+    def width(t):
+        return round(sum(BADGE_WIDTHS.get(ch, 7.5) for ch in t), 1)
+    lt, mt = width(label), width(message)
+    lw, mw = math.ceil(lt + 10), math.ceil(mt + 10)
+    w = lw + mw
+    e = html.escape
+    title = f"{e(label)}: {e(message)}"
+
+    def text(t, tl, x):
+        return (f'<text aria-hidden="true" x="{x}" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" '
+                f'textLength="{round(tl * 10)}">{e(t)}</text><text x="{x}" y="140" transform="scale(.1)" fill="#fff" '
+                f'textLength="{round(tl * 10)}">{e(t)}</text>')
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="20" role="img" aria-label="{title}">'
+            f"<title>{title}</title>"
+            '<linearGradient id="s" x2="0" y2="100%"><stop offset="0" stop-color="#bbb" stop-opacity=".1"/>'
+            '<stop offset="1" stop-opacity=".1"/></linearGradient>'
+            f'<clipPath id="r"><rect width="{w}" height="20" rx="3" fill="#fff"/></clipPath>'
+            f'<g clip-path="url(#r)"><rect width="{lw}" height="20" fill="#555"/>'
+            f'<rect x="{lw}" width="{mw}" height="20" fill="{color}"/><rect width="{w}" height="20" fill="url(#s)"/></g>'
+            '<g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" '
+            'text-rendering="geometricPrecision" font-size="110">'
+            f"{text(label, lt, lw * 5)}{text(message, mt, lw * 10 + mw * 5)}</g></svg>\n")
+
+
+EMPTY_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" viewBox="0 0 1 1"/>\n'
+
+
+def write_site(d, cols, error, beta=None):
+    """beta: the tag of the newest pre-release when it is newer than the latest release, else None"""
     os.makedirs(d, exist_ok=True)
     when = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     run_url = None
@@ -1305,6 +1345,8 @@ def write_site(d, cols, error):
     with open(os.path.join(d, "badge.json"), "w", encoding="utf-8") as f:
         json.dump({"schemaVersion": 1, "label": "upstream versions", "message": badge[0], "color": badge[1]}, f)
         f.write("\n")
+    with open(os.path.join(d, "beta.svg"), "w", encoding="utf-8") as f:
+        f.write(badge_svg("beta", beta if beta.startswith("v") else f"v{beta}") if beta else EMPTY_SVG)
 
 
 def main(argv=None):
@@ -1317,9 +1359,11 @@ def main(argv=None):
     ap.add_argument("--today", type=datetime.date.fromisoformat, help="the date the EOL warning counts from (tests)")
     a = ap.parse_args(argv)
     up = Upstream(a.fixtures, a.today)
-    cols, error, code = [], None, 0
+    cols, error, code, beta = [], None, 0, None
     try:
-        for tag, kind in release_columns(up):
+        rel = release_columns(up)
+        beta = next((tag for tag, kind in rel if kind == "pre-release"), None)
+        for tag, kind in rel:
             tree = TreeAt(a.root, tag)
             cols.append((tag, kind, [check(tree, up) for check in CHECKS]))
     except UpstreamError as e:
@@ -1329,7 +1373,7 @@ def main(argv=None):
     except Exception as e:  # noqa: BLE001 - a bug here still gives a grey badge, not a stale one
         error, code = f"the check itself failed: {e!r}", 4
     if a.site:
-        write_site(a.site, cols, error)
+        write_site(a.site, cols, error, beta)
     if error:
         print(f"::error::{error}")
         if a.summary:

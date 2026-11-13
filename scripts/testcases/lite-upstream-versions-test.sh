@@ -529,6 +529,9 @@ grep -qF '<th>Komponente</th><th>openccu-lite 1.0.0 (latest)</th><th>neueste ups
   && ! grep -qF '<th>unsere</th>' "$tmp/site/index.html" && ! grep -qF '<th>ours</th>' "$tmp/site/en.html" \
   && grep -qF '| component | openccu-lite 1.0.0 (latest) | newest upstream | supported until | status |' "$tmp/sum" \
   && ok "one release: the header names it, no pre-release column, no 'ours'" || { bad "one release: the header"; grep -F '<th>' "$tmp/site/en.html"; cat "$tmp/sum"; }
+grep -qxF '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1" viewBox="0 0 1 1"/>' "$tmp/site/beta.svg" \
+  && [ "$(wc -l <"$tmp/site/beta.svg")" -eq 1 ] \
+  && ok "one release: beta.svg is the empty 1x1 image" || { bad "one release: beta.svg is the empty 1x1 image"; cat "$tmp/site/beta.svg"; }
 [ "$(grep -c "$ICON" "$tmp/site/en.html")" -eq 10 ] && grep -qF 'aria-label="aktuell"' "$tmp/site/index.html" \
   && grep -qF '<title>up to date</title>' "$tmp/site/en.html" && grep -qF '.ck circle{fill:var(--ok)}' "$tmp/site/en.html" \
   && ok "current cells: the check disc with its accessible name, one per row" || bad "current cells: the check disc with its accessible name, one per row"
@@ -546,6 +549,13 @@ grep -qF '<th>openccu-lite 1.0.0 (latest)</th><th>openccu-lite 1.1.0-dev.0 (pre-
   && grep -qF '| component | openccu-lite 1.0.0 (latest) | openccu-lite 1.1.0-dev.0 (pre-release) | newest upstream | supported until | status (1.0.0) |' "$tmp/sum" \
   && ! grep -qF '2026.05.2' "$tmp/sum" "$tmp/site/en.html" \
   && ok "two columns, each from its own tag, never the head" || { bad "two columns, each from its own tag, never the head"; cat "$tmp/sum"; }
+# beta.svg: the newer pre-release (not the older rc.3), blue, shields.io's flat shape, nothing fetched from elsewhere
+grep -qF '<title>beta: v1.1.0-dev.0</title>' "$tmp/site/beta.svg" && grep -qF '>beta</text>' "$tmp/site/beta.svg" \
+  && grep -qF '>v1.1.0-dev.0</text>' "$tmp/site/beta.svg" && grep -qF 'fill="#007ec6"' "$tmp/site/beta.svg" \
+  && grep -qF 'height="20"' "$tmp/site/beta.svg" && ! grep -qF 'rc.3' "$tmp/site/beta.svg" \
+  && [ "$(grep -o 'http[s]*://[^"]*' "$tmp/site/beta.svg" | sort -u)" = "http://www.w3.org/2000/svg" ] \
+  && python3 -c 'import sys, xml.dom.minidom as d; d.parse(sys.argv[1])' "$tmp/site/beta.svg" \
+  && ok "a newer pre-release: beta.svg says beta | v1.1.0-dev.0, self-contained" || { bad "a newer pre-release: beta.svg"; cat "$tmp/site/beta.svg"; }
 grep -qF "<td>2026.08.1 <span class=\"due\">update available</span></td><td>2026.08.2 $ICON" "$tmp/site/en.html" \
   && grep -qF "<td>2026.08.1 <span class=\"due\">Update verfügbar</span></td><td>2026.08.2 $ICON" "$tmp/site/index.html" \
   && ! grep -qF "<td>2026.08.1 $ICON" "$tmp/site/en.html" \

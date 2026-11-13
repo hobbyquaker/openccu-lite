@@ -6,7 +6,7 @@
 </h1>
 
 [![stable release](https://img.shields.io/github/v/release/openccu-lite/openccu-lite?label=stable)](https://github.com/openccu-lite/openccu-lite/releases/latest)
-[![beta release](https://img.shields.io/github/v/release/openccu-lite/openccu-lite?include_prereleases&filter=*-*&label=beta&color=blue)](https://github.com/openccu-lite/openccu-lite/releases)
+[![beta](https://openccu-lite.github.io/openccu-lite/beta.svg)](https://github.com/openccu-lite/openccu-lite/releases)
 [![upstream versions](https://img.shields.io/endpoint?url=https://openccu-lite.github.io/openccu-lite/badge.json)](https://openccu-lite.github.io/openccu-lite/)
 
 [:uk: English README](README.en.md)
