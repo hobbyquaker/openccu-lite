@@ -51,10 +51,14 @@
 ^rfd: No BidCoS-Interface available$ ## boot 2: the seeded gateway is rfd's only interface
 ^systemd: rfd\.service: Failed with result 'exit-code'\.$ ## boot 2: rfd without its seeded gateway
 ^systemd: Failed to start BidCos-RF Interface\.$ ## boot 2: the same
+^systemd: hmipserver\.service: Failed with result 'exit-code'\.$ ## boot 1: the VM has no radio module and HmIP is on Automatic, so occulited refuses HMIPServer.jar's start with the no-module marker (occulited task 147: no fallback to HMServer.jar); the test checks the marker, then sets HmIP to none
+^systemd: Failed to start HmIP, HmIPW and VirtualDevices Interface\.$ ## the line above's unit, the same refused start
 ^hmipserver: de\.eq3\.ccu\.bidcos\.dispatcher\.BidCosRpcDispatcher \[[^]]+\] (BidCosCache could not be initialized|java\.net\.ConnectException(: Connection refused)?|Could not register BidCos-RF_java)$ ## boot 2: rfd is down without its seeded gateway
 ^hmipserver: de\.eq3\.cbcs\.legacy\.communication\.rpc\.internal\.transport\.http\.HttpTransport \[[^]]+\] Request to http://127\.0\.0\.1:32001 failed: .*$ ## boot 2: HMIPServer 1.5.2 starts while rfd is down without its seeded gateway and retries its registration with rfd every 5 seconds, each failure with this line (measured on rpi4-2 with rfd stopped)
 ^hmipserver: (Caused by: )?java\.net\.ConnectException(: Connection refused)?$ ## boot 2: the exception of the retry above, one line per entry of its stack trace
 ^hmipserver: Caused by: java\.nio\.channels\.ClosedChannelException$ ## boot 2: the same retry's cause, when rfd closes its port while it gives up on the gateway
+^hmipserver: (Caused by: )?java\.io\.IOException: HTTP/1\.1 header parser received no bytes$ ## boot 2: the same retry, when rfd accepted the connection and then ended without its seeded gateway ("No BidCoS-Interface available"); timing-dependent, seen in 2.0.0-beta.4's third run
+^hmipserver: Caused by: java\.net\.SocketException: Connection reset$ ## boot 2: the line above's cause
 ^hmipserver: de\.eq3\.cbcs\.legacy\.communication\.rpc\.RpcIOException: java\.net\.ConnectException(: Connection refused)?$ ## boot 2: the same retry, wrapped by the server's RPC client
 ^hmipserver: de\.eq3\.cbcs\.util\.EQ3LoggerOutputStream \[[^]]+\] INFO: I/O exception \(java\.net\.SocketException\) caught when processing request to [{][}]->http://127\.0\.0\.1:32001: Connection reset by peer$ ## boot 2: rfd goes down without its seeded gateway while hmipserver's BidCos dispatcher has a request to it in flight; Apache HttpClient logs the reset and its retry through hmipserver's stdout at warning - timing-dependent, met under runner load (B-334), the same shape as occulited's reset form (B-323)
 ^hmipserver: de\.eq3\.cbcs\.util\.EQ3LoggerOutputStream \[[^]]+\] INFO: Retrying request to [{][}]->http://127\.0\.0\.1:32001$ ## boot 2: the line above's retry, to rfd only (B-334)
