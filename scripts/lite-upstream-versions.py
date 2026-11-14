@@ -166,6 +166,9 @@ BASE_REPORT = "https://openccu-lite.github.io/OpenCCU-Base/"
 EQ3_BASE = "homematicip/OpenCCU-Base"   # eQ-3's own OpenCCU-Base repository
 BASE_REPORT_STALE_DAYS = 2
 PIVCCU_FORK = "openccu-lite/piVCCU"
+# the fork's name before it moved into the organisation (2026-11-13): a release tagged before the move pins it
+# there, and GitHub redirects the old name - the same fork
+PIVCCU_FORK_FORMER = ("hobbyquaker/piVCCU",)
 PIVCCU_UP = "alexreinert/piVCCU"
 PIVCCU_MK = "buildroot-external/package/generic_raw_uart/generic_raw_uart.mk"
 PIVCCU_DRIVERS = "kernel"
@@ -1126,7 +1129,7 @@ def check_pivccu(root, up):
     site = re.search(r"^GENERIC_RAW_UART_SITE\s*=\s*\$\(call github,([\w.-]+),([\w.-]+),", text, re.M)
     if not ref or not site:
         raise PinError(f"{PIVCCU_MK}: no GENERIC_RAW_UART_VERSION or no GitHub GENERIC_RAW_UART_SITE")
-    if f"{site.group(1)}/{site.group(2)}" != PIVCCU_FORK:
+    if f"{site.group(1)}/{site.group(2)}" not in (PIVCCU_FORK, *PIVCCU_FORK_FORMER):
         raise PinError(f"{PIVCCU_MK}: built from {site.group(1)}/{site.group(2)}, not {PIVCCU_FORK}")
     ref = ref.group(1)
     head = re.match(r"^refs/heads/([\w./-]+)$", up.symref(f"https://github.com/{PIVCCU_UP}", "pivccu-head.txt"))

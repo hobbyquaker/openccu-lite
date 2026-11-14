@@ -520,6 +520,7 @@ base; rm "$tmp/fx/pivccu-head.txt"; expect "piVCCU: upstream's HEAD unreachable:
 base; pv_cmp v1.0.0 4 1 'aa01:kernel: a fix'; rm -f "$tmp/fx/pivccu-kernel.json"; expect "piVCCU: the driver commits unreachable: exit 3" 3 "check failed" "pivccu-kernel.json"
 base; pv_mk v1.0.0 'https://example.org/x.tar.gz'; expect "piVCCU: our generic_raw_uart.mk not on GitHub: exit 2" 2 "check failed" "generic_raw_uart.mk"
 base; pv_mk v1.0.0 '$(call github,alexreinert,piVCCU,$(GENERIC_RAW_UART_VERSION))'; expect "piVCCU: built from another repository: exit 2" 2 "check failed" "not openccu-lite/piVCCU"
+base; pv_mk v1.0.0 '$(call github,hobbyquaker,piVCCU,$(GENERIC_RAW_UART_VERSION))'; expect "piVCCU: a release from before the move names the fork's former owner: no failure" 0 "up to date" "all current"
 
 # the release columns: each from its tag, one for Latest, a second only for a newer pre-release
 base; expect "one release: one column" 0 "up to date" "all current"
